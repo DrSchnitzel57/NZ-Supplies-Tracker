@@ -46,26 +46,45 @@ browser UI for accounts and daily work. All examples use synthetic values.
 ## Backups (host-local, 30-day retention)
 
 - Verified SQLite backups via the backup API (never a naive WAL file copy):
-  `docker compose exec app python manage.py backup_db`
+  `docker compose exec app python manage.py backup_db --dest /app/data/backups/manual-NAME.sqlite3 --quiesce`
+  (`--quiesce` holds an owned maintenance window during the copy).
+- Every backup is atomic (temporary file + fsync + rename) and records a
+  `<name>.manifest.json` sidecar (path, checksum, app version, schema head,
+  completion). Only a completed backup with a matching manifest counts as
+  verified; interrupted copies can never pass verification.
 - Daily scheduler: install `scripts/daily_backup.sh` as a daily host cron
-  job; it also runs `prune_backups --days 30`. The newest verified
-  `pre-update-*` recovery backup is protected until superseded by a newer one.
-- Artifacts are permission-restricted (0600/0700). Verify with
+  job; it also runs `prune_backups --days 30`. The newest **verified**
+  `pre-update-*`/`pre-reset-*` recovery backup is protected until superseded
+  by a newer verified one — corrupt files are skipped and can never become
+  the protected backup.
+- Artifacts are permission-restricted (0600 files, 0700 dirs); verification
+  refuses backups with unsafe permissions. Restored/copied files keep 0600:
+  after copying a backup onto the host, run `chmod 600` before verifying.
+- Verify with
   `python manage.py shell -c "from apps.operations import backup; backup.verify_sqlite_backup('PATH')"`.
 - Monitor backup age/size; a failed backup must block reset/update (fail
   closed) and never report silent success.
+- Crashed operations keep writes closed (fail closed): inspect with
+  `python manage.py maintenance --check`; take over explicitly with
+  `python manage.py maintenance --enter --force --owner NAME` (audited), and
+  release with the printed `--token`.
 - Limitation: host-only backups cannot survive disk/host loss. Keep a
   separate copy procedure if that risk must be covered (out of scope).
 
 ## Updates (controlled, brief interruption)
 
-- `bash scripts/update.sh X.Y.Z`: validates config/release, enters
-  maintenance (writes refused), takes a verified backup, pulls the pinned
-  image, migrates, restarts, checks readiness, then exits maintenance.
-- Coordinates other writers and operator runs via the maintenance flag;
-  concurrent writes fail with a clear maintenance message, not corruption.
+- `bash scripts/update.sh X.Y.Z`: validates config/release (the requested pin
+  always wins over `.env`), enters an owned maintenance window (a held
+  window aborts the update instead of sharing it), takes a verified backup
+  to an exact file, pulls the pinned image, migrates, restarts, checks
+  readiness, then exits maintenance with its token.
+- Coordinates other writers and operator runs via the owned maintenance
+  window; concurrent writes fail with a clear maintenance message, not
+  corruption. Restore order is always verify → restore → migrate →
+  readiness → reopen writes.
 - On failure the script keeps mutation access closed and prints exact
-  recovery steps (inspect logs, restore recovery backup, re-run).
+  recovery steps (inspect logs, restore recovery backup, re-run) plus the
+  run's maintenance token for a deliberate release after recovery.
 - No unattended `latest` upgrades; no zero-downtime promise.
 
 ## Rollback

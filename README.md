@@ -1,7 +1,8 @@
-# MTC Missionary Supplies Tracker — Shared Application (Milestones 01–03)
+# MTC Missionary Supplies Tracker — Shared Application (Milestones 01–05)
 
 Foundation, data invariants, daily staff workflows, portable transfers,
-reports and administrator safeguards for the LAN
+reports, administrator safeguards, deployment/recovery and review
+remediation for the LAN
 replacement. `READ ME.txt` remains the prototype's instructions; this README
 covers the Django application.
 
@@ -17,27 +18,23 @@ uv venv --python 3.13 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py check
-.venv/bin/python manage.py test tests.foundation tests.auth
-.venv/bin/python manage.py test tests.ledger
-.venv/bin/python manage.py test tests.concurrency
-.venv/bin/python manage.py test tests.workflows tests.auth tests.ledger tests.concurrency
-.venv/bin/python manage.py test tests.transfers tests.seed_conversion
-.venv/bin/python manage.py test tests.reports tests.admin_safety
-.venv/bin/python -m pytest tests/browser/test_workflows.py
-.venv/bin/python -m pytest tests/browser/test_refresh_sessions.py
-.venv/bin/python -m pytest tests/browser/test_transfers_reports.py
-.venv/bin/python -m pytest tests/browser/test_admin.py
+.venv/bin/python manage.py test
+.venv/bin/python -m pytest tests/browser
+.venv/bin/python -m pytest tests/deployment
 ```
 
-Browser tests use local Django test services and synthetic data only (no
-CDN). The Playwright smoke test needs a browser binary once per machine:
+`requirements.prod.txt` is the production-only subset shipped in the image
+(no pytest/playwright). Browser and deployment suites are real:
+Chromium flows with all internet hosts blocked, and isolated Compose
+TLS/backup/restore drills with throwaway volumes. The Playwright browser
+needs its binary once per machine:
 
 ```sh
 .venv/bin/python -m playwright install chromium
 ```
 
-Without the binary that single test skips; every other browser check still
-runs against the same HTML a browser receives.
+Without the binary the browser suite fails (it never skips); CI installs it
+automatically (see `.github/workflows/tests.yml`).
 
 Local database defaults to `.local/db.sqlite3` (gitignored). Override with
 `DJANGO_DB_PATH`. Copy `.env.example` to `.env` for local tweaks; never commit

@@ -25,10 +25,31 @@ class ProductionConfigTests(TestCase):
         self.assertTrue(settings.ALLOWED_HOSTS)
 
     def test_secure_cookie_flags_outside_debug(self):
-        with override_settings(DEBUG=False):
-            # Settings module sets these at import when DEBUG is false; assert
-            # the production contract explicitly here.
-            self.assertTrue(getattr(settings, "SESSION_COOKIE_SECURE", False) or True)
+        import os
+        import subprocess
+        import sys
+
+        # Load the real settings module in production mode and assert the
+        # secure flags are actually set (not just present as strings).
+        code = (
+            "import django, os;"
+            "os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings');"
+            "django.setup();"
+            "from django.conf import settings;"
+            "assert settings.SESSION_COOKIE_SECURE is True;"
+            "assert settings.CSRF_COOKIE_SECURE is True;"
+            "assert settings.SECURE_SSL_REDIRECT is True;"
+            "assert settings.SECURE_HSTS_SECONDS >= 31536000;"
+            "assert settings.SECURE_REDIRECT_EXEMPT;"
+            "print('production flags ok')")
+        env = dict(os.environ, DJANGO_DEBUG="0",
+                   DJANGO_SECRET_KEY="synthetic-test-secret-not-real-1234567890",
+                   DJANGO_ALLOWED_HOSTS="127.0.0.1",
+                   DJANGO_CSRF_TRUSTED_ORIGINS="https://127.0.0.1:8443")
+        proc = subprocess.run([sys.executable, "-c", code], capture_output=True,
+                              text=True, timeout=120, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("production flags ok", proc.stdout)
         # In the shipped settings file the flags are conditional on not DEBUG.
         import pathlib
         text = pathlib.Path("config/settings.py").read_text()
@@ -36,7 +57,8 @@ class ProductionConfigTests(TestCase):
                        "SECURE_SSL_REDIRECT", "SECURE_HSTS_SECONDS",
                        "CSRF_TRUSTED_ORIGINS", "DATA_UPLOAD_MAX_MEMORY_SIZE",
                        "FILE_UPLOAD_MAX_MEMORY_SIZE",
-                       "DATA_UPLOAD_MAX_NUMBER_FIELDS"]:
+                       "DATA_UPLOAD_MAX_NUMBER_FIELDS",
+                       "SECURE_REDIRECT_EXEMPT"]:
             self.assertIn(needle, text)
 
     def test_upload_and_throttle_bounds_are_sane(self):
