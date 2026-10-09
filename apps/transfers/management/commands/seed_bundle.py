@@ -28,6 +28,8 @@ class Command(BaseCommand):
         out = Path(options["output"])
         if not src.exists():
             raise CommandError(f"source file not found: {src}")
+        if src.stat().st_size > 50 * 1024 * 1024:
+            raise CommandError("source file is too large (limit 50 MB)")
         try:
             html = src.read_text(encoding="utf-8", errors="strict")
         except UnicodeDecodeError as exc:

@@ -39,7 +39,7 @@ jobs:
       - name: Build image (no push; synthetic verification)
         run: |
           docker build -t supplies-tracker:test .
-          docker run --rm supplies-tracker:test python manage.py check
+          docker run --rm -e DJANGO_SECRET_KEY=test-only-synthetic-secret-not-a-real-secret supplies-tracker:test python manage.py check
 
   publish:
     # Gated: only on explicit version tags, never on branch pushes, and only

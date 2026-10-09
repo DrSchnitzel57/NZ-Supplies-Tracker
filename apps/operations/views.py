@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import time
-
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import require_GET
 
 from apps.accounts.decorators import (
     admin_required,
@@ -20,7 +18,7 @@ from apps.accounts.decorators import (
 )
 from apps.common.errors import DomainError
 from apps.inventory.models import Item
-from apps.issuing.models import Issue, IssueLine
+from apps.issuing.models import Issue
 from apps.operations import reset as reset_service
 from apps.operations.models import SystemSetting
 from apps.roster.models import Missionary

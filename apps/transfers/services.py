@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 from django.db import transaction
-from django.utils import timezone
 
 from apps.accounts import services as permissions
 from apps.common.db import transact
@@ -330,8 +329,6 @@ def confirm_row_import(*, actor, preview, selected: list[int] | None) -> dict:
     holding a row lock — concurrent confirms and lower-version edits both
     fail instead of double-applying or silently overwriting.
     """
-    from django.db import transaction
-
     from apps.inventory import services as inv
     from apps.roster import services as roster_services
     from apps.transfers.models import RowImportPreview

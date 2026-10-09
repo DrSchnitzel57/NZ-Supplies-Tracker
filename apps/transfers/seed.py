@@ -292,8 +292,6 @@ def _norm_item(i: dict, n: int) -> dict:
 
 def seed_to_bundle_rows(seed) -> dict:
     """Convert normalized seed to bundle row dicts with correction metadata."""
-    import json as _json
-
     roster, items, dists = normalize_seed(seed)
     roster_rows = [
         {"id": str(uuid.uuid4()), "external_id": p["external_id"], "name": p["name"],

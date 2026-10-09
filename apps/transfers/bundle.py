@@ -419,8 +419,8 @@ def _check_references(tables: dict) -> None:
         _parse_dt(row.get("archived_at"), label="roster archived_at")
     for row in tables["items.csv"]:
         _parse_uuid(row.get("id"), label=f"item {row.get('id')}")
-        on_hand = _parse_int(row.get("on_hand") or 0,
-                             label=f"on_hand for item {row.get('id')}", minimum=0)
+        _parse_int(row.get("on_hand") or 0,
+                   label=f"on_hand for item {row.get('id')}", minimum=0)
         _parse_int(row.get("low_threshold") or 0,
                    label=f"low_threshold for item {row.get('id')}", minimum=0)
         _parse_int(row.get("version") or 0, label="item version", minimum=0)

@@ -13,6 +13,7 @@ from apps.common.errors import DomainError
 from apps.transfers import services as transfer_services
 from apps.transfers.models import RowImportPreview
 from apps.transfers.row_imports import (
+    MAX_UPLOAD_BYTES,
     PREVIEW_TTL_SECONDS,
     build_preview,
     current_revision,
@@ -116,6 +117,9 @@ def _handle_upload(request, kind: str):
         return redirect(f"transfers-{kind}")
     if upload is None:
         messages.error(request, "Choose a .csv or plain .xlsx file.")
+        return redirect(f"transfers-{kind}")
+    if upload.size > MAX_UPLOAD_BYTES:
+        messages.error(request, "File is too large (limit 2 MB).")
         return redirect(f"transfers-{kind}")
     try:
         detect_kind(upload.name)

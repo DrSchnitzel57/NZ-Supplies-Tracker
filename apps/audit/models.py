@@ -33,6 +33,3 @@ class AuditEvent(models.Model):
                 username = ""
             self.actor_username = username or ""
         super().save(*args, **kwargs)
-
-    class Meta:
-        ordering = ["created_at"]

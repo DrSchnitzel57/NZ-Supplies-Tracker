@@ -18,7 +18,6 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from apps.common.errors import (
     MaintenanceActiveError,
     StaleVersionError,
-    ThrottledError,
     ValidationError,
 )
 from tests.factories import make_admin, make_item, make_missionary, make_staff
@@ -290,8 +289,6 @@ class ResetRestoreCommandTests(TransactionTestCase):
         self.admin, _ = make_admin()
 
     def test_reset_marker_records_path_and_version(self):
-        from unittest import mock
-
         from apps.operations import backup as backup_mod
         from apps.operations import reset as reset_service
 
@@ -353,7 +350,6 @@ class ResetRestoreCommandTests(TransactionTestCase):
 
         from django.core.management import call_command
 
-        from apps.inventory.models import StockMovement
         from apps.operations import backup as backup_mod
         from apps.roster.models import Missionary
 
@@ -515,8 +511,6 @@ class BundleValidationTests(TestCase):
         self.assertIn("checksum", str(ctx.exception))
 
     def test_count_mismatch_and_bad_header_rejected(self):
-        from apps.transfers import bundle as bundle_mod
-
         with self.assertRaises(Exception) as ctx:
             self._import(_rebuild_bundle(
                 manifest_overrides={"counts": {"settings": 0, "roster": 0,
@@ -538,7 +532,7 @@ class BundleValidationTests(TestCase):
         item = make_item(self.admin, opening_qty=10)
         from apps.issuing import services as issuing
 
-        issue = issuing.create_issue(
+        issuing.create_issue(
             actor=self.admin, missionary_id=person.pk,
             lines=[{"item_id": str(item.pk), "quantity": 3}],
             note="", idempotency_key="rev-reg-1")
@@ -565,7 +559,6 @@ class BundleValidationTests(TestCase):
 
     def test_timestamps_and_actor_snapshots_survive_without_accounts(self):
         from apps.issuing import services as issuing
-        from apps.transfers import bundle as bundle_mod
         from apps.transfers import services as transfers
 
         person = make_missionary(self.admin)
@@ -661,7 +654,7 @@ class RowImportHardeningTests(TestCase):
         from apps.transfers import services as transfers
 
         first = make_missionary(self.staff, external_id="LV-1", name="One")
-        second = make_missionary(self.staff, external_id="LV-2", name="Two")
+        make_missionary(self.staff, external_id="LV-2", name="Two")
         rows = [["external_id", "name"], ["LV-3", "Three"]]
         preview = self._preview("roster", rows)
         # Edit the LOWER-version record; max-version token schemes miss this.
@@ -704,7 +697,6 @@ class RowImportHardeningTests(TestCase):
 
     def test_archived_roster_match_reactivates(self):
         from apps.roster import services as roster_services
-        from apps.roster.models import Missionary
         from apps.transfers import services as transfers
 
         person = make_missionary(self.staff, external_id="RE-1", name="Old")
@@ -962,7 +954,6 @@ class ViewBehaviorTests(TestCase):
 
 class ReportFamilyTests(TestCase):
     def test_stock_category_intake_reports(self):
-        from apps.inventory.models import Item
         from apps.issuing import services as issuing
         from apps.reports import services as rep
 
