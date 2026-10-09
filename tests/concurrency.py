@@ -207,6 +207,45 @@ class CompetingIssuesTests(TransactionTestCase):
         item.refresh_from_db()
         self.assertEqual(item.on_hand, 8)
 
+    def test_concurrent_same_key_create_item_writes_once(self):
+        from apps.inventory.models import Item, StockMovement, item_key
+
+        admin, _ = make_admin()
+        key = f"same-open-{uuid.uuid4().hex}"
+        tag = uuid.uuid4().hex[:8]
+        payloads = [
+            {"category": f"CatA {tag}", "name": f"ItemA {tag}", "size": ""},
+            {"category": f"CatB {tag}", "name": f"ItemB {tag}", "size": ""},
+        ]
+        keys = [item_key(**p) for p in payloads]
+        barrier = threading.Barrier(2)
+        outcomes = [None, None]
+
+        def attempt(index):
+            _close_thread_connections()
+            barrier.wait(timeout=10)
+            try:
+                item = inv.create_item(
+                    actor=admin, idempotency_key=key, opening_qty=5,
+                    reason="opening", **payloads[index],
+                )
+                outcomes[index] = str(item.pk)
+            except Exception as exc:  # pragma: no cover - surfaced below
+                outcomes[index] = f"error:{type(exc).__name__}:{exc}"
+            finally:
+                _close_thread_connections()
+
+        threads = [threading.Thread(target=attempt, args=(i,)) for i in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+        # Same idempotency key from two writers: one row wins, no orphan item.
+        self.assertEqual(outcomes[0], outcomes[1])
+        self.assertFalse(str(outcomes[0]).startswith("error:"))
+        self.assertEqual(StockMovement.objects.filter(idempotency_key=key).count(), 1)
+        self.assertEqual(Item.objects.filter(key__in=keys).count(), 1)
+
     def test_maintenance_guard_blocks_other_connections(self):
         from apps.common.errors import MaintenanceActiveError
         from apps.operations import guards

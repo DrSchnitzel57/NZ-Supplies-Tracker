@@ -71,6 +71,12 @@ def create_item(
             with transaction.atomic():
                 item.save()
         except IntegrityError as exc:
+            if idempotency_key:
+                winner = StockMovement.objects.filter(
+                    idempotency_key=idempotency_key
+                ).first()
+                if winner is not None:
+                    return Item.objects.get(pk=winner.item_id)
             raise ValidationError("item already exists (normalized match)") from exc
         try:
             with transaction.atomic():
@@ -87,6 +93,10 @@ def create_item(
             if idempotency_key and StockMovement.objects.filter(
                 idempotency_key=idempotency_key
             ).exists():
+                # A concurrent same-key submit won: remove the item row this
+                # attempt just created so it cannot linger as an orphan
+                # without movements, then return the winner's row.
+                item.delete()
                 return Item.objects.get(
                     pk=StockMovement.objects.get(
                         idempotency_key=idempotency_key
