@@ -13,7 +13,7 @@ Replace browser-local persistence with a dependable LAN tool for approximately t
 - Business services own mutations; views, importers and commands invoke the same services. Database constraints and atomic transactions enforce invariants independently of UI validation.
 - One application host, one local-disk SQLite database; no live database on OneDrive/network storage. Configure WAL, bounded busy timeout and immediate write transactions. Do not rely on SQLite row-level `select_for_update`; prove concurrent writes using separate connections/processes.
 - Compose runs application and Caddy; static assets and persistent app data are separated from image layers. A fixed LAN IP/port is configured by the operator. Caddy issues local certificates covering the configured address; browsers warn unless devices trust the local CA. Only HTTPS is exposed; admin/proxy management interfaces are not public.
-- Firewall/bind configuration restricts access to the approved LAN. No router port forwarding. Host prerequisites, Docker Desktop licensing where relevant, certificate trust and host disk security are operator checks.
+- Firewall/bind configuration restricts access to the approved LAN. No router port forwarding. Host prerequisites, Docker Desktop licensing where relevant and host disk security are operator checks. Certificate trust setup/distribution is out of scope for now; browser warnings remain a known limitation, not a task or acceptance criterion.
 
 ## Data and business rules
 
@@ -44,6 +44,9 @@ Replace browser-local persistence with a dependable LAN tool for approximately t
 ## UI and operations
 
 - Preserve familiar responsive navigation and core screens. Authenticated staff identity replaces typed Issued by. No handwritten signature collection or offline-browser synchronization.
+- Optimize for nontechnical staff: Issue goods is the primary action; use Available, Add stock, Correct stock count and Undo this issue instead of internal accounting jargon. Keep imports/archives secondary, hide administrator-only tools, provide contextual help and specific outcome messages. Preserve familiarity, not every prototype layout detail.
+- Provide a linked, one-page illustrated `docs/QUICK_START.md` using synthetic examples. Manual usability acceptance before rollout: a first-time representative staff member issues goods without coaching, then adds stock and corrects an issue with the guide. Observe hesitation/errors and address confusing UI rather than assume it is intuitive.
+- Separate staff from operator complexity: staff use a browser link/account, administrators manage accounts through the UI, and the operator owns installation, updates, backup monitoring and host/network recovery. Full reset lives in a clearly marked destructive admin area, never ordinary troubleshooting.
 - Poll read-only dashboard/stock values approximately every 15 seconds, without disturbing drafts or extending sessions. Clearly show connection/save failures and preserve drafts in memory; do not silently queue offline mutations or persist personal data in localStorage.
 - Bundle fonts and dependencies. Routine work needs only the LAN host. Low-stock alerts can be copied or opened using `mailto:`; no SMTP service. Browser PDF/clipboard/mail behavior needs client checks.
 - Daily SQLite-safe backups on the host, 30-day daily retention; preserve the latest successful pre-update recovery backup until superseded. Verify integrity/checksums and document restore. A host/disk failure can destroy both live data and these backups.
@@ -62,6 +65,7 @@ Replace browser-local persistence with a dependable LAN tool for approximately t
 - **ZIP/CSV manifest over opaque database interchange:** portable and inspectable for Power App migration while representing complete relationships; backups remain the recovery source.
 - **Compose/private prebuilt images over on-host builds or OS-specific installers:** consistent deployment and controlled remote updates.
 - **LAN HTTPS/self-issued certificates over public hosting:** matches available infrastructure; trust warnings and host controls remain explicit operational limitations.
+- **Guided everyday workflows over exposing technical controls:** nontechnical staff need plain language, progressive disclosure and a short guide; operational complexity stays with the operator. Certificate trust configuration is deferred by user request, while HTTPS remains required.
 - **Host-only backups over external backup infrastructure for now:** accepted initial constraint, not protection against host loss.
 
 ## Planning references
