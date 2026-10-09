@@ -1,89 +1,115 @@
-"""Backup/restore: SQLite-safe ops, retention, failure paths (synthetic)."""
+"""Real backup/restore/maintenance drills inside the isolated stack."""
 
-import sqlite3
-import time
+from __future__ import annotations
+
+import json
 
 import pytest
 
-from apps.operations import backup as backup_mod
+from tests.deployment.conftest import (
+    compose_exec,
+    https_get,
+    run,
+    wait_until,
+)
 
-pytestmark = pytest.mark.django_db
+pytestmark = pytest.mark.django_db(transaction=False)
 
-
-def _synthetic_db(path):
-    conn = sqlite3.connect(str(path))
-    conn.execute("CREATE TABLE django_migrations (id INTEGER PRIMARY KEY)")
-    conn.execute("CREATE TABLE accounts_user (id INTEGER PRIMARY KEY)")
-    conn.execute("CREATE TABLE inventory_item (id INTEGER PRIMARY KEY)")
-    conn.execute("CREATE TABLE roster_missionary (id INTEGER PRIMARY KEY)")
-    conn.execute("INSERT INTO accounts_user VALUES (1)")
-    conn.commit()
-    conn.close()
+SHELL = ("python", "manage.py", "shell", "-c")
 
 
-def test_backup_verify_round_trip(tmp_path):
-    src = tmp_path / "live.sqlite3"
-    _synthetic_db(src)
-    dest = tmp_path / "backups" / "daily.sqlite3"
-    info = backup_mod.backup_sqlite(source_path=src, dest_path=dest)
-    assert info["bytes"] > 0 and len(info["sha256"]) == 64
-    backup_mod.verify_sqlite_backup(dest)
-    # Permission-restricted artifacts.
-    assert (dest.stat().st_mode & 0o777) == 0o600
+def _shell(stack, code: str):
+    return compose_exec(stack, *SHELL, code)
 
 
-def test_corrupt_backup_fails_closed_and_leaves_dest(tmp_path):
-    src = tmp_path / "live.sqlite3"
-    _synthetic_db(src)
-    good = tmp_path / "good.sqlite3"
-    backup_mod.backup_sqlite(source_path=src, dest_path=good)
-    corrupt = tmp_path / "corrupt.sqlite3"
-    corrupt.write_bytes(b"not a database at all")
-    dest = tmp_path / "restored.sqlite3"
-    dest.write_bytes(good.read_bytes())
-    before = dest.read_bytes()
-    with pytest.raises(ValueError):
-        backup_mod.restore_sqlite(backup_path=corrupt, dest_path=dest)
-    assert dest.read_bytes() == before  # usable recovery path preserved
+def test_persistence_across_container_restart(stack):
+    proc = _shell(stack,
+                 "from apps.roster.models import Missionary;"
+                 "Missionary.objects.create(external_id='persist-1', name='Persist Me');"
+                 "print('created')")
+    assert proc.returncode == 0, proc.stdout
+    run(*stack["prefix"], "restart", "app", timeout=300)
+    wait_until(lambda: https_get("/readyz/")[0] == 200,
+               label="readiness after restart")
+    proc = _shell(stack,
+                 "from apps.roster.models import Missionary;"
+                 "print(Missionary.objects.filter(external_id='persist-1').count())")
+    assert proc.returncode == 0, proc.stdout
+    assert proc.stdout.strip().endswith("1")
 
 
-def test_incomplete_schema_rejected(tmp_path):
-    path = tmp_path / "thin.sqlite3"
-    conn = sqlite3.connect(str(path))
-    conn.execute("CREATE TABLE django_migrations (id INTEGER PRIMARY KEY)")
-    conn.commit()
-    conn.close()
-    with pytest.raises(ValueError):
-        backup_mod.verify_sqlite_backup(path)
+def test_backup_verify_and_protected_restore_drill(stack):
+    dest = "/app/data/backups/drill-pre-update.sqlite3"
+    proc = compose_exec(stack, "python", "manage.py", "backup_db",
+                        "--dest", dest, "--quiesce")
+    assert proc.returncode == 0, proc.stdout
+    proc = _shell(stack,
+                  "from apps.operations import backup;"
+                  "backup.verify_sqlite_backup('/app/data/backups/drill-pre-update.sqlite3');"
+                  "info = __import__('json').loads(open('/app/data/backups/drill-pre-update.sqlite3.manifest.json').read());"
+                  "assert info['completed'] is True;"
+                  "print('verified', info['sha256'][:8])")
+    assert proc.returncode == 0, proc.stdout
+    assert "verified" in proc.stdout
+    # A corrupt copy is refused and can never become the protected backup.
+    proc = _shell(stack,
+                  "import shutil\n"
+                  "shutil.copy('/app/data/backups/drill-pre-update.sqlite3', '/tmp/evil.sqlite3')\n"
+                  "open('/tmp/evil.sqlite3','r+b').write(b'\\x00' * 64)\n"
+                  "from apps.operations import backup\n"
+                  "try:\n"
+                  "    backup.verify_sqlite_backup('/tmp/evil.sqlite3')\n"
+                  "    print('NOT-REFUSED')\n"
+                  "except ValueError:\n"
+                  "    print('refused')")
+    assert "refused" in proc.stdout
+    assert "NOT-REFUSED" not in proc.stdout
 
 
-def test_retention_protects_recovery_backup_until_superseded(tmp_path):
-    d = tmp_path / "backups"
-    d.mkdir()
-    old_daily = d / "daily-old.sqlite3"
-    _synthetic_db(old_daily)
-    old_time = time.time() - 40 * 86400
-    import os
-    os.utime(old_daily, (old_time, old_time))
-    recovery = d / "pre-update-20260101-000000.sqlite3"
-    _synthetic_db(recovery)
-    os.utime(recovery, (old_time, old_time))
-    result = backup_mod.prune_backups(backup_dir=d, retention_days=30)
-    assert str(recovery) in result["kept"]
-    assert result["protected"] == str(recovery)
-    assert str(old_daily) in result["deleted"]
-    # Superseded: a newer pre-update backup releases the old one.
-    newer = d / "pre-update-20260201-000000.sqlite3"
-    _synthetic_db(newer)
-    os.utime(recovery, (old_time, old_time))
-    result2 = backup_mod.prune_backups(backup_dir=d, retention_days=30)
-    assert result2["protected"] == str(newer)
-    assert str(recovery) in result2["deleted"]
+def test_owned_maintenance_token_flow(stack):
+    proc = _shell(stack,
+                  "from apps.operations import guards;"
+                  "print('token=' + guards.enter_maintenance(owner='drill', reason='test'))")
+    assert proc.returncode == 0, proc.stdout
+    token = [line for line in proc.stdout.splitlines() if "token=" in line][0].split("token=")[1].strip()
+    # A second operator cannot share the window.
+    proc = compose_exec(stack, "python", "manage.py", "maintenance",
+                        "--enter", "--owner", "intruder")
+    assert proc.returncode != 0
+    assert "already held" in proc.stdout
+    # Exiting without the token is refused; with it the window closes.
+    proc = compose_exec(stack, "python", "manage.py", "maintenance", "--exit")
+    assert proc.returncode != 0
+    proc = compose_exec(stack, "python", "manage.py", "maintenance",
+                        "--exit", "--token", token)
+    assert proc.returncode == 0, proc.stdout
+    status, body = https_get("/readyz/")
+    payload = json.loads(body.decode())
+    assert payload["ok"] is True and payload["maintenance"] is False
 
 
-def test_restore_requires_verified_backup(tmp_path):
-    src = tmp_path / "live.sqlite3"
-    _synthetic_db(src)
-    dest = tmp_path / "dest.sqlite3"
-    info = backup_mod.restore_sqlite(backup_path=src, dest_path=dest)
-    assert info["bytes"] > 0
+def test_dead_server_recovers(stack):
+    run(*stack["prefix"], "stop", "app", timeout=300)
+    try:
+        import urllib.error
+        try:
+            https_get("/readyz/", timeout=10)
+            reachable = True
+        except Exception:  # noqa: BLE001 - any failure means not serving
+            reachable = False
+        assert not reachable, "stopped app still answers HTTPS"
+    finally:
+        run(*stack["prefix"], "start", "app", timeout=300)
+    wait_until(lambda: https_get("/readyz/")[0] == 200,
+               label="readiness after restart")
+
+
+def test_restore_refuses_version_mismatch(stack):
+    proc = compose_exec(stack, "python", "manage.py", "backup_db",
+                        "--dest", "/app/data/backups/v.sqlite3")
+    assert proc.returncode == 0, proc.stdout
+    proc = compose_exec(stack, "python", "manage.py", "restore_db",
+                        "/app/data/backups/v.sqlite3",
+                        "--expected-version", "9.9.9")
+    assert proc.returncode != 0
+    assert "mismatch" in proc.stdout
