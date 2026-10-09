@@ -33,6 +33,23 @@ if not DEBUG and SECRET_KEY == _default_secret:
 
 _allowed = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
+if not DEBUG and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must not be empty in production.")
+
+_csrf_origins = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(",") if o.strip()]
+
+# Trusted proxy: only Caddy (Compose network) forwards proto/host.
+USE_X_FORWARDED_HOST = _env_bool("DJANGO_USE_X_FORWARDED_HOST", False)
+
+# Application release label baked into the image (e.g. 0.4.0). Empty in dev.
+APP_VERSION = os.environ.get("APP_VERSION", "").strip()
+
+# Bounded uploads: spreadsheet/bundle views enforce tighter per-file caps;
+# these Django-level caps are the outer fail-closed bound.
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DATA_UPLOAD_MAX_MEMORY_SIZE", str(5 * 1024 * 1024)))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("FILE_UPLOAD_MAX_MEMORY_SIZE", str(5 * 1024 * 1024)))
+DATA_UPLOAD_MAX_NUMBER_FIELDS = int(os.environ.get("DATA_UPLOAD_MAX_NUMBER_FIELDS", "2000"))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -151,6 +168,7 @@ CACHES = {
 
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

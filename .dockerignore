@@ -1,0 +1,17 @@
+# Keep personal data, secrets, local state and bundles out of images.
+# Never ship the prototype HTML (personal SEED data) or real fixtures.
+/MTC Missionary Supplies Tracker.html
+.local/
+*.sqlite3
+*.sqlite3-*
+*.zip
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+/staticfiles/
+/media/
+.git/
+__pycache__/
