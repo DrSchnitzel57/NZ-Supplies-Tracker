@@ -16,22 +16,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Install Chromium (real browser flows; failures must not skip)
+        run: |
+          python -m playwright install chromium --with-deps
       - name: Django checks
         run: |
           python manage.py check
           python manage.py makemigrations --check --dry-run
       - name: Django test suite (synthetic data only)
         run: |
-          python manage.py test tests.foundation tests.auth tests.ledger tests.concurrency tests.workflows tests.transfers tests.seed_conversion tests.reports tests.admin_safety tests.deployment_security
-      - name: Browser suite
+          python manage.py test
+      - name: Browser suite (real Chromium, LAN-only)
         run: |
           python -m pytest tests/browser -q
-      - name: Deployment suite
+      - name: Deployment suite (isolated Compose)
         run: |
           python -m pytest tests/deployment -q
       - name: Shell syntax
         run: |
-          bash -n scripts/update.sh scripts/restore.sh
+          bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh
       - name: Compose config (synthetic)
         run: |
           docker compose -f compose.test.yaml config --quiet
+      - name: Image exclusions
+        run: |
+          docker build -t supplies-tracker:test .
+          docker run --rm supplies-tracker:test python -c "import pathlib; assert not list(pathlib.Path('/app').glob('*.html')), 'html in image'; assert not pathlib.Path('/app/.local').exists(), '.local in image'; print('image exclusions ok')"
+          docker run --rm supplies-tracker:test python manage.py check

@@ -1,17 +1,26 @@
 # Keep personal data, secrets, local state and bundles out of images.
 # Never ship the prototype HTML (personal SEED data) or real fixtures.
+# (Build context only copies manage.py/config/apps/templates/static, but
+# these rules are the fail-closed backstop.)
 /MTC Missionary Supplies Tracker.html
+*.probe.html
 .local/
 *.sqlite3
 *.sqlite3-*
+*.db
+*.bak
+backups/
 *.zip
+.bundle/
 .env
 .env.*
 !.env.example
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 /staticfiles/
 /media/
 .git/
-__pycache__/
+docs/img/
+tests/

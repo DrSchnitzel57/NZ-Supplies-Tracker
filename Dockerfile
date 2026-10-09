@@ -1,12 +1,13 @@
 # Pinned production image: Python 3.13 slim + Gunicorn serving Django.
-# Judgment call: collectstatic at build so the image never needs the host
-# network at runtime; runtime needs only the LAN host (Caddy -> app).
-FROM python:3.13-slim-bookworm AS base
+# Installs production dependencies only (no pytest/playwright); static
+# assets are collected at build and served by WhiteNoise from Gunicorn, so
+# runtime needs only the LAN host (Caddy -> app).
+FROM python:3.13.7-slim-bookworm AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.prod.txt ./
+RUN pip install --no-cache-dir -r requirements.prod.txt
 
 COPY manage.py ./
 COPY config ./config
@@ -20,8 +21,8 @@ RUN DJANGO_SECRET_KEY=build-only-insecure DJANGO_DEBUG=0 \
 
 # Non-root runtime user owns nothing writable except via mounted volumes.
 RUN useradd --create-home --uid 10001 appuser \
-    && mkdir -p /app/data /app/backups \
-    && chown -R appuser:appuser /app/data /app/backups /app/staticfiles
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app/data /app/staticfiles
 USER appuser
 
 ENV DJANGO_DEBUG=0 DJANGO_DB_PATH=/app/data/db.sqlite3

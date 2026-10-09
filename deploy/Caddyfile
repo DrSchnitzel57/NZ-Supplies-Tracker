@@ -2,6 +2,9 @@
 # {$APP_HOST}:{$APP_PORT} is the single HTTPS entrypoint. Caddy issues a
 # local certificate for the configured address; browsers warn unless they
 # trust the local CA (trust setup is out of scope; see docs/OPERATIONS.md).
+# Static assets are served by the app itself (WhiteNoise); Caddy only
+# terminates TLS and forwards, always marking the original proto/host so
+# Django's HTTPS checks see the real client-facing scheme.
 {
 	admin off
 }
@@ -14,9 +17,15 @@ https://{$APP_HOST}:{$APP_PORT} {
 	}
 	# Health/readiness stay unauthenticated but reveal nothing sensitive.
 	handle /healthz* {
-		reverse_proxy app:8000
+		reverse_proxy app:8000 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+		}
 	}
 	handle /readyz* {
-		reverse_proxy app:8000
+		reverse_proxy app:8000 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+		}
 	}
 }
