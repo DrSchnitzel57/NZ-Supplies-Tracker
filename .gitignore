@@ -8,3 +8,11 @@
 .env
 .env.*
 !.env.example
+
+# Python/Django generated artifacts and local virtualenv.
+.venv/
+__pycache__/
+*.pyc
+db.sqlite3-journal
+/staticfiles/
+/media/

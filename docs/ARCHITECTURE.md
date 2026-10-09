@@ -66,6 +66,7 @@ Replace browser-local persistence with a dependable LAN tool for approximately t
 - **Compose/private prebuilt images over on-host builds or OS-specific installers:** consistent deployment and controlled remote updates.
 - **LAN HTTPS/self-issued certificates over public hosting:** matches available infrastructure; trust warnings and host controls remain explicit operational limitations.
 - **Guided everyday workflows over exposing technical controls:** nontechnical staff need plain language, progressive disclosure and a short guide; operational complexity stays with the operator. Certificate trust configuration is deferred by user request, while HTTPS remains required.
+- **Immediate transactions plus bounded retry of transient SQLite locks (milestone 01):** WAL and `BEGIN IMMEDIATE` serialize writers, but contended writers can still see transient `database is/table locked` errors; write services retry the whole atomic block a bounded number of times so the loser re-reads fresh state and raises the proper domain error (shortage, stale version, already-reversed) instead of a raw database error.
 - **Host-only backups over external backup infrastructure for now:** accepted initial constraint, not protection against host loss.
 
 ## Planning references
