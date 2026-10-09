@@ -149,7 +149,7 @@ def issue_quick(request):
         person = Missionary.objects.get(pk=missionary_id) if missionary_id else None
     except (Missionary.DoesNotExist, ValueError, TypeError):
         person = None
-    return_to = f"/roster/{missionary_id}/" if missionary_id else "/issue/"
+    return_to = f"/roster/{person.pk}/" if person is not None else "/issue/"
     return _handle_issue_post(
         request, return_to=return_to, template="issuing/issue.html", quick_person=person
     )
@@ -165,14 +165,16 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
         lines = _parse_lines(request.POST)
     except ValueError as exc:
         messages.error(request, f"Could not issue goods: {exc}")
+        kept_rows = [
+            {"item_id": (request.POST.get(f"item-{i}") or ""),
+             "quantity": (request.POST.get(f"qty-{i}") or "")}
+            for i in range(10)
+        ]
         ctx = _form_context(
             draft_key=idem,
             missionary_id=missionary_id,
             note=note,
-            draft_lines=[
-                {"item_id": (request.POST.get(f"item-{i}") or ""), "quantity": (request.POST.get(f"qty-{i}") or "")}
-                for i in range(3)
-            ] or None,
+            draft_lines=kept_rows or None,
         )
         # Preserve single-line quick drafts too.
         if not any(d["item_id"] or d["quantity"] for d in ctx["draft_lines"]):
@@ -259,12 +261,16 @@ def issue_confirm(request):
             proposal = []
     if not proposal:
         messages.error(request, "The revised list was unclear. Please try again.")
-        return redirect("/issue/")
+        ctx = _form_context(draft_key=idem, missionary_id=missionary_id, note=note)
+        return render(request, "issuing/issue.html", ctx, status=400)
     try:
         missionary = Missionary.objects.get(pk=missionary_id)
     except (Missionary.DoesNotExist, ValueError, TypeError):
         messages.error(request, "Choose a person to issue goods to.")
-        return redirect("/issue/")
+        kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in proposal]
+        ctx = _form_context(draft_key=idem, missionary_id="", note=note)
+        ctx["draft_lines"] = (kept + ctx["draft_lines"])[:10]
+        return render(request, "issuing/issue.html", ctx, status=400)
     try:
         issue = issuing.create_issue(
             actor=request.user,
@@ -285,7 +291,10 @@ def issue_confirm(request):
         return render(request, "issuing/shortage.html", ctx, status=409)
     except DomainError as exc:
         messages.error(request, f"Could not issue goods: {exc}")
-        return redirect("/issue/")
+        kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in proposal]
+        ctx = _form_context(draft_key=idem, missionary_id=str(missionary.pk), note=note)
+        ctx["draft_lines"] = (kept + ctx["draft_lines"])[:10]
+        return render(request, "issuing/issue.html", ctx, status=400)
     messages.success(request, f"Issued revised quantities to {issue.missionary_name}.")
     return redirect("issue-detail", pk=issue.pk)
 

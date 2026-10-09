@@ -11,11 +11,13 @@
 {% if mode == "create" %}
 <label>Opening quantity <input name="opening_qty" inputmode="numeric" pattern="[0-9]*" value="0"></label>
 <label>Reason <input name="reason" value="opening balance"></label>
+<input type="hidden" name="idempotency_key" value="{{ create_key }}">
 {% else %}
 <label>Unit <input name="unit" value="{{ item.unit }}"></label>
 <input type="hidden" name="expected_version" value="{{ item.version }}">
 {% endif %}
-<label>Low-stock alert level <input name="low_threshold" inputmode="numeric" pattern="[0-9]*" value="{% if item %}{{ item.low_threshold }}{% else %}0{% endif %}"></label>
+<label>Low-stock alert level <input name="low_threshold" inputmode="numeric" pattern="[0-9]*" value="{% if item %}{{ item.low_threshold }}{% elif default_threshold %}{{ default_threshold }}{% else %}0{% endif %}"></label>
+{% if mode == "create" and default_threshold %}<p class="help">Defaults to the site alert level ({{ default_threshold }}). Change it per item if needed.</p>{% endif %}
 <button type="submit">{% if mode == "create" %}Add item{% else %}Save changes{% endif %}</button>
 </form>
 {% endblock %}

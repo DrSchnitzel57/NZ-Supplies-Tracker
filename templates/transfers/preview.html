@@ -16,16 +16,26 @@
 <h2>Valid rows ({{ valid|length }})</h2>
 <form method="post" action="/transfers/preview/{{ preview.token }}/confirm/">
 {% csrf_token %}
+{% if preview.mode == "add_update" %}
+<input type="hidden" name="has_rows" value="1">
+<p class="toolbar" role="group" aria-label="Row selection">
+<button type="submit" name="scope" value="all">Apply all</button>
+<button type="submit" name="scope" value="none">Apply none</button>
+</p>
+<p class="help">Tick the rows to apply and choose “Apply approved rows”, or apply everything / nothing at once. Confirming with nothing ticked writes nothing.</p>
+{% endif %}
 <table>
-<thead><tr>{% if preview.mode == "add_update" %}<th>Apply?</th>{% endif %}<th>Row</th><th>Action</th><th>Summary</th></tr></thead>
+<thead><tr>{% if preview.mode == "add_update" %}<th>Apply?</th>{% endif %}<th>Row</th><th>Action</th><th>Summary</th><th>Change</th><th>Note</th></tr></thead>
 <tbody>
 {% for r in valid %}
 <tr>
 {% if preview.mode == "add_update" %}<td><input type="checkbox" name="row-{{ r.row }}" checked aria-label="Apply row {{ r.row }}"></td>{% endif %}
 <td>{{ r.row }}</td><td>{{ r.action }}</td>
-<td>{% if preview.kind == "roster" %}{{ r.external_id }} — {{ r.name }}{% else %}{{ r.category }} / {{ r.name }}{% if r.size %} ({{ r.size }}){% endif %}{% if r.counted is not None %} → count {{ r.counted }}{% endif %}{% endif %}</td>
+<td>{% if preview.kind == "roster" %}{{ r.external_id }} — {{ r.name }}{% if r.archived %} (archived — will be reactivated){% endif %}{% else %}{{ r.category }} / {{ r.name }}{% if r.size %} ({{ r.size }}){% endif %}{% if r.archived %} (archived — will be reactivated){% endif %}{% endif %}</td>
+<td>{% if preview.kind == "inventory" %}{% if r.current is not None %}now {{ r.current }} → {% endif %}{% if r.counted is not None %}count {{ r.counted }} ({{ r.delta|stringformat:"+d" }}, {{ r.movement }}){% else %}details only{% endif %}{% if r.low_threshold is not None %} · alert {{ r.low_threshold }}{% endif %}{% else %}—{% endif %}</td>
+<td>{{ r.reason|default:"—" }}</td>
 </tr>
-{% empty %}<tr><td colspan="4">No valid rows.</td></tr>
+{% empty %}<tr><td colspan="6">No valid rows.</td></tr>
 {% endfor %}
 </tbody>
 </table>

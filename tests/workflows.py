@@ -28,9 +28,15 @@ class RouteAccessTests(TestCase):
 
     def test_login_required_for_staff_screens(self):
         for url in ["/", "/roster/", "/inventory/", "/issue/", "/reports/", "/guide/",
-                    "/issue/history/", "/api/stock/", "/api/dashboard/"]:
+                    "/issue/history/"]:
             response = self.client.get(url)
             self.assertIn(response.status_code, (302, 301), url)
+        # Poll endpoints answer JSON 401 (not a login redirect) so background
+        # polling can tell "sign-in expired" apart from "offline".
+        for url in ["/api/stock/", "/api/dashboard/"]:
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 401, url)
+            self.assertEqual(response.json()["error"], "sign-in-required")
 
     def test_staff_can_open_all_screens(self):
         self.client.login(username=self.staff.username, password=self.pw)

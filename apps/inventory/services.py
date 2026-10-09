@@ -344,4 +344,7 @@ def _audit(actor, action, item, detail):
     )
 
 
-__all__ = ["normalize_text"]
+__all__ = [
+    "create_item", "receive_stock", "adjust_count", "update_item",
+    "archive_item", "reactivate_item", "remaining", "ledger_balance", "net_out",
+]

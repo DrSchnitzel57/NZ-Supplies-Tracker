@@ -15,6 +15,7 @@
 <h2>Add stock</h2>
 <form method="post" action="/inventory/{{ item.pk }}/add-stock/" class="stack" data-once>
 {% csrf_token %}
+<input type="hidden" name="idempotency_key" value="{{ receive_key }}">
 <label>Quantity to add <input name="quantity" inputmode="numeric" pattern="[0-9]*" required></label>
 <label>Reason (for example: “delivery from supplier”) <input name="reason" required></label>
 <button type="submit">Add stock</button>
@@ -25,6 +26,7 @@
 <form method="post" action="/inventory/{{ item.pk }}/correct-count/" class="stack" data-once>
 {% csrf_token %}
 <input type="hidden" name="expected_version" value="{{ item.version }}">
+<input type="hidden" name="idempotency_key" value="{{ correct_key }}">
 <label>Counted quantity now on the shelf <input name="counted_qty" inputmode="numeric" pattern="[0-9]*" value="{{ item.on_hand }}" required></label>
 <label>Reason (for example: “recount found a damaged box”) <input name="reason" required></label>
 <button type="submit">Correct stock count</button>

@@ -8,6 +8,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
 from apps.accounts.decorators import admin_required, staff_required
+from apps.accounts.reauth import reauth_required
 from apps.common.errors import DomainError
 from apps.transfers import services as transfer_services
 from apps.transfers.models import RowImportPreview
@@ -42,6 +43,7 @@ def bundle_home(request):
 
 
 @admin_required
+@reauth_required
 def bundle_export(request):
     data = transfer_services.export_bundle(actor=request.user)
     response = HttpResponse(data, content_type="application/zip")
@@ -50,6 +52,7 @@ def bundle_export(request):
 
 
 @admin_required
+@reauth_required
 @require_http_methods(["POST"])
 def bundle_import(request):
     upload = request.FILES.get("bundle")
@@ -73,7 +76,13 @@ def bundle_import(request):
 
 
 def _import_screen(request, kind: str):
-    previews = list(RowImportPreview.objects.filter(kind=kind).order_by("-created_at")[:10])
+    from apps.accounts import services as permissions
+
+    qs = RowImportPreview.objects.all()
+    if not permissions.is_admin(request.user):
+        # Staff only ever see their own previews; no cross-user tokens/names.
+        qs = qs.filter(created_by=request.user)
+    previews = list(qs.filter(kind=kind).order_by("-created_at")[:10])
     return render(request, "transfers/rows.html",
                   {"kind": kind, "previews": previews})
 
@@ -130,8 +139,15 @@ def _handle_upload(request, kind: str):
 
 @staff_required
 def import_preview(request, token: str):
+    from apps.accounts import services as permissions
+
     preview = _get_preview_or_expired(token)
     if preview is None:
+        messages.error(request, "Preview not found or expired; upload again.")
+        return redirect("dashboard")
+    if (preview.created_by_id is not None
+            and preview.created_by_id != request.user.pk
+            and not permissions.is_admin(request.user)):
         messages.error(request, "Preview not found or expired; upload again.")
         return redirect("dashboard")
     stale = preview.base_revision != current_revision(preview.kind)
@@ -156,20 +172,46 @@ def import_preview(request, token: str):
 @staff_required
 @require_http_methods(["POST"])
 def import_confirm(request, token: str):
+    from apps.accounts import reauth as reauth_mod
+    from apps.accounts import services as permissions
+
     preview = _get_preview_or_expired(token)
     if preview is None:
         messages.error(request, "Preview expired; upload again.")
         return redirect("dashboard")
-    # Approved valid subset: checkboxes named row-<n>; absent means all valid.
-    has_choices = any(k.startswith("row-") for k in request.POST)
+    if (preview.created_by_id is not None
+            and preview.created_by_id != request.user.pk
+            and not permissions.is_admin(request.user)):
+        messages.error(request, "Preview expired; upload again.")
+        return redirect("dashboard")
+    # Replacement archives records: administrators only, with fresh identity.
+    if preview.mode == "replace":
+        if not permissions.is_admin(request.user):
+            messages.error(request, "Replacement imports need an administrator.")
+            return redirect("transfers-preview", token=token)
+        if not reauth_mod.reauth_fresh(request):
+            messages.error(request, "Confirm your password first (recent sign-in required).")
+            return redirect(f"/admin-area/reauth/?next=/transfers/preview/{token}/")
+    # Explicit selection: "all" applies every valid row, "none" writes
+    # nothing, and a checkbox subset applies exactly those rows. Unchecking
+    # every box (no row-* keys) means none — never "all".
+    scope = (request.POST.get("scope") or "").strip()
+    has_checkboxes = request.POST.get("has_rows") == "1"
     chosen = []
     for k, v in request.POST.items():
         if k.startswith("row-") and v == "on":
             num = k[len("row-"):]
             if num.isdigit():
                 chosen.append(int(num))
-    # If no checkboxes were rendered/checked explicitly, treat missing key:
-    subset = set(chosen) if has_choices else None
+    if scope == "all":
+        subset = None
+    elif scope == "none":
+        subset = set()
+    elif has_checkboxes:
+        subset = set(chosen)
+    else:
+        # Replace mode renders no checkboxes: the whole valid file applies.
+        subset = None
     try:
         result = transfer_services.confirm_row_import(
             actor=request.user, preview=preview, selected=subset)

@@ -9,7 +9,7 @@
 <label>Mode
 <select name="mode">
 <option value="add_update">Add/update (valid rows can be approved)</option>
-<option value="replace">Replace all (needs every row valid{% if not user.is_superuser %} + administrator{% endif %})</option>
+{% if user.is_superuser %}<option value="replace">Replace all (needs every row valid)</option>{% endif %}
 </select></label>
 <button type="submit">Review preview</button>
 </form>

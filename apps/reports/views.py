@@ -19,19 +19,21 @@ def report_home(request):
 
 @staff_required
 def export_roster_csv(request):
-    return rep.roster_csv()
+    include_archived = request.GET.get("archived", "1") != "0"
+    return rep.roster_csv(include_archived=include_archived)
 
 
 @staff_required
 def export_inventory_csv(request):
-    return rep.inventory_csv()
+    include_archived = request.GET.get("archived", "1") != "0"
+    return rep.inventory_csv(include_archived=include_archived)
 
 
 @staff_required
 def export_report(request, family: str):
     include_archived = request.GET.get("archived") == "1"
     fmt = (request.GET.get("format") or "csv").strip().lower()
-    if family not in ("per-item", "per-person", "low-stock", "history"):
+    if family not in rep.REPORT_FAMILIES:
         from django.http import HttpResponseNotFound
         return HttpResponseNotFound("unknown report")
     if fmt == "pdf":

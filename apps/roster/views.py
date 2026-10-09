@@ -25,12 +25,15 @@ def missionary_list(request):
     if not show_archived:
         qs = qs.filter(is_archived=False)
     if q:
-        qs = qs.filter(Q(name__icontains=q) | Q(external_id__icontains=q))
+        qs = qs.filter(Q(name__icontains=q) | Q(external_id__icontains=q)
+                       | Q(email__icontains=q))
+    total = qs.count()
     qs = qs.order_by("name")[:500]
     return render(
         request,
         "roster/list.html",
-        {"missionaries": qs, "q": q, "show_archived": show_archived},
+        {"missionaries": qs, "q": q, "show_archived": show_archived,
+         "total": total, "shown": len(qs)},
     )
 
 

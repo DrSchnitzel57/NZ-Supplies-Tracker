@@ -12,7 +12,12 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 
-from apps.accounts.decorators import admin_required, no_activity_update, staff_required
+from apps.accounts.decorators import (
+    admin_required,
+    no_activity_update,
+    staff_required,
+    staff_required_api,
+)
 from apps.common.errors import DomainError
 from apps.inventory.models import Item
 from apps.issuing.models import Issue, IssueLine
@@ -52,7 +57,7 @@ def guide(request):
     return render(request, "guide.html")
 
 
-@staff_required
+@staff_required_api
 @no_activity_update
 @require_GET
 def stock_api(request):
@@ -72,13 +77,25 @@ def stock_api(request):
     return JsonResponse({"items": payload, "now": timezone.now().isoformat()})
 
 
-@staff_required
+@staff_required_api
 @no_activity_update
 @require_GET
 def dashboard_api(request):
+    from django.conf import settings
+
     low = Item.objects.filter(
         is_archived=False, on_hand__lte=Coalesce("low_threshold", 0)
     ).count()
+    # Server-driven expiry countdown so the warning banner is honest: it
+    # reflects the actual idle timer, not page-load time.
+    last = request.session.get("last_activity")
+    timeout = getattr(settings, "SESSION_IDLE_TIMEOUT", 1800)
+    expires_in = None
+    if last is not None:
+        try:
+            expires_in = max(0, int(timeout - (timezone.now().timestamp() - float(last))))
+        except (TypeError, ValueError):
+            expires_in = None
     return JsonResponse(
         {
             "people": Missionary.objects.filter(is_archived=False).count(),
@@ -88,6 +105,7 @@ def dashboard_api(request):
                 issued_at__date=timezone.now().date(), status=Issue.ACTIVE
             ).count(),
             "now": timezone.now().isoformat(),
+            "expires_in": expires_in,
         }
     )
 
@@ -129,6 +147,7 @@ def settings_view(request):
 
 
 @admin_required
+@no_activity_update
 def reauth_view(request):
     from apps.accounts import reauth as reauth_mod
 

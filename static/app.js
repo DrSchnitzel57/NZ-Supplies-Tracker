@@ -79,6 +79,7 @@
       setStatus("connected");
       setRefresh(lastOk);
       showSessionWarning(false);
+      warnBeforeExpiry(dj.expires_in);
     } catch (err) {
       failures += 1;
       setStatus("offline — showing last saved page (retry " + failures + ")");
@@ -87,11 +88,11 @@
 
   function preventDoubleSubmit() {
     document.querySelectorAll("form[data-once]").forEach(function (form) {
-      form.addEventListener("submit", function () {
+      form.addEventListener("submit", function (event) {
         var btn = form.querySelector("[type=submit]");
         if (form.dataset.submitted === "1") {
           // Server idempotency key protects against replays; block the extra click.
-          if (window.event) window.event.preventDefault();
+          event.preventDefault();
           return false;
         }
         form.dataset.submitted = "1";
@@ -103,16 +104,19 @@
     });
   }
 
-  function warnBeforeExpiry() {
-    // If the page has been open ~25 minutes without a full navigation,
-    // remind staff that the 30-minute sign-in expiry is near. Polling alone
-    // never extends the session, so this warning is honest.
-    setTimeout(function () { showSessionWarning(true); }, 25 * 60 * 1000);
+  var EXPIRY_WARN_SECONDS = 5 * 60;
+
+  function warnBeforeExpiry(expiresIn) {
+    // Server-driven and persistent: the countdown comes from the session's
+    // actual idle timer, and once shown the warning stays until a full
+    // navigation succeeds. Polling alone never extends the session.
+    if (typeof expiresIn === "number" && expiresIn <= EXPIRY_WARN_SECONDS) {
+      showSessionWarning(true);
+    }
   }
 
   document.addEventListener("DOMContentLoaded", function () {
     preventDoubleSubmit();
-    warnBeforeExpiry();
     pollOnce();
     setInterval(pollOnce, POLL_MS);
   });

@@ -4,7 +4,7 @@
 <h1>Inventory</h1>
 <p class="help">Available is what is on the shelf right now. “Given out” is net issued goods (undone issues don’t count). Count corrections are shown separately — they never invent issues. Archived items stay in history but cannot be issued.</p>
 <form method="get" class="toolbar" role="search">
-  <label>Search <input type="search" name="q" value="{{ q }}" placeholder="Item or category"></label>
+  <label>Search <input type="search" name="q" value="{{ q }}" placeholder="Item, category or size"></label>
   <label>Category
     <select name="category"><option value="">All</option>
     {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
@@ -29,4 +29,5 @@
 {% endfor %}
 </tbody>
 </table>
+{% if total > shown %}<p class="help">Showing the first {{ shown }} of {{ total }} items — narrow the search to see the rest.</p>{% endif %}
 {% endblock %}

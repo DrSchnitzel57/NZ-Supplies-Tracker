@@ -16,12 +16,13 @@ from apps.inventory.models import Item, StockMovement
 
 def _summaries(items):
     """Attach honest display figures: Available, net given out, corrections."""
+    from apps.issuing.models import IssueLine
+
     ids = [i.pk for i in items]
     net_map = {
         row["item_id"]: row["s"]
         for row in (
-            __import__("apps.issuing.models", fromlist=["IssueLine"])
-            .IssueLine.objects.filter(item_id__in=ids, issue__status="ACTIVE")
+            IssueLine.objects.filter(item_id__in=ids, issue__status="ACTIVE")
             .values("item_id")
             .annotate(s=Sum("quantity"))
         )
@@ -53,13 +54,15 @@ def item_list(request):
     if not show_archived:
         qs = qs.filter(is_archived=False)
     if q:
-        qs = qs.filter(Q(name__icontains=q) | Q(category__icontains=q))
+        qs = qs.filter(Q(name__icontains=q) | Q(category__icontains=q)
+                       | Q(size__icontains=q))
     if category:
         qs = qs.filter(category__iexact=category)
     if size:
-        qs = qs.filter(size__iexact=size)
+        qs = qs.filter(size__icontains=size)
     if low_only:
         qs = qs.filter(on_hand__lte=Coalesce("low_threshold", 0))
+    total = qs.count()
     qs = list(qs.order_by("category", "name", "size")[:1000])
     _summaries(qs)
     categories = list(
@@ -79,12 +82,22 @@ def item_list(request):
             "low_only": low_only,
             "show_archived": show_archived,
             "categories": categories,
+            "total": total,
+            "shown": len(qs),
         },
     )
 
 
 @staff_required
 def item_create(request):
+    from apps.operations.models import SystemSetting
+
+    def _default_threshold() -> str:
+        try:
+            return SystemSetting.objects.get(key="default_low_threshold").value or "0"
+        except SystemSetting.DoesNotExist:
+            return "0"
+
     if request.method == "POST":
         import uuid as _uuid
 
@@ -101,7 +114,8 @@ def item_create(request):
                 opening_qty=opening,
                 reason=(request.POST.get("reason") or "opening balance").strip()
                 or "opening balance",
-                idempotency_key=f"ui-create-{_uuid.uuid4().hex}",
+                idempotency_key=(request.POST.get("idempotency_key") or "").strip()
+                or f"ui-create-{_uuid.uuid4().hex}",
             )
         except DomainError as exc:
             messages.error(request, f"Could not add item: {exc}")
@@ -113,11 +127,18 @@ def item_create(request):
                     "category": request.POST.get("category", ""),
                     "name": request.POST.get("name", ""),
                     "size": request.POST.get("size", ""),
+                    "create_key": (request.POST.get("idempotency_key") or "").strip()
+                    or f"ui-create-{_uuid.uuid4().hex}",
+                    "default_threshold": _default_threshold(),
                 },
             )
-        # Optional low-stock threshold from the same form.
+        # Optional low-stock threshold from the same form; blank means the
+        # site default alert level.
+        raw_threshold = (request.POST.get("low_threshold") or "").strip()
+        if raw_threshold == "":
+            raw_threshold = _default_threshold()
         try:
-            threshold = int(request.POST.get("low_threshold") or 0)
+            threshold = int(raw_threshold or 0)
         except (TypeError, ValueError):
             threshold = 0
         if threshold != obj.low_threshold:
@@ -132,11 +153,22 @@ def item_create(request):
                 pass
         messages.success(request, f"Added {obj}.")
         return redirect("inventory-detail", pk=obj.pk)
-    return render(request, "inventory/form.html", {"mode": "create"})
+    return render(request, "inventory/form.html",
+                  {"mode": "create",
+                   "create_key": f"ui-create-{_new_uuid()}",
+                   "default_threshold": _default_threshold()})
+
+
+def _new_uuid() -> str:
+    import uuid as _uuid
+
+    return _uuid.uuid4().hex
 
 
 @staff_required
 def item_detail(request, pk):
+    import uuid as _uuid
+
     item = get_object_or_404(Item, pk=pk)
     _summaries([item])
     movements = list(
@@ -159,6 +191,8 @@ def item_detail(request, pk):
             "item": item,
             "movements": movements,
             "ledger_total": ledger_total,
+            "receive_key": f"ui-rx-{_uuid.uuid4().hex}",
+            "correct_key": f"ui-ct-{_uuid.uuid4().hex}",
         },
     )
 

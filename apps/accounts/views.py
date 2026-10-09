@@ -3,7 +3,6 @@ from django.contrib.auth import get_user_model, views as auth_views
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
-from django.views import View
 from django.views.decorators.http import require_http_methods
 
 from apps.accounts import lifecycle
@@ -108,7 +107,3 @@ def user_reactivate(request, pk):
         return redirect("accounts-users")
     messages.success(request, f"Reactivated {user.username}.")
     return redirect("accounts-users")
-
-
-class StaffOnlyView(View):
-    pass

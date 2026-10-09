@@ -2,9 +2,9 @@
 {% block title %}Missionaries — Supplies Tracker{% endblock %}
 {% block content %}
 <h1>Missionaries</h1>
-<p class="help">Find a person to see their profile and issue goods to them. Archived people stay in history but cannot receive new goods. Search by name or ID.</p>
+<p class="help">Find a person to see their profile and issue goods to them. Archived people stay in history but cannot receive new goods. Search by name, ID or email.</p>
 <form method="get" class="toolbar" role="search">
-  <label>Search <input type="search" name="q" value="{{ q }}" placeholder="Name or ID"></label>
+  <label>Search <input type="search" name="q" value="{{ q }}" placeholder="Name, ID or email"></label>
   <label><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
   <button type="submit">Search</button>
   <a href="/roster/new/">Add a person</a>
@@ -18,4 +18,5 @@
 {% endfor %}
 </tbody>
 </table>
+{% if total > shown %}<p class="help">Showing the first {{ shown }} of {{ total }} people — narrow the search to see the rest.</p>{% endif %}
 {% endblock %}
