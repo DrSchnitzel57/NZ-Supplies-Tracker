@@ -90,9 +90,13 @@ browser UI for accounts and daily work. All examples use synthetic values.
 ## Rollback
 
 - `bash scripts/restore.sh BACKUP X.Y.Z [--allow-newer-data-loss]`: verifies
-  the backup (integrity + schema), pulls the matching image, restores under
-  exclusive maintenance, migrates and rechecks readiness.
-- Without the flag, restore refuses when live data holds newer work.
+  the backup (integrity + schema + release), pulls the matching image, stops
+  writers, restores under exclusive maintenance, re-acquires the window
+  (restoring replaces the maintenance row), migrates, rechecks readiness,
+  then releases the printed maintenance token — only after the script's own
+  readiness gate. Without the flag, restore refuses when live data holds
+  newer work. Pre-write refusals reopen the window; post-restore failures
+  keep it held and print the token for deliberate recovery.
 - Image rollback alone cannot undo an incompatible migration; always pair
   the image with its compatible database backup.
 
