@@ -92,11 +92,13 @@ def test_protected_restore_drill_restores_data(stack):
     assert "newer work" in proc.stdout
     # Writers are stopped for the offline restore (scripts do this); the
     # command holds maintenance across restore+migrate and prints its token.
+    # `run --rm` (not `exec`) works while the app service is stopped.
     run(*stack["prefix"], "stop", "app", timeout=300)
     try:
-        proc = compose_exec(stack, "python", "manage.py", "restore_db",
-                            "/app/data/backups/drill-restore.sqlite3",
-                            "--allow-newer-data-loss")
+        proc = run(*stack["prefix"], "run", "--rm", "app",
+                   "python", "manage.py", "restore_db",
+                   "/app/data/backups/drill-restore.sqlite3",
+                   "--allow-newer-data-loss", timeout=300, check=False)
         assert proc.returncode == 0, proc.stdout
         assert "maintenance-token:" in proc.stdout
         token = [line for line in proc.stdout.splitlines()
@@ -153,10 +155,12 @@ def test_failed_update_rollback_in_stack(stack):
     # restore, preserved copy, readiness before reopening).
     run(*stack["prefix"], "stop", "app", timeout=300)
     try:
-        proc = compose_exec(stack, "python", "manage.py", "restore_db",
-                            "/app/data/backups/rb-pre.sqlite3",
-                            "--allow-newer-data-loss",
-                            "--owner", "restore-db", "--force-takeover")
+        proc = run(*stack["prefix"], "run", "--rm", "app",
+                   "python", "manage.py", "restore_db",
+                   "/app/data/backups/rb-pre.sqlite3",
+                   "--allow-newer-data-loss",
+                   "--owner", "restore-db", "--force-takeover",
+                   timeout=300, check=False)
         assert proc.returncode == 0, proc.stdout
         assert "maintenance-token:" in proc.stdout
         token = [line for line in proc.stdout.splitlines()
