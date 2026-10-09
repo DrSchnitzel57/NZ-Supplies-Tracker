@@ -58,7 +58,13 @@ def can_manage_users(user) -> bool:
 
 
 def validate_new_user(*, username: str, password: str) -> None:
+    from django.contrib.auth.password_validation import validate_password
+
     if not username or not username.strip():
         raise ValidationError("username is required")
     if not password:
         raise ValidationError("temporary password is required")
+    try:
+        validate_password(password)
+    except Exception as exc:
+        raise ValidationError(f"temporary password is too weak: {exc}") from exc

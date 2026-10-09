@@ -9,6 +9,7 @@ from django.views.decorators.http import require_http_methods
 from apps.accounts import lifecycle
 from apps.accounts.decorators import admin_required
 from apps.accounts.forms import ForcedPasswordChangeForm, ThrottledLoginForm
+from apps.accounts.reauth import reauth_required
 from apps.common.errors import DomainError
 
 
@@ -44,6 +45,7 @@ def user_list(request):
 
 
 @admin_required
+@reauth_required
 @require_http_methods(["POST"])
 def user_create(request):
     username = (request.POST.get("username") or "").strip()
@@ -63,6 +65,7 @@ def user_create(request):
 
 
 @admin_required
+@reauth_required
 @require_http_methods(["POST"])
 def user_reset_password(request, pk):
     User = get_user_model()
@@ -82,6 +85,7 @@ def user_reset_password(request, pk):
 
 
 @admin_required
+@reauth_required
 @require_http_methods(["POST"])
 def user_deactivate(request, pk):
     try:
@@ -94,6 +98,7 @@ def user_deactivate(request, pk):
 
 
 @admin_required
+@reauth_required
 @require_http_methods(["POST"])
 def user_reactivate(request, pk):
     try:

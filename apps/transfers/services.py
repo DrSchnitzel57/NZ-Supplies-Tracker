@@ -102,7 +102,7 @@ def import_bundle(*, actor, data: bytes, filename: str = "bundle.zip") -> dict:
     tables = parsed["tables"]
     # The maintenance window blocks routine writers; this operation is the
     # holder, so its own writes must not trip the routine write guard.
-    with maintenance_mode():
+    with maintenance_mode(owner="bundle-import", reason=filename):
         def _work():
             if not operational_empty():
                 raise ValidationError("full import requires empty operational data (reset first)")

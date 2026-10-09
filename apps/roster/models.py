@@ -14,6 +14,17 @@ class Missionary(models.Model):
     external_id = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=255)
     email = models.EmailField(blank=True, default="")
+    # Source-preserved roster context (converted from the approved seed and
+    # carried through bundles; blank when the source did not provide them).
+    title_prefix = models.CharField(max_length=16, blank=True, default="")  # Elder/Sister
+    arrival_status = models.CharField(max_length=32, blank=True, default="")
+    stake = models.CharField(max_length=128, blank=True, default="")
+    mission = models.CharField(max_length=128, blank=True, default="")
+    language = models.CharField(max_length=64, blank=True, default="")
+    arrival_date = models.DateField(null=True, blank=True)
+    release_date = models.DateField(null=True, blank=True)
+    personal_email = models.EmailField(blank=True, default="")
+    intake_metadata = models.JSONField(default=dict, blank=True)
     is_archived = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
     version = models.IntegerField(default=0)

@@ -18,6 +18,21 @@ class AuditEvent(models.Model):
     target_id = models.CharField(max_length=64)
     detail = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Actor snapshot: retained when the linked account is later removed, and
+    # preserved across bundle export/import without requiring accounts.
+    actor_username = models.CharField(max_length=150, blank=True, default="")
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def save(self, *args, **kwargs):
+        if self.actor_id and not self.actor_username:
+            try:
+                username = self.actor.username
+            except Exception:
+                username = ""
+            self.actor_username = username or ""
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ["created_at"]

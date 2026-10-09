@@ -33,7 +33,7 @@ class Command(BaseCommand):
             raise CommandError(
                 "backup/image mismatch: running version does not match "
                 "--expected-version; restore the matching release image first.")
-        with maintenance_mode():
+        with maintenance_mode(owner="restore-db", reason=str(options["backup"])):
             try:
                 backup_mod.verify_sqlite_backup(options["backup"])
             except ValueError as exc:

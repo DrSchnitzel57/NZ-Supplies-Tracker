@@ -94,7 +94,13 @@ def dashboard_api(request):
 
 @admin_required
 def settings_view(request):
+    from apps.accounts import reauth as reauth_mod
+    from apps.operations.guards import assert_writes_allowed
+
     if request.method == "POST":
+        if not reauth_mod.reauth_fresh(request):
+            messages.error(request, "Confirm your password first (recent sign-in required).")
+            return redirect("/admin-area/reauth/?next=/admin-area/settings/")
         notice = (request.POST.get("site_notice") or "").strip()[:500]
         threshold_raw = (request.POST.get("default_low_threshold") or "").strip()
         try:
@@ -102,9 +108,20 @@ def settings_view(request):
         except ValueError:
             messages.error(request, "Default alert level must be a whole number.")
             return redirect("ops-settings")
+        try:
+            assert_writes_allowed()
+        except DomainError as exc:
+            messages.error(request, f"Settings refused: {exc}")
+            return redirect("ops-settings")
         SystemSetting.objects.update_or_create(key="site_notice", defaults={"value": notice})
         SystemSetting.objects.update_or_create(
             key="default_low_threshold", defaults={"value": str(threshold)})
+        from apps.audit.models import AuditEvent
+        AuditEvent.objects.create(
+            actor=request.user, action="settings.updated",
+            target_type="system", target_id="settings",
+            detail={"default_low_threshold": threshold,
+                    "notice_len": len(notice)})
         messages.success(request, "Saved system settings.")
         return redirect("ops-settings")
     current = {s.key: s.value for s in SystemSetting.objects.all()}
@@ -113,48 +130,57 @@ def settings_view(request):
 
 @admin_required
 def reauth_view(request):
+    from apps.accounts import reauth as reauth_mod
+
     if request.method == "POST":
+        try:
+            reauth_mod.check_reauth_allowed(request.user)
+        except DomainError as exc:
+            messages.error(request, str(exc))
+            return render(request, "operations/reauth.html",
+                          {"next": request.GET.get("next", "")}, status=429)
         user = authenticate(request, username=request.user.username,
                             password=request.POST.get("password", ""))
         if user is None:
+            reauth_mod.record_reauth_failure(request.user)
             messages.error(request, "Password did not match. Try again.")
-            return render(request, "operations/reauth.html", {"next": request.GET.get("next", "")})
-        request.session["admin_reauth_at"] = time.time()
+            return render(request, "operations/reauth.html",
+                          {"next": request.GET.get("next", "")}, status=401)
+        reauth_mod.record_reauth_success(request.user)
+        reauth_mod.mark_reauthenticated(request)
         messages.success(request, "Identity confirmed for the next 10 minutes.")
-        nxt = request.GET.get("next") or request.POST.get("next") or "/admin-area/reset/"
-        return redirect(nxt)
+        return redirect(reauth_mod.safe_next(request, "/admin-area/reset/"))
     return render(request, "operations/reauth.html", {"next": request.GET.get("next", "")})
-
-
-def _reauth_fresh(request) -> bool:
-    try:
-        return (time.time() - float(request.session.get("admin_reauth_at", 0))
-                ) < reset_service.REAUTH_WINDOW_SECONDS
-    except (TypeError, ValueError):
-        return False
 
 
 @admin_required
 def reset_view(request):
+    from apps.accounts import reauth as reauth_mod
+
     if request.method == "POST":
-        if not _reauth_fresh(request):
+        if not reauth_mod.reauth_fresh(request):
             messages.error(request, "Confirm your password first (recent sign-in required).")
             return redirect("/admin-area/reauth/?next=/admin-area/reset/")
         try:
             info = reset_service.reset_to_empty(
                 actor=request.user,
-                confirmation=request.POST.get("confirmation", ""))
+                confirmation=request.POST.get("confirmation", ""),
+                expected_counts={
+                    "people": request.POST.get("expected_people", ""),
+                    "items": request.POST.get("expected_items", ""),
+                    "issues": request.POST.get("expected_issues", ""),
+                })
         except DomainError as exc:
             messages.error(request, f"Reset refused: {exc}")
             return redirect("ops-reset")
+        except Exception:
+            messages.error(request, "Reset refused: backup or database error; nothing was deleted.")
+            return redirect("ops-reset")
         messages.success(
             request,
-            f"Operational data cleared. Verified backup saved ({info.get('bytes', 0)} bytes).")
+            f"Operational data cleared. Verified backup saved ({info.get('bytes', 0)} bytes, "
+            f"sha256 {info.get('sha256', '')[:16]}…).")
         return redirect("dashboard")
-    fresh = _reauth_fresh(request)
-    counts = {
-        "people": Missionary.objects.count(),
-        "items": Item.objects.count(),
-        "issues": Issue.objects.count(),
-    }
+    fresh = reauth_mod.reauth_fresh(request)
+    counts = reset_service.current_counts()
     return render(request, "operations/reset.html", {"fresh": fresh, "counts": counts})

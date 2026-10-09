@@ -11,18 +11,19 @@ User = get_user_model()
 class ThrottledLoginForm(AuthenticationForm):
     def clean(self):
         username = self.data.get("username", "")
+        key = throttling.login_key(username)
         try:
-            throttling.check_allowed(username)
+            throttling.check_allowed(key)
         except ThrottledError:
             raise forms.ValidationError(
                 "Too many login attempts. Try again later."
             )
         try:
             cleaned = super().clean()
-        except forms.ValidationError:
-            throttling.record_failure(username)
+        except Exception:
+            throttling.record_failure(key)
             raise
-        throttling.record_success(username)
+        throttling.record_success(key)
         return cleaned
 
 

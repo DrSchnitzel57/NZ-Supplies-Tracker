@@ -7,6 +7,9 @@
 {% if not fresh %}<p class="error" role="alert">Confirm your password first: <a href="/admin-area/reauth/?next=/admin-area/reset/">Confirm identity</a>.</p>{% endif %}
 <form method="post">
 {% csrf_token %}
+<input type="hidden" name="expected_people" value="{{ counts.people }}">
+<input type="hidden" name="expected_items" value="{{ counts.items }}">
+<input type="hidden" name="expected_issues" value="{{ counts.issues }}">
 <label>Type <strong>RESET</strong> to confirm <input name="confirmation" autocomplete="off" required></label>
 <button type="submit" {% if not fresh %}disabled{% endif %}>Clear all operational data</button>
 </form>

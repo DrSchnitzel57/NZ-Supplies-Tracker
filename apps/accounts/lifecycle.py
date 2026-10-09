@@ -47,6 +47,11 @@ def reset_password(*, actor, user_id, temporary_password: str):
     permissions.require_admin(actor)
     if not temporary_password:
         raise ValidationError("temporary password is required")
+    from django.contrib.auth.password_validation import validate_password
+    try:
+        validate_password(temporary_password)
+    except Exception as exc:
+        raise ValidationError(f"temporary password is too weak: {exc}") from exc
     user = User.objects.get(pk=user_id)
     user.set_password(temporary_password)
     user.must_change_password = True

@@ -32,6 +32,11 @@ class Item(models.Model):
     unit = models.CharField(max_length=32, default="each")
     on_hand = models.IntegerField(default=0)
     low_threshold = models.IntegerField(default=0)
+    # Seed-conversion provenance: source-negative opening balances are zeroed
+    # live (never negative) and the original value is preserved here so a
+    # bundle export round-trips the authorized correction metadata.
+    source_remaining = models.IntegerField(null=True, blank=True)
+    source_corrected = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
     version = models.IntegerField(default=0)
@@ -87,6 +92,9 @@ class StockMovement(models.Model):
     created_by = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL
     )
+    # Actor snapshot: retained when the linked account is later removed, and
+    # preserved across bundle export/import without requiring accounts.
+    created_by_username = models.CharField(max_length=150, blank=True, default="")
     idempotency_key = models.CharField(
         max_length=128, null=True, blank=True, unique=True
     )
@@ -100,3 +108,12 @@ class StockMovement(models.Model):
                 name="movement_balance_nonnegative",
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        if self.created_by_id and not self.created_by_username:
+            try:
+                username = self.created_by.username
+            except Exception:
+                username = ""
+            self.created_by_username = username or ""
+        super().save(*args, **kwargs)
