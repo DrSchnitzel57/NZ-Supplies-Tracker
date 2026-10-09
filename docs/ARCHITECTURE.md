@@ -8,6 +8,12 @@ Replace browser-local persistence with a dependable LAN tool for approximately t
 
 ## Runtime and boundaries
 
+### Review hold and remediation
+
+Independent review of implemented milestones 01–04 at `04b2227` returned **FIX**. After declared dependency installation, 118 Django tests, 19 browser-contract tests (one skip) and 15 deployment-contract tests passed, but isolated runtime probes failed HTTPS/static delivery, stale/bundle integrity, maintenance ownership and WAL recovery. Milestone checkboxes indicate implementation, not release approval. Hold real imports/deployment until `.openchamber/plans/05-review-remediation.md` and a fresh full review pass. The plan is self-contained in Git; ignored review artifacts and local HTML do not carry into a new worktree.
+
+Remediation preserves the chosen architecture and original functionality: restore all source roster fields/reorder levels, validate consistent lossless history, coordinate owner-controlled maintenance and offline recovery, enforce shared throttling/privileged reauthentication, and prove real browser/Compose behavior. Certificate trust configuration remains deferred; LAN HTTPS is required.
+
 - Django 5.2 LTS, Python 3.13, server-rendered templates, small JavaScript enhancements, Gunicorn and SQLite. Pin supported patch versions and dependencies during implementation.
 - `config/` owns settings, URLs and deployment entrypoints. `apps/` separates accounts, roster, inventory, issuing, transfers, reports, audit and operations. Templates/static assets are local; `tests/` uses synthetic data only.
 - Business services own mutations; views, importers and commands invoke the same services. Database constraints and atomic transactions enforce invariants independently of UI validation.
@@ -54,6 +60,8 @@ Replace browser-local persistence with a dependable LAN tool for approximately t
 - Operator-triggered updates: validate selected version/config, enter maintenance, quiesce writes, verify backup, pull pinned images, migrate, restart and check readiness. Fail closed rather than continue with half-upgraded data. Rollback may require matching image plus database restore; no unattended latest updates or zero-downtime promise.
 
 ## Decisions and why
+
+- **Remediate and independently re-review instead of shipping on green contract tests:** live probes demonstrated data-loss and operational failures. Keep Django/SQLite/Compose, fix all findings with regressions, then search for additional issues before release approval. User requested all review fixes in worktree-portable plans; implementation must not rely on the ignored report.
 
 - **Modular monolith over patching the HTML or microservices:** preserves workflows while replacing tangled persistence and centralizing inventory correctness, without service sprawl.
 - **Django/templates over React plus a separate API:** built-in identity/migrations and fewer independently maintained components suit this temporary single-host tool.
