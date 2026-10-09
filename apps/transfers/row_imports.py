@@ -10,29 +10,47 @@ import csv
 import io
 import re
 import uuid
+import zipfile
 
 from apps.inventory.models import item_key
 from apps.transfers.bundle import safe_decode
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 MAX_ROWS = 2000
+MAX_COLUMNS = 64
+MAX_CELL_CHARS = 4000
+MAX_CELLS = 200_000
+#: Row-import previews expire after 24 hours and are single-use.
+PREVIEW_TTL_SECONDS = 24 * 3600
 ALLOWED_EXTENSIONS = {".csv", ".xlsx"}
 REJECTED_EXTENSIONS = {".xlsm", ".xls", ".xlsb", ".ods", ".zip"}
 
 ROSTER_ALIASES = {
-    "external_id": {"external_id", "external id", "id", "missionary id", "ext id", "ext_id"},
-    "name": {"name", "full name", "missionary", "missionary name"},
+    "external_id": {"external_id", "external id", "externalid", "ext id", "extid",
+                    "ext_id", "id", "missionary id", "missionaryid"},
+    "name": {"name", "full name", "fullname", "full_name", "missionary",
+             "missionary name"},
     "email": {"email", "e-mail", "email address"},
+    "title_prefix": {"title prefix", "titleprefix", "prefix", "elder/sister", "title"},
+    "arrival_status": {"arrival status", "arrivalstatus", "status"},
+    "stake": {"stake"},
+    "mission": {"mission"},
+    "language": {"language"},
+    "arrival_date": {"arrival date", "arrivaldate", "arrival_date"},
+    "release_date": {"release date", "releasedate", "release_date"},
+    "personal_email": {"personal email", "personalemail", "personal_email"},
     "reason": {"reason", "note", "comment"},
 }
 INVENTORY_ALIASES = {
     "category": {"category", "cat", "group"},
-    "name": {"name", "item", "item name", "product", "title"},
+    "name": {"name", "item", "item name", "itemname", "item_name", "product", "title"},
     "size": {"size", "variant"},
-    "remaining": {"remaining", "on hand", "on_hand", "available", "qty", "quantity", "count"},
+    "remaining": {"remaining", "remain", "on hand", "onhand", "on_hand", "available",
+                  "qty", "quantity", "count"},
     "stock": {"stock"},
-    "out": {"out", "given out", "issued", "total out"},
-    "low_threshold": {"low_threshold", "low", "low stock", "threshold", "reorder", "minimum", "alert level"},
+    "out": {"out", "given out", "givenout", "issued", "total out"},
+    "low_threshold": {"low_threshold", "lowthreshold", "low", "low stock",
+                      "threshold", "reorder", "reorder level", "minimum", "alert level"},
     "reason": {"reason", "note", "comment"},
 }
 
@@ -75,71 +93,166 @@ def read_table(*, filename: str, content: bytes) -> list[list[str]]:
         reader = csv.reader(io.StringIO(text))
         rows = [[safe_decode(c) for c in row] for row in reader]
     else:
+        if not content.startswith(b"PK"):
+            raise ValueError("not a valid .xlsx file")
         try:
             import openpyxl
         except ImportError as exc:
             raise ValueError("spreadsheet support is unavailable") from exc
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=False, read_only=True)
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(content))
+        except zipfile.BadZipFile as exc:
+            raise ValueError("not a valid .xlsx file") from exc
+        with archive:
+            names = archive.namelist()
+            if any("vbaProject.bin" in n or n.endswith(".bin")
+                   for n in names if n.startswith("xl/")):
+                raise ValueError("macro workbooks are not allowed; use plain .xlsx")
+            total = sum(i.file_size for i in archive.infolist())
+            if total > 16 * 1024 * 1024:
+                raise ValueError("spreadsheet expands too large")
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=False, read_only=True)
+        except Exception as exc:
+            raise ValueError(f"not a valid .xlsx file: {exc}") from exc
         ws = wb.active
+        if ws.max_column is not None and ws.max_column > MAX_COLUMNS:
+            raise ValueError(f"too many columns (limit {MAX_COLUMNS})")
+        if ws.max_row is not None and (ws.max_row - 1) > MAX_ROWS:
+            raise ValueError("too many rows (limit 2000)")
+        if ((ws.max_row or 0) * (ws.max_column or 0)) > MAX_CELLS:
+            raise ValueError("spreadsheet has too many cells")
         rows = []
         for row in ws.iter_rows(values_only=True):
             cells = []
             for cell in row:
                 if cell is None:
                     cells.append("")
-                else:
+                elif isinstance(cell, bool):
+                    cells.append("TRUE" if cell else "FALSE")
+                elif isinstance(cell, (int, float)):
+                    import math
+                    if isinstance(cell, float) and (
+                            math.isnan(cell) or math.isinf(cell)):
+                        raise ValueError("counts must be finite whole numbers")
                     cells.append(safe_decode(str(cell)))
-            rows.append(cells)
+                else:
+                    text = safe_decode(str(cell))
+                    if len(text) > MAX_CELL_CHARS:
+                        raise ValueError("a cell exceeds the text limit")
+                    cells.append(text)
+            rows.append(cells[:MAX_COLUMNS])
         if wb.sheetnames and len(wb.sheetnames) > 1:
             pass  # only the first worksheet is read; documented.
     # Drop trailing fully-blank rows.
     while rows and not any((c or "").strip() for c in rows[-1]):
         rows.pop()
-    if len(rows) - 1 > MAX_ROWS:
+    for row in rows:
+        if len(row) > MAX_COLUMNS:
+            raise ValueError(f"too many columns (limit {MAX_COLUMNS})")
+        for cell in row:
+            if len(cell or "") > MAX_CELL_CHARS:
+                raise ValueError("a cell exceeds the text limit")
+    if (len(rows) - 1 > MAX_ROWS) or (sum(len(r) for r in rows) > MAX_CELLS):
         raise ValueError("too many rows (limit 2000)")
     return rows
 
 
+_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+
+COUNT_LIMIT = 999_999_999
+
+
 def _is_formula(text: str) -> bool:
-    return text.lstrip().startswith("=")
+    stripped = (text or "").lstrip()
+    if stripped.startswith(_FORMULA_TRIGGERS):
+        return True
+    # Bundle-safe quoted formulas ('=1+1) are still formulas for row imports.
+    if stripped.startswith("'") and stripped[1:2] in _FORMULA_TRIGGERS:
+        return True
+    return False
+
+
+def _find_header_row(rows: list[list[str]], aliases: dict[str, set[str]],
+                       required: tuple[str, ...]) -> int:
+    """Locate the header row, tolerating up to two leading title rows.
+
+    Returns the index of the first row (within the first three) whose
+    normalized cells map every required field; raises a missing-columns
+    error otherwise.
+    """
+    for index in range(min(3, len(rows))):
+        mapping = _map_headers([(c or "") for c in rows[index]], aliases)
+        if all(f in mapping for f in required):
+            return index
+    # Report against the first row so the message names the actual upload.
+    mapping = _map_headers([(c or "") for c in (rows[0] if rows else [])], aliases)
+    missing = [f for f in required if f not in mapping]
+    raise ValueError(f"missing required columns: {', '.join(missing)}")
 
 
 def build_preview(*, kind: str, rows: list[list[str]], mode: str) -> dict:
     """Validate rows without writing. Returns {headers, mapping, valid, errors, summary}."""
     if not rows or not any((c or "").strip() for c in rows[0]):
         raise ValueError("spreadsheet has no header row")
-    headers = [(c or "").strip() for c in rows[0]]
-    data = rows[1:]
+    if kind == "roster":
+        start = _find_header_row(rows, ROSTER_ALIASES, ("external_id", "name"))
+    elif kind == "inventory":
+        start = _find_header_row(rows, INVENTORY_ALIASES, ("category", "name"))
+    else:
+        raise ValueError("unknown import kind")
+    headers = [(c or "").strip() for c in rows[start]]
+    data = rows[start + 1:]
     if kind == "roster":
         return _preview_roster(headers, data, mode)
-    if kind == "inventory":
-        return _preview_inventory(headers, data, mode)
-    raise ValueError("unknown import kind")
+    return _preview_inventory(headers, data, mode)
 
 
-def _preview_roster(headers, data, mode) -> dict:
+    if kind == "roster":
+        return _preview_roster(headers, data, mode, first_row=start + 2)
+    return _preview_inventory(headers, data, mode, first_row=start + 2)
+
+
+def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
     from apps.roster.models import Missionary
 
     mapping = _map_headers(headers, ROSTER_ALIASES)
-    missing = [f for f in ("external_id", "name") if f not in mapping]
     valid: list[dict] = []
     errors: list[dict] = []
     seen: set[str] = set()
     existing = {m.external_id: m for m in Missionary.objects.all()}
-    for n, row in enumerate(data, start=2):
+    for offset, row in enumerate(data):
+        n = first_row + offset
+
         def cell(field):
             i = mapping.get(field)
             return (row[i] if i is not None and i < len(row) else "").strip()
-        ext, name, email, reason = cell("external_id"), cell("name"), cell("email"), cell("reason")
+        ext, name, email = cell("external_id"), cell("name"), cell("email")
+        reason = cell("reason")
         if not ext and not name and not email:
             continue  # skip blank lines silently
         problems = []
-        if _is_formula(ext) or _is_formula(name) or _is_formula(email):
-            problems.append("formulas are not evaluated; replace with plain text")
+        for field_name, value in (("external_id", ext), ("name", name), ("email", email),
+                                  ("title_prefix", cell("title_prefix")),
+                                  ("arrival_status", cell("arrival_status")),
+                                  ("stake", cell("stake")), ("mission", cell("mission")),
+                                  ("language", cell("language")),
+                                  ("arrival_date", cell("arrival_date")),
+                                  ("release_date", cell("release_date")),
+                                  ("personal_email", cell("personal_email"))):
+            if _is_formula(value):
+                problems.append(f"{field_name}: formulas are not evaluated; replace with plain text")
         if not ext:
             problems.append("external ID is required")
         if not name:
             problems.append("name is required")
+        personal = cell("personal_email")
+        if len(ext) > 64:
+            problems.append("external ID is too long (limit 64)")
+        if len(name) > 255:
+            problems.append("name is too long (limit 255)")
+        if len(email) > 254 or len(personal) > 254:
+            problems.append("email is too long")
         if ext in seen:
             problems.append("duplicate external ID in file")
         seen.add(ext)
@@ -150,7 +263,26 @@ def _preview_roster(headers, data, mode) -> dict:
             action = "create"
         if email and "@" not in email:
             problems.append("email looks invalid")
+        if personal and "@" not in personal:
+            problems.append("personal email looks invalid")
+        for label in ("arrival_date", "release_date"):
+            raw = cell(label)
+            if raw:
+                from django.utils.dateparse import parse_date
+                try:
+                    parsed = parse_date(raw)
+                except ValueError:
+                    parsed = None
+                if parsed is None:
+                    problems.append(f"{label} must be a date (YYYY-MM-DD)")
         entry = {"row": n, "external_id": ext, "name": name, "email": email,
+                 "title_prefix": cell("title_prefix"),
+                 "arrival_status": cell("arrival_status"),
+                 "stake": cell("stake"), "mission": cell("mission"),
+                 "language": cell("language"),
+                 "arrival_date": cell("arrival_date"),
+                 "release_date": cell("release_date"),
+                 "personal_email": personal,
                  "reason": reason, "action": action,
                  "archived": existing[ext].is_archived if ext in existing else False}
         if problems:
@@ -167,16 +299,26 @@ def _preview_roster(headers, data, mode) -> dict:
 
 
 def _to_int_or_none(text: str):
+    import math
+
     text = (text or "").strip()
     if text == "":
         return None
     try:
-        return int(float(text))
+        number = float(text)
     except ValueError:
         return "invalid"
+    if math.isnan(number) or math.isinf(number):
+        return "invalid"
+    if number != int(number):
+        return "invalid"  # fractional counts are rejected, never truncated
+    value = int(number)
+    if abs(value) > COUNT_LIMIT:
+        return "invalid"
+    return value
 
 
-def _preview_inventory(headers, data, mode) -> dict:
+def _preview_inventory(headers, data, mode, first_row: int = 2) -> dict:
     from apps.inventory.models import Item
 
     mapping = _map_headers(headers, INVENTORY_ALIASES)
@@ -192,7 +334,8 @@ def _preview_inventory(headers, data, mode) -> dict:
     errors: list[dict] = []
     seen: set[str] = set()
     existing = {i.key: i for i in Item.objects.all()}
-    for n, row in enumerate(data, start=2):
+    for offset, row in enumerate(data):
+        n = first_row + offset
         def cell(field):
             i = mapping.get(field)
             return (row[i] if i is not None and i < len(row) else "").strip()
@@ -207,6 +350,8 @@ def _preview_inventory(headers, data, mode) -> dict:
             problems.append("category is required")
         if not name:
             problems.append("name is required")
+        if len(cat) > 128 or len(name) > 255 or len(size) > 64:
+            problems.append("category/name/size is too long")
         key = item_key(cat or "?", name or "?", size)
         if key in seen:
             problems.append("duplicate item in file (category/name/size)")
@@ -276,14 +421,27 @@ def _preview_inventory(headers, data, mode) -> dict:
 
 
 def current_revision(kind: str) -> str:
-    """Revision token: counts plus max versions, invalidating stale previews."""
+    """Exact revision token: count plus a hash of every record's id/version.
+
+    Any edit — even to a record that is not the maximum version — changes
+    the token, so a preview built on older data can never confirm against
+    newer source data.
+    """
+    import hashlib
+
     if kind == "roster":
         from apps.roster.models import Missionary
-        qs = Missionary.objects.all()
-        return f"r:{qs.count()}:{Missionary.objects.order_by('-version').values_list('version', flat=True).first() or 0}"
-    from apps.inventory.models import Item
-    qs = Item.objects.all()
-    return f"i:{qs.count()}:{Item.objects.order_by('-version').values_list('version', flat=True).first() or 0}"
+        pairs = sorted(Missionary.objects.values_list("id", "version"))
+        count = len(pairs)
+    else:
+        from apps.inventory.models import Item
+        pairs = sorted(Item.objects.values_list("id", "version"))
+        count = len(pairs)
+    digest = hashlib.sha256(
+        ";".join(f"{pk}:{version}" for pk, version in pairs).encode("utf-8")
+    ).hexdigest()[:32]
+    prefix = "r" if kind == "roster" else "i"
+    return f"{prefix}:{count}:{digest}"
 
 
 def new_preview_token() -> str:

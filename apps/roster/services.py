@@ -15,7 +15,8 @@ def _clean(value: str | None) -> str:
     return (value or "").strip()
 
 
-def create_missionary(*, actor, external_id: str, name: str, email: str = ""):
+def create_missionary(*, actor, external_id: str, name: str, email: str = "",
+                      **extra):
     permissions.require_staff(actor)
     external_id = _clean(external_id)
     name = _clean(name)
@@ -23,6 +24,10 @@ def create_missionary(*, actor, external_id: str, name: str, email: str = ""):
         raise ValidationError("external ID is required")
     if not name:
         raise ValidationError("name is required")
+    fields = {k: _clean(extra.get(k, "")) for k in (
+        "title_prefix", "arrival_status", "stake", "mission", "language",
+        "personal_email")}
+    note = _clean(extra.get("note", ""))
     from apps.roster.models import Missionary
 
     def _work():
@@ -31,11 +36,12 @@ def create_missionary(*, actor, external_id: str, name: str, email: str = ""):
             raise ValidationError("external ID already exists")
         try:
             obj = Missionary.objects.create(
-                external_id=external_id, name=name, email=_clean(email)
+                external_id=external_id, name=name, email=_clean(email),
+                **fields,
             )
         except IntegrityError as exc:
             raise ValidationError("external ID already exists") from exc
-        _audit(actor, "roster.created", obj)
+        _audit(actor, "roster.created", obj, note=note)
         return obj
 
     return transact(_work)
@@ -69,6 +75,14 @@ def update_missionary(*, actor, missionary_id, expected_version: int, **fields):
             obj.name = new_name
         if "email" in fields and fields["email"] is not None:
             obj.email = _clean(fields["email"])
+        for extra_field in ("title_prefix", "arrival_status", "stake",
+                            "mission", "language", "personal_email"):
+            if extra_field in fields and fields[extra_field] is not None:
+                setattr(obj, extra_field, _clean(fields[extra_field]))
+        if "arrival_date" in fields:
+            obj.arrival_date = fields["arrival_date"]
+        if "release_date" in fields:
+            obj.release_date = fields["release_date"]
         obj.version += 1
         try:
             obj.full_clean()
@@ -78,7 +92,7 @@ def update_missionary(*, actor, missionary_id, expected_version: int, **fields):
             obj.save()
         except IntegrityError as exc:
             raise ValidationError("external ID already exists") from exc
-        _audit(actor, "roster.updated", obj)
+        _audit(actor, "roster.updated", obj, note=_clean(fields.get("note", "")))
         return obj
 
     return transact(_work)
@@ -120,13 +134,16 @@ def reactivate_missionary(*, actor, missionary_id):
     return transact(_work)
 
 
-def _audit(actor, action, obj):
+def _audit(actor, action, obj, note: str = ""):
     from apps.audit.models import AuditEvent
 
+    detail = {"external_id": obj.external_id, "name": obj.name}
+    if note:
+        detail["note"] = note
     AuditEvent.objects.create(
         actor=actor,
         action=action,
         target_type="missionary",
         target_id=str(obj.pk),
-        detail={"external_id": obj.external_id, "name": obj.name},
+        detail=detail,
     )

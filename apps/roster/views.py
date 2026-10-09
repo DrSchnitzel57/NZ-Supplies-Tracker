@@ -43,6 +43,12 @@ def missionary_create(request):
                 external_id=request.POST.get("external_id", ""),
                 name=request.POST.get("name", ""),
                 email=request.POST.get("email", ""),
+                title_prefix=request.POST.get("title_prefix", ""),
+                arrival_status=request.POST.get("arrival_status", ""),
+                stake=request.POST.get("stake", ""),
+                mission=request.POST.get("mission", ""),
+                language=request.POST.get("language", ""),
+                personal_email=request.POST.get("personal_email", ""),
             )
         except DomainError as exc:
             messages.error(request, f"Could not add person: {exc}")
@@ -108,6 +114,12 @@ def missionary_edit(request, pk):
                 external_id=request.POST.get("external_id"),
                 name=request.POST.get("name"),
                 email=request.POST.get("email"),
+                title_prefix=request.POST.get("title_prefix"),
+                arrival_status=request.POST.get("arrival_status"),
+                stake=request.POST.get("stake"),
+                mission=request.POST.get("mission"),
+                language=request.POST.get("language"),
+                personal_email=request.POST.get("personal_email"),
             )
         except DomainError as exc:
             messages.error(request, f"Could not save changes: {exc}")

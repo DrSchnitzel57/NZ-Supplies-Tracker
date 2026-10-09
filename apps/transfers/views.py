@@ -12,14 +12,13 @@ from apps.common.errors import DomainError
 from apps.transfers import services as transfer_services
 from apps.transfers.models import RowImportPreview
 from apps.transfers.row_imports import (
+    PREVIEW_TTL_SECONDS,
     build_preview,
     current_revision,
     detect_kind,
     new_preview_token,
     read_table,
 )
-
-PREVIEW_TTL_SECONDS = 24 * 3600
 
 
 def _get_preview_or_expired(token: str):

@@ -20,6 +20,17 @@ class AccountAdminTests(TestCase):
         self.admin, self.apw = make_admin()
         self.staff, self.spw = make_staff()
 
+    def _reauth(self):
+        import time
+
+        session = self.client.session
+        session["admin_reauth"] = {
+            "at": time.time(),
+            "user_id": self.admin.pk,
+            "pwd": self.admin.password,
+        }
+        session.save()
+
     def test_staff_cannot_use_account_tools(self):
         self.client.login(username=self.staff.username, password=self.spw)
         self.assertEqual(self.client.get("/accounts/users/").status_code, 403)
@@ -28,6 +39,7 @@ class AccountAdminTests(TestCase):
 
     def test_admin_creates_resets_and_deactivates_without_terminal(self):
         self.client.login(username=self.admin.username, password=self.apw)
+        self._reauth()
         response = self.client.post("/accounts/users/create/",
                                     {"username": "new-staff-1", "password": "TempPass123!"})
         self.assertEqual(response.status_code, 302)
@@ -49,15 +61,24 @@ class AccountAdminTests(TestCase):
 
     def test_self_deactivation_blocked(self):
         self.client.login(username=self.admin.username, password=self.apw)
+        self._reauth()
         response = self.client.post(f"/accounts/users/{self.admin.pk}/deactivate/")
         self.assertEqual(response.status_code, 302)
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.is_active)
 
+    def test_admin_account_changes_need_fresh_reauth(self):
+        self.client.login(username=self.admin.username, password=self.apw)
+        response = self.client.post("/accounts/users/create/",
+                                    {"username": "nope-1", "password": "TempPass123!"})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(User.objects.filter(username="nope-1").exists())
+
     def test_settings_saved_by_admin_only(self):
         self.client.login(username=self.staff.username, password=self.spw)
         self.assertEqual(self.client.get("/admin-area/settings/").status_code, 403)
         self.client.login(username=self.admin.username, password=self.apw)
+        self._reauth()
         response = self.client.post("/admin-area/settings/",
                                     {"site_notice": "Hello", "default_low_threshold": "3"})
         self.assertEqual(response.status_code, 302)
@@ -73,10 +94,17 @@ class ProtectedResetTests(TestCase):
         self.item = make_item(self.admin, opening_qty=5)
 
     def _reauth(self):
-        session = self.client.session
         import time
-        session["admin_reauth_at"] = time.time()
+        session = self.client.session
+        session["admin_reauth"] = {
+            "at": time.time(),
+            "user_id": self.admin.pk,
+            "pwd": self.admin.password,
+        }
         session.save()
+
+    def _counts(self):
+        return {"expected_people": "1", "expected_items": "1", "expected_issues": "0"}
 
     def test_reset_requires_reauth_and_typed_confirmation(self):
         self.client.login(username=self.admin.username, password=self.apw)
@@ -88,16 +116,29 @@ class ProtectedResetTests(TestCase):
         self._reauth()
         with mock.patch("apps.operations.backup.backup_sqlite",
                         return_value={"path": "x", "sha256": "y", "bytes": 1}):
-            response = self.client.post("/admin-area/reset/", {"confirmation": "DELETE"})
+            response = self.client.post("/admin-area/reset/",
+                                        {"confirmation": "DELETE", **self._counts()})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Missionary.objects.count(), 1)
+
+    def test_reset_refuses_stale_confirmation_counts(self):
+        self.client.login(username=self.admin.username, password=self.apw)
+        self._reauth()
+        make_missionary(self.admin)  # newer work after the screen rendered
+        with mock.patch("apps.operations.backup.backup_sqlite",
+                        return_value={"path": "x", "sha256": "y", "bytes": 1}):
+            response = self.client.post("/admin-area/reset/",
+                                        {"confirmation": "RESET", **self._counts()})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Missionary.objects.count(), 2)
 
     def test_successful_reset_keeps_accounts_and_marker_only(self):
         self.client.login(username=self.admin.username, password=self.apw)
         self._reauth()
         with mock.patch("apps.operations.backup.backup_sqlite",
                         return_value={"path": "x", "sha256": "abc", "bytes": 10}):
-            response = self.client.post("/admin-area/reset/", {"confirmation": "RESET"})
+            response = self.client.post("/admin-area/reset/",
+                                        {"confirmation": "RESET", **self._counts()})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Missionary.objects.count(), 0)
         self.assertEqual(Item.objects.count(), 0)
@@ -113,7 +154,8 @@ class ProtectedResetTests(TestCase):
         self._reauth()
         with mock.patch("apps.operations.backup.backup_sqlite",
                         side_effect=ValueError("disk full")):
-            response = self.client.post("/admin-area/reset/", {"confirmation": "RESET"})
+            response = self.client.post("/admin-area/reset/",
+                                        {"confirmation": "RESET", **self._counts()})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Missionary.objects.count(), 1)
         self.assertEqual(Item.objects.count(), 1)

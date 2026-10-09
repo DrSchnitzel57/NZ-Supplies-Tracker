@@ -28,7 +28,12 @@ class Command(BaseCommand):
         out = Path(options["output"])
         if not src.exists():
             raise CommandError(f"source file not found: {src}")
-        html = src.read_text(encoding="utf-8", errors="strict")
+        try:
+            html = src.read_text(encoding="utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise CommandError(
+                "source HTML must be UTF-8 encoded; re-save it as UTF-8 and retry"
+            ) from exc
         try:
             seed = extract_seed_json(html)
         except ValueError as exc:
