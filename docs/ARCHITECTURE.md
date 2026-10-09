@@ -2,7 +2,7 @@
 
 ## Status and goal
 
-Milestone 01 (foundation and data invariants) is implemented and tested: Django scaffold, local identity, stable records, ledger with atomic mutations, maintenance guards and synthetic suites (`tests.foundation`, `tests.auth`, `tests.ledger`, `tests.concurrency`). It is not a deployable replacement. The repository also contains the standalone HTML prototype and `READ ME.txt`; milestones 02–04 remain planned work.
+Milestone 01 (foundation and data invariants) is implemented and tested: Django scaffold, local identity, stable records, ledger with atomic mutations, maintenance guards and synthetic suites (`tests.foundation`, `tests.auth`, `tests.ledger`, `tests.concurrency`). Milestone 02 (daily staff workflows) is implemented and tested: server-rendered dashboard/roster/inventory/issuing/reports screens on the milestone 01 services, one shared issuing service for main-screen and profile entrypoints, shortage review with rechecked confirm, whole-issue undo with kept history, read-only 15-second polling that never extends sessions, one-page quick-start (`docs/QUICK_START.md`) and synthetic suites (`tests.workflows`, `tests/browser/`). Neither milestone is a deployable replacement yet. The repository also contains the standalone HTML prototype and `READ ME.txt`; milestones 03–04 remain planned work.
 
 Replace browser-local persistence with a dependable LAN tool for approximately ten simultaneous staff until the Power App arrives. Preserve dashboard, roster, inventory, issuing, low-stock alerts, imports and reports. Use one active roster, not a multi-intake system. The original HTML remains a functional reference and approved initial data source, not production frontend code.
 

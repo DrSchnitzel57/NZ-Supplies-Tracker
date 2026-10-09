@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Issue to {{ issue.missionary_name }} — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Issue to {{ issue.missionary_name }}</h1>
+<p>Person: {{ issue.missionary_name }} ({{ issue.missionary_external_id }}) · Given by <strong>{{ issue.issued_by_username }}</strong> at {{ issue.issued_at }} · Status: <strong>{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</strong></p>
+{% if issue.status == "REVERSED" %}
+<p>Undone by <strong>{{ issue.reversed_by.username }}</strong> at {{ issue.reversed_at }}. Reason: {{ issue.reversal_reason }}</p>
+{% endif %}
+{% if issue.note %}<p>Note: {{ issue.note }}</p>{% endif %}
+<h2>Items in this issue (original record — never changed)</h2>
+<table>
+<thead><tr><th>Item</th><th>Quantity</th></tr></thead>
+<tbody>
+{% for line in issue.lines.all %}
+<tr><td data-label="Item">{{ line.item_category }} / {{ line.item_name }}{% if line.item_size %} ({{ line.item_size }}){% endif %}</td><td data-label="Quantity">{{ line.quantity }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% if issue.status == "ACTIVE" %}
+<h2>Undo this issue</h2>
+<p class="help">Made a mistake? Undoing adds everything in this issue back to Available. You must give a reason. An issue can only be undone once.</p>
+<form method="post" action="/issue/{{ issue.pk }}/undo/" class="stack" data-once>
+{% csrf_token %}
+<label>Reason for undoing (required) <input name="reason" required placeholder="For example: wrong person selected"></label>
+<button type="submit">Undo this issue</button>
+</form>
+{% endif %}
+<p><a href="/issue/history/">Back to history</a></p>
+{% endblock %}

@@ -1,5 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Supplies Tracker</title></head>
-<body>{% block content %}{% endblock %}</body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Supplies Tracker{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="topbar">
+  <nav class="nav" aria-label="Main navigation">
+    <a class="brand" href="/">Supplies Tracker</a>
+    {% if user.is_authenticated %}
+    <a href="/">Dashboard</a>
+    <a href="/roster/">Missionaries</a>
+    <a href="/inventory/">Inventory</a>
+    <a href="/issue/" class="primary-action">Issue goods</a>
+    <a href="/issue/history/">History</a>
+    <a href="/reports/">Reports</a>
+    <a href="/guide/">Quick-start guide</a>
+    {% if user.is_superuser %}<a href="/accounts/users/">Users</a>{% endif %}
+    {% endif %}
+  </nav>
+  <div class="userbar">
+    {% if user.is_authenticated %}
+    <span>Signed in as <strong>{{ user.username }}</strong></span>
+    <form method="post" action="/accounts/logout/" class="inline">{% csrf_token %}<button type="submit">Sign out</button></form>
+    {% else %}
+    <a href="/accounts/login/">Sign in</a>
+    {% endif %}
+  </div>
+</header>
+<div class="statusbar" role="status" aria-live="polite">
+  <span id="connection-status">Connection: checking…</span>
+  <span aria-hidden="true"> · </span>
+  <span id="last-refresh">Last refresh: not yet</span>
+  <span id="session-warning" hidden> Your sign-in is about to expire. Save your work and sign in again in a new tab to keep going.</span>
+</div>
+{% if messages %}
+<ul class="messages" aria-live="polite">
+  {% for message in messages %}<li class="msg-{{ message.tags }}">{{ message }}</li>{% endfor %}
+</ul>
+{% endif %}
+<main id="main" class="wrap">
+{% block content %}{% endblock %}
+</main>
+<footer class="foot">
+  <p>Need help? Open the <a href="/guide/">one-page quick-start guide</a>. Staff need only a browser link and an account — no technical setup.</p>
+</footer>
+<script src="/static/app.js" defer></script>
+</body>
 </html>

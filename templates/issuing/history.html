@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Issue history — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Issue history</h1>
+<p class="help">Undone issues are kept for honesty: the original record never changes, and “Given out” totals skip undone issues. Open any row to see who gave, who undid, and when.</p>
+<table>
+<thead><tr><th>When</th><th>Person</th><th>Items</th><th>Given by</th><th>Status</th><th></th></tr></thead>
+<tbody>
+{% for issue in issues %}
+<tr>
+<td data-label="When">{{ issue.issued_at }}</td>
+<td data-label="Person">{{ issue.missionary_name }}</td>
+<td data-label="Items">{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+<td data-label="Given by">{{ issue.issued_by_username }}</td>
+<td data-label="Status">{% if issue.status == "REVERSED" %}<span class="badge-reversed">Undone</span>{% else %}Current{% endif %}</td>
+<td data-label="Details"><a href="/issue/{{ issue.pk }}/">Open</a></td>
+</tr>
+{% empty %}<tr><td colspan="6">No issues yet.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

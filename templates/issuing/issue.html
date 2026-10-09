@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Issue goods — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Issue goods</h1>
+<p class="help">Pick a person, add one or more items with quantities, then choose “Issue goods”. Repeating the same item adds the quantities together. If something is short, nothing is issued until you review and confirm the revised list. Your draft stays on this page if there is an error — nothing is lost.</p>
+<form method="post" class="stack" data-once>
+{% csrf_token %}
+<input type="hidden" name="idempotency_key" value="{{ draft_key }}">
+<label>Person (active records only)
+<select name="missionary_id" required>
+<option value="">— Choose a person —</option>
+{% for m in missionaries %}<option value="{{ m.pk }}" {% if m.pk|stringformat:"s" == missionary_id %}selected{% endif %}>{{ m.name }} ({{ m.external_id }})</option>{% endfor %}
+</select></label>
+<h2>Items</h2>
+{% for row in draft_lines %}
+<div class="toolbar">
+<label>Item
+<select name="item-{{ forloop.counter0 }}">
+<option value="">— Choose —</option>
+{% for item in items %}<option value="{{ item.pk }}" {% if item.pk|stringformat:"s" == row.item_id %}selected{% endif %}>{{ item }} — Available: {{ item.on_hand }}</option>{% endfor %}
+</select></label>
+<label>Quantity <input name="qty-{{ forloop.counter0 }}" inputmode="numeric" pattern="[0-9]*" value="{{ row.quantity }}"></label>
+</div>
+{% endfor %}
+<label>Note (optional) <input name="note" value="{{ note }}"></label>
+<button type="submit">Issue goods</button>
+</form>
+<p class="help">Made a mistake later? Open the issue in <a href="/issue/history/">History</a> and choose “Undo this issue” with a reason.</p>
+{% endblock %}

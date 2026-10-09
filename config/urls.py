@@ -18,4 +18,8 @@ urlpatterns = [
     path("accounts/", include("apps.accounts.urls")),
     path("poll/", poll, name="poll"),
     path("api/poll/", poll, name="api-poll"),
+    path("", include("apps.operations.urls")),
+    path("roster/", include("apps.roster.urls")),
+    path("inventory/", include("apps.inventory.urls")),
+    path("issue/", include("apps.issuing.urls")),
 ]

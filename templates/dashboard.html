@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<p class="help">Start here. <a href="/issue/" class="primary-action">Issue goods</a> is the main daily task. Numbers below refresh automatically about every 15 seconds without touching any form you are filling in.</p>
+<div class="cards">
+  <div class="card"><h2>People</h2><p data-live-people>{{ counts.people }}</p></div>
+  <div class="card"><h2>Items</h2><p data-live-items>{{ counts.items }}</p></div>
+  <div class="card"><h2>Issues today</h2><p>{{ counts.issues_today }}</p></div>
+  <div class="card"><h2>Low stock lines</h2><p data-live-low>{{ low_items|length }}</p></div>
+</div>
+<h2>Low stock — needs attention</h2>
+{% if low_items %}
+<table>
+<thead><tr><th>Item</th><th>Available</th><th>Alert level</th></tr></thead>
+<tbody>
+{% for item in low_items %}
+<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a> <span class="badge-low">low</span></td><td data-label="Available">{{ item.on_hand }}</td><td data-label="Alert level">{{ item.low_threshold }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}<p>Nothing is low right now.</p>{% endif %}
+<h2>Recent issues</h2>
+{% if recent %}
+<table>
+<thead><tr><th>When</th><th>Person</th><th>Items</th><th>Status</th></tr></thead>
+<tbody>
+{% for issue in recent %}
+<tr><td data-label="When">{{ issue.issued_at }}</td><td data-label="Person"><a href="/roster/{{ issue.missionary_id }}/">{{ issue.missionary_name }}</a></td><td data-label="Items">{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</td><td data-label="Status">{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}<p>No issues recorded yet.</p>{% endif %}
+<p><a href="/guide/">New here? Read the one-page quick-start guide.</a></p>
+{% endblock %}

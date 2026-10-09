@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "create" %}Add an item{% else %}Edit {{ item }}{% endif %} — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>{% if mode == "create" %}Add an item{% else %}Edit item{% endif %}</h1>
+<p class="help">Items are matched by category, name and size (ignoring extra spaces and letter case). Set the low-stock alert level so the dashboard can warn you.</p>
+<form method="post" class="stack" data-once>
+{% csrf_token %}
+<label>Category <input name="category" value="{% if category %}{{ category }}{% elif item %}{{ item.category }}{% endif %}" required></label>
+<label>Item name <input name="name" value="{% if name %}{{ name }}{% elif item %}{{ item.name }}{% endif %}" required></label>
+<label>Size (optional) <input name="size" value="{% if size %}{{ size }}{% elif item %}{{ item.size }}{% endif %}"></label>
+{% if mode == "create" %}
+<label>Opening quantity <input name="opening_qty" inputmode="numeric" pattern="[0-9]*" value="0"></label>
+<label>Reason <input name="reason" value="opening balance"></label>
+{% else %}
+<label>Unit <input name="unit" value="{{ item.unit }}"></label>
+<input type="hidden" name="expected_version" value="{{ item.version }}">
+{% endif %}
+<label>Low-stock alert level <input name="low_threshold" inputmode="numeric" pattern="[0-9]*" value="{% if item %}{{ item.low_threshold }}{% else %}0{% endif %}"></label>
+<button type="submit">{% if mode == "create" %}Add item{% else %}Save changes{% endif %}</button>
+</form>
+{% endblock %}

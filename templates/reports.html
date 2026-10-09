@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Reports — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Reports</h1>
+<p class="help">On-screen summaries. “Given out” counts only current issues — undone issues are excluded but remain visible in history. Low-stock lines use each item’s alert level.</p>
+<h2>Given out per item (net)</h2>
+<table>
+<thead><tr><th>Item</th><th>Given out (net)</th></tr></thead>
+<tbody>
+{% for row in per_item %}
+<tr><td data-label="Item">{{ row.item_category }} / {{ row.item_name }}{% if row.item_size %} ({{ row.item_size }}){% endif %}</td><td data-label="Given out (net)">{{ row.total }}</td></tr>
+{% empty %}<tr><td colspan="2">No issues yet.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+<h2>Given out per person (net)</h2>
+<table>
+<thead><tr><th>Person</th><th>Given out (net)</th></tr></thead>
+<tbody>
+{% for row in per_person %}
+<tr><td data-label="Person">{{ row.issue__missionary_name }} ({{ row.issue__missionary_external_id }})</td><td data-label="Given out (net)">{{ row.total }}</td></tr>
+{% empty %}<tr><td colspan="2">No issues yet.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+<h2>Low stock</h2>
+<table>
+<thead><tr><th>Item</th><th>Available</th><th>Alert level</th></tr></thead>
+<tbody>
+{% for item in low_items %}
+<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a></td><td data-label="Available">{{ item.on_hand }}</td><td data-label="Alert level">{{ item.low_threshold }}</td></tr>
+{% empty %}<tr><td colspan="3">Nothing is low right now.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+<h2>Recent issues (original and undone)</h2>
+<table>
+<thead><tr><th>When</th><th>Person</th><th>Status</th><th>Given by / undone by</th></tr></thead>
+<tbody>
+{% for issue in recent %}
+<tr><td data-label="When">{{ issue.issued_at }}</td><td data-label="Person">{{ issue.missionary_name }}</td><td data-label="Status">{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</td><td data-label="Given by / undone by">{{ issue.issued_by_username }}{% if issue.status == "REVERSED" %} / {{ issue.reversed_by.username }} ({{ issue.reversal_reason }}){% endif %}</td></tr>
+{% empty %}<tr><td colspan="4">No issues yet.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

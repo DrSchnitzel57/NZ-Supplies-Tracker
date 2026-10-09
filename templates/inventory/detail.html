@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ item }} — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>{{ item }}</h1>
+<p>Available: <strong data-available-for="{{ item.pk }}">{{ item.on_hand }}</strong> · Given out (net): <strong>{{ item.net_given }}</strong> · Count corrections total: <strong>{{ item.corrections_total }}</strong> · {% if item.is_archived %}Archived{% else %}Active{% endif %}</p>
+<p class="help">Available is the shelf count. “Given out” counts only current issues. If the shelf count is wrong, use “Correct stock count” with a reason — it records a correction, it does not invent or erase issues.</p>
+<p><a href="/inventory/{{ item.pk }}/edit/">Edit details</a>
+{% if item.is_archived %}
+<form method="post" action="/inventory/{{ item.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>
+{% else %}
+<form method="post" action="/inventory/{{ item.pk }}/archive/" class="inline">{% csrf_token %}<button type="submit">Archive</button></form>
+{% endif %}
+</p>
+
+<h2>Add stock</h2>
+<form method="post" action="/inventory/{{ item.pk }}/add-stock/" class="stack" data-once>
+{% csrf_token %}
+<label>Quantity to add <input name="quantity" inputmode="numeric" pattern="[0-9]*" required></label>
+<label>Reason (for example: “delivery from supplier”) <input name="reason" required></label>
+<button type="submit">Add stock</button>
+</form>
+
+<h2>Correct stock count</h2>
+<p class="help">Count what is actually on the shelf and enter it here. The difference is recorded as a correction with your reason. If someone else changed stock after you opened this page, you will be asked to refresh first.</p>
+<form method="post" action="/inventory/{{ item.pk }}/correct-count/" class="stack" data-once>
+{% csrf_token %}
+<input type="hidden" name="expected_version" value="{{ item.version }}">
+<label>Counted quantity now on the shelf <input name="counted_qty" inputmode="numeric" pattern="[0-9]*" value="{{ item.on_hand }}" required></label>
+<label>Reason (for example: “recount found a damaged box”) <input name="reason" required></label>
+<button type="submit">Correct stock count</button>
+</form>
+
+<h2>Recent stock changes</h2>
+<table>
+<thead><tr><th>When</th><th>What changed</th><th>Change</th><th>Available after</th><th>Reason</th></tr></thead>
+<tbody>
+{% for m in movements %}
+<tr><td data-label="When">{{ m.created_at }}</td><td data-label="What changed">{{ m.plain_kind }}</td><td data-label="Change">{{ m.delta }}</td><td data-label="Available after">{{ m.balance_after }}</td><td data-label="Reason">{{ m.reason }}</td></tr>
+{% empty %}<tr><td colspan="5">No stock changes yet.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

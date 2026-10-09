@@ -121,7 +121,7 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 # Poll endpoints must not extend the idle timer. Paths listed here are skipped
 # by IdleTimeoutMiddleware when refreshing last-activity.
-SESSION_POLL_PATHS = ["/poll/", "/api/poll/", "/api/stock/"]
+SESSION_POLL_PATHS = ["/poll/", "/api/poll/", "/api/stock/", "/api/dashboard/"]
 
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"
