@@ -10,7 +10,7 @@ a whole issue exactly once, with a reason, even for archived records.
 
 from __future__ import annotations
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.accounts import services as permissions
@@ -27,7 +27,12 @@ def _aggregate(lines) -> dict:
     aggregated: dict = {}
     for entry in lines or []:
         item_id = entry.get("item_id") or entry.get("item")
-        qty = int(entry.get("quantity", 0))
+        if item_id is None or str(item_id).strip() == "":
+            raise ValidationError("issue line item is required")
+        try:
+            qty = int(entry.get("quantity", 0))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("issue quantities must be whole numbers") from exc
         if qty <= 0:
             raise ValidationError("issue quantities must be positive")
         key = str(item_id)
@@ -113,24 +118,26 @@ def create_issue(*, actor, missionary_id, lines, idempotency_key: str, note: str
                 )
         if shortages:
             proposal = [
-                {"item_id": item_id, "quantity": items[item_id].on_hand}
-                for item_id in aggregated
+                {"item_id": item_id, "quantity": min(requested, items[item_id].on_hand)}
+                for item_id, requested in aggregated.items()
                 if items[item_id].on_hand > 0
             ]
             raise InsufficientStockError(shortages=shortages, proposal=proposal)
 
         try:
-            issue = Issue.objects.create(
-                missionary=missionary,
-                missionary_name=missionary.name,
-                missionary_external_id=missionary.external_id,
-                issued_by=actor,
-                issued_by_username=getattr(actor, "username", ""),
-                note=(note or "").strip(),
-                idempotency_key=idempotency_key,
-            )
+            with transaction.atomic():
+                issue = Issue.objects.create(
+                    missionary=missionary,
+                    missionary_name=missionary.name,
+                    missionary_external_id=missionary.external_id,
+                    issued_by=actor,
+                    issued_by_username=getattr(actor, "username", ""),
+                    note=(note or "").strip(),
+                    idempotency_key=idempotency_key,
+                )
         except IntegrityError:
-            # Lost an idempotency race: the other writer won; return its row.
+            # Lost an idempotency race: the other writer won; the savepoint
+            # above keeps this transaction usable so we can return its row.
             return Issue.objects.get(idempotency_key=idempotency_key)
         for item_id, qty in aggregated.items():
             item = items[item_id]

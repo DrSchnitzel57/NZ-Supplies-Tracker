@@ -25,12 +25,7 @@ class ForcedPasswordChangeView(LoginRequiredMixin, auth_views.PasswordChangeView
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        user = self.request.user
-        user.must_change_password = False
-        from django.utils import timezone
-
-        user.password_changed_at = timezone.now()
-        user.save(update_fields=["must_change_password", "password_changed_at"])
+        lifecycle.mark_password_changed(user=self.request.user)
         return response
 
 

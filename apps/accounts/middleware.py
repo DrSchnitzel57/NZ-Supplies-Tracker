@@ -21,7 +21,6 @@ EXEMPT_PREFIXES = (
     "/accounts/login/",
     "/accounts/logout/",
     PASSWORD_CHANGE_PATH,
-    "/admin/",
     "/static/",
 )
 

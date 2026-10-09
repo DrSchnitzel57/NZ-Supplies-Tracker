@@ -72,6 +72,25 @@ def complete_password_change(*, user, new_password: str):
     user.must_change_password = False
     user.password_changed_at = timezone.now()
     user.save(update_fields=["password", "must_change_password", "password_changed_at"])
+    _audit_password_changed(user)
+    return user
+
+
+def mark_password_changed(*, user):
+    """Clear the temporary-password gate after a UI password change.
+
+    The password itself was already saved by the password-change form, so
+    this only clears the flag, stamps the change and records the audit event
+    without touching the password hash (which would invalidate the session).
+    """
+    user.must_change_password = False
+    user.password_changed_at = timezone.now()
+    user.save(update_fields=["must_change_password", "password_changed_at"])
+    _audit_password_changed(user)
+    return user
+
+
+def _audit_password_changed(user):
     from apps.audit.models import AuditEvent
 
     AuditEvent.objects.create(

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from django.db import transaction
+from django.db import IntegrityError
 from django.utils import timezone
 
 from apps.accounts import services as permissions
+from apps.common.db import transact
 from apps.common.errors import StaleVersionError, ValidationError
 from apps.operations.guards import assert_writes_allowed
 
@@ -16,7 +17,6 @@ def _clean(value: str | None) -> str:
 
 def create_missionary(*, actor, external_id: str, name: str, email: str = ""):
     permissions.require_staff(actor)
-    assert_writes_allowed()
     external_id = _clean(external_id)
     name = _clean(name)
     if not external_id:
@@ -25,22 +25,28 @@ def create_missionary(*, actor, external_id: str, name: str, email: str = ""):
         raise ValidationError("name is required")
     from apps.roster.models import Missionary
 
-    if Missionary.objects.filter(external_id=external_id).exists():
-        raise ValidationError("external ID already exists")
-    with transaction.atomic():
-        obj = Missionary.objects.create(
-            external_id=external_id, name=name, email=_clean(email)
-        )
+    def _work():
+        assert_writes_allowed()
+        if Missionary.objects.filter(external_id=external_id).exists():
+            raise ValidationError("external ID already exists")
+        try:
+            obj = Missionary.objects.create(
+                external_id=external_id, name=name, email=_clean(email)
+            )
+        except IntegrityError as exc:
+            raise ValidationError("external ID already exists") from exc
         _audit(actor, "roster.created", obj)
         return obj
+
+    return transact(_work)
 
 
 def update_missionary(*, actor, missionary_id, expected_version: int, **fields):
     permissions.require_staff(actor)
-    assert_writes_allowed()
     from apps.roster.models import Missionary
 
-    with transaction.atomic():
+    def _work():
+        assert_writes_allowed()
         try:
             obj = Missionary.objects.select_for_update().get(pk=missionary_id)
         except Missionary.DoesNotExist as exc:
@@ -64,18 +70,26 @@ def update_missionary(*, actor, missionary_id, expected_version: int, **fields):
         if "email" in fields and fields["email"] is not None:
             obj.email = _clean(fields["email"])
         obj.version += 1
-        obj.full_clean()
-        obj.save()
+        try:
+            obj.full_clean()
+        except Exception as exc:
+            raise ValidationError(str(exc)) from exc
+        try:
+            obj.save()
+        except IntegrityError as exc:
+            raise ValidationError("external ID already exists") from exc
         _audit(actor, "roster.updated", obj)
         return obj
+
+    return transact(_work)
 
 
 def archive_missionary(*, actor, missionary_id, expected_version: int | None = None):
     permissions.require_staff(actor)
-    assert_writes_allowed()
     from apps.roster.models import Missionary
 
-    with transaction.atomic():
+    def _work():
+        assert_writes_allowed()
         obj = Missionary.objects.select_for_update().get(pk=missionary_id)
         if expected_version is not None and obj.version != expected_version:
             raise StaleVersionError("stale roster record; refresh and retry")
@@ -86,13 +100,15 @@ def archive_missionary(*, actor, missionary_id, expected_version: int | None = N
         _audit(actor, "roster.archived", obj)
         return obj
 
+    return transact(_work)
+
 
 def reactivate_missionary(*, actor, missionary_id):
     permissions.require_staff(actor)
-    assert_writes_allowed()
     from apps.roster.models import Missionary
 
-    with transaction.atomic():
+    def _work():
+        assert_writes_allowed()
         obj = Missionary.objects.select_for_update().get(pk=missionary_id)
         obj.is_archived = False
         obj.archived_at = None
@@ -100,6 +116,8 @@ def reactivate_missionary(*, actor, missionary_id):
         obj.save()
         _audit(actor, "roster.reactivated", obj)
         return obj
+
+    return transact(_work)
 
 
 def _audit(actor, action, obj):

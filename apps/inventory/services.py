@@ -41,47 +41,73 @@ def create_item(
     idempotency_key: str | None = None,
 ):
     permissions.require_staff(actor)
-    assert_writes_allowed()
     category = (category or "").strip()
     name = (name or "").strip()
     size = (size or "").strip()
     if not category or not name:
         raise ValidationError("category and name are required")
+    try:
+        opening_qty = int(opening_qty)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("opening quantity must be a whole number") from exc
     if opening_qty < 0:
         raise NegativeBalanceError("opening quantity cannot be negative")
-    if idempotency_key:
-        existing = StockMovement.objects.filter(
-            idempotency_key=idempotency_key
-        ).first()
-        if existing is not None:
-            return Item.objects.get(pk=existing.item_id)
-    with transaction.atomic():
+
+    def _work():
+        assert_writes_allowed()
+        if idempotency_key:
+            existing = StockMovement.objects.filter(
+                idempotency_key=idempotency_key
+            ).first()
+            if existing is not None:
+                return Item.objects.get(pk=existing.item_id)
         key = item_key(category, name, size)
         if Item.objects.filter(key=key).exists():
             raise ValidationError("item already exists (normalized match)")
         item = Item(
             category=category, name=name, size=size, on_hand=opening_qty
         )
-        item.save()
-        StockMovement.objects.create(
-            item=item,
-            kind=StockMovement.OPENING,
-            delta=opening_qty,
-            balance_after=opening_qty,
-            reason=_require_reason(reason, "opening"),
-            created_by=actor,
-            idempotency_key=idempotency_key,
-        )
+        try:
+            with transaction.atomic():
+                item.save()
+        except IntegrityError as exc:
+            raise ValidationError("item already exists (normalized match)") from exc
+        try:
+            with transaction.atomic():
+                StockMovement.objects.create(
+                    item=item,
+                    kind=StockMovement.OPENING,
+                    delta=opening_qty,
+                    balance_after=opening_qty,
+                    reason=_require_reason(reason, "opening"),
+                    created_by=actor,
+                    idempotency_key=idempotency_key,
+                )
+        except IntegrityError:
+            if idempotency_key and StockMovement.objects.filter(
+                idempotency_key=idempotency_key
+            ).exists():
+                return Item.objects.get(
+                    pk=StockMovement.objects.get(
+                        idempotency_key=idempotency_key
+                    ).item_id
+                )
+            raise
         _audit(actor, "item.created", item, {"opening_qty": opening_qty})
         return item
+
+    return transact(_work)
 
 
 def receive_stock(*, actor, item_id, quantity: int, reason: str, idempotency_key=None):
     """Add stock. Quantity must be positive; reason is mandatory."""
     permissions.require_staff(actor)
-    if quantity is None or int(quantity) <= 0:
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("receipt quantity must be a whole number") from exc
+    if quantity <= 0:
         raise ValidationError("receipt quantity must be positive")
-    quantity = int(quantity)
     reason = _require_reason(reason, "receipt")
 
     def _work():
@@ -95,16 +121,20 @@ def receive_stock(*, actor, item_id, quantity: int, reason: str, idempotency_key
         item = Item.objects.select_for_update().get(pk=item_id)
         balance = item.on_hand + quantity
         try:
-            movement = StockMovement.objects.create(
-                item=item,
-                kind=StockMovement.RECEIPT,
-                delta=quantity,
-                balance_after=balance,
-                reason=reason,
-                created_by=actor,
-                idempotency_key=idempotency_key,
-            )
+            with transaction.atomic():
+                movement = StockMovement.objects.create(
+                    item=item,
+                    kind=StockMovement.RECEIPT,
+                    delta=quantity,
+                    balance_after=balance,
+                    reason=reason,
+                    created_by=actor,
+                    idempotency_key=idempotency_key,
+                )
         except IntegrityError:
+            if not idempotency_key:
+                raise
+            # Idempotency race lost: savepoint keeps this transaction usable.
             existing = StockMovement.objects.get(idempotency_key=idempotency_key)
             return Item.objects.get(pk=existing.item_id), existing
         item.on_hand = balance
@@ -132,9 +162,12 @@ def adjust_count(
 ):
     """Set Remaining to a counted value via an explicit correction movement."""
     permissions.require_staff(actor)
-    if counted_qty is None or int(counted_qty) < 0:
+    try:
+        counted_qty = int(counted_qty)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("counted quantity must be a whole number") from exc
+    if counted_qty < 0:
         raise NegativeBalanceError("counted quantity cannot be negative")
-    counted_qty = int(counted_qty)
     reason = _require_reason(reason, "count correction")
 
     def _work():
@@ -155,15 +188,16 @@ def adjust_count(
             )
         delta = counted_qty - item.on_hand
         try:
-            movement = StockMovement.objects.create(
-                item=item,
-                kind=StockMovement.COUNT_ADJUST,
-                delta=delta,
-                balance_after=counted_qty,
-                reason=reason,
-                created_by=actor,
-                idempotency_key=idempotency_key,
-            )
+            with transaction.atomic():
+                movement = StockMovement.objects.create(
+                    item=item,
+                    kind=StockMovement.COUNT_ADJUST,
+                    delta=delta,
+                    balance_after=counted_qty,
+                    reason=reason,
+                    created_by=actor,
+                    idempotency_key=idempotency_key,
+                )
         except IntegrityError as exc:
             if idempotency_key and StockMovement.objects.filter(
                 idempotency_key=idempotency_key
@@ -172,7 +206,7 @@ def adjust_count(
                     idempotency_key=idempotency_key
                 )
                 return Item.objects.get(pk=existing.item_id), existing
-            raise NegativeBalanceError("count would create negative stock") from exc
+            raise
         item.on_hand = counted_qty
         item.version += 1
         item.save()
@@ -189,8 +223,9 @@ def adjust_count(
 
 def update_item(*, actor, item_id, expected_version: int, **fields):
     permissions.require_staff(actor)
-    assert_writes_allowed()
-    with transaction.atomic():
+
+    def _work():
+        assert_writes_allowed()
         try:
             item = Item.objects.select_for_update().get(pk=item_id)
         except Item.DoesNotExist as exc:
@@ -210,15 +245,21 @@ def update_item(*, actor, item_id, expected_version: int, **fields):
             item.full_clean()
         except Exception as exc:
             raise ValidationError(str(exc)) from exc
-        item.save()
+        try:
+            item.save()
+        except IntegrityError as exc:
+            raise ValidationError("item already exists (normalized match)") from exc
         _audit(actor, "item.updated", item, {"key": new_key})
         return item
+
+    return transact(_work)
 
 
 def archive_item(*, actor, item_id):
     permissions.require_staff(actor)
-    assert_writes_allowed()
-    with transaction.atomic():
+
+    def _work():
+        assert_writes_allowed()
         item = Item.objects.select_for_update().get(pk=item_id)
         item.is_archived = True
         item.archived_at = timezone.now()
@@ -227,11 +268,14 @@ def archive_item(*, actor, item_id):
         _audit(actor, "item.archived", item, {})
         return item
 
+    return transact(_work)
+
 
 def reactivate_item(*, actor, item_id):
     permissions.require_staff(actor)
-    assert_writes_allowed()
-    with transaction.atomic():
+
+    def _work():
+        assert_writes_allowed()
         item = Item.objects.select_for_update().get(pk=item_id)
         item.is_archived = False
         item.archived_at = None
@@ -239,6 +283,8 @@ def reactivate_item(*, actor, item_id):
         item.save()
         _audit(actor, "item.reactivated", item, {})
         return item
+
+    return transact(_work)
 
 
 def remaining(item_or_id) -> int:

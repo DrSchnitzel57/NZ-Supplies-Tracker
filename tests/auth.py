@@ -44,6 +44,38 @@ class TempPasswordTests(TestCase):
         user.refresh_from_db()
         self.assertFalse(user.must_change_password)
 
+    def test_temp_password_gate_also_covers_admin_site(self):
+        admin, _ = make_admin()
+        user = lifecycle.create_user(
+            actor=admin, username="newstaff-admin", password="Temp12345!"
+        )
+        self.client.force_login(user)
+        response = self.client.get("/admin/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/password-change/", response["Location"])
+
+    def test_ui_password_change_records_audit_event(self):
+        from apps.audit.models import AuditEvent
+
+        admin, _ = make_admin()
+        user = lifecycle.create_user(
+            actor=admin, username="newstaff-audit", password="Temp12345!"
+        )
+        self.client.force_login(user)
+        self.client.post(
+            "/accounts/password-change/",
+            {
+                "old_password": "Temp12345!",
+                "new_password1": "BrandNewPass123!",
+                "new_password2": "BrandNewPass123!",
+            },
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="user.password_changed", target_id=str(user.pk)
+            ).exists()
+        )
+
 
 class PermissionEndpointTests(TestCase):
     def test_admin_view_requires_admin(self):

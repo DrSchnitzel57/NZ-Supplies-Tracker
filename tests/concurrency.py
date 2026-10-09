@@ -139,3 +139,107 @@ class CompetingIssuesTests(TransactionTestCase):
         self.assertEqual(inv.ledger_balance(item.pk), item.on_hand)
         # Silence unused import warning for reviewers.
         self.assertTrue(connection.vendor == "sqlite")
+
+    def test_concurrent_same_key_issue_returns_single_row(self):
+        admin, _ = make_admin()
+        m = make_missionary(admin)
+        item = make_item(admin, opening_qty=10)
+        key = f"same-key-{uuid.uuid4().hex}"
+        barrier = threading.Barrier(2)
+        outcomes = [None, None]
+
+        def attempt(index):
+            _close_thread_connections()
+            barrier.wait(timeout=10)
+            try:
+                issue = issuing.create_issue(
+                    actor=admin, missionary_id=m.pk,
+                    lines=[{"item_id": str(item.pk), "quantity": 2}],
+                    idempotency_key=key,
+                )
+                outcomes[index] = str(issue.pk)
+            except Exception as exc:  # pragma: no cover - surfaced below
+                outcomes[index] = f"error:{type(exc).__name__}:{exc}"
+            finally:
+                _close_thread_connections()
+
+        threads = [threading.Thread(target=attempt, args=(i,)) for i in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+        self.assertEqual(outcomes[0], outcomes[1])
+        self.assertFalse(str(outcomes[0]).startswith("error:"))
+        item.refresh_from_db()
+        self.assertEqual(item.on_hand, 8)
+        self.assertEqual(
+            Issue.objects.filter(idempotency_key=key).count(), 1
+        )
+
+    def test_concurrent_same_key_receipt_writes_once(self):
+        admin, _ = make_admin()
+        item = make_item(admin, opening_qty=5)
+        key = f"same-rx-{uuid.uuid4().hex}"
+        barrier = threading.Barrier(2)
+        outcomes = [None, None]
+
+        def attempt(index):
+            _close_thread_connections()
+            barrier.wait(timeout=10)
+            try:
+                _, movement = inv.receive_stock(
+                    actor=admin, item_id=item.pk, quantity=3, reason="delivery",
+                    idempotency_key=key,
+                )
+                outcomes[index] = str(movement.pk)
+            except Exception as exc:  # pragma: no cover - surfaced below
+                outcomes[index] = f"error:{type(exc).__name__}:{exc}"
+            finally:
+                _close_thread_connections()
+
+        threads = [threading.Thread(target=attempt, args=(i,)) for i in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+        self.assertEqual(outcomes[0], outcomes[1])
+        self.assertFalse(str(outcomes[0]).startswith("error:"))
+        item.refresh_from_db()
+        self.assertEqual(item.on_hand, 8)
+
+    def test_maintenance_guard_blocks_other_connections(self):
+        from apps.common.errors import MaintenanceActiveError
+        from apps.operations import guards
+
+        admin, _ = make_admin()
+        item = make_item(admin, opening_qty=5)
+        observed = {}
+
+        def attempt():
+            _close_thread_connections()
+            try:
+                guards.assert_writes_allowed()
+                observed["guard"] = "allowed"
+            except MaintenanceActiveError:
+                observed["guard"] = "blocked"
+            try:
+                inv.receive_stock(
+                    actor=admin, item_id=item.pk, quantity=1, reason="x",
+                    idempotency_key=f"maint-{uuid.uuid4().hex}",
+                )
+                observed["write"] = "wrote"
+            except MaintenanceActiveError:
+                observed["write"] = "blocked"
+            except Exception as exc:  # pragma: no cover - surfaced below
+                observed["write"] = f"error:{type(exc).__name__}"
+            finally:
+                _close_thread_connections()
+
+        with guards.maintenance_mode():
+            worker = threading.Thread(target=attempt)
+            worker.start()
+            worker.join(timeout=30)
+        self.assertEqual(observed.get("guard"), "blocked")
+        self.assertEqual(observed.get("write"), "blocked")
+        item.refresh_from_db()
+        self.assertEqual(item.on_hand, 5)

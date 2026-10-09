@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
-from django.db import transaction
-
 from apps.common.errors import MaintenanceActiveError
 
 
@@ -27,18 +25,16 @@ def assert_writes_allowed() -> None:
 
 @contextmanager
 def maintenance_mode():
-    """Exclusive maintenance window: blocks routine writes inside the block."""
-    from apps.operations.models import MaintenanceState
+    """Exclusive maintenance window: blocks routine writes inside the block.
 
-    with transaction.atomic():
-        state, _ = MaintenanceState.objects.select_for_update().get_or_create(pk=1)
-        state.maintenance_mode = True
-        state.save()
-        try:
-            yield state
-        finally:
-            state.maintenance_mode = False
-            state.save()
+    The flag is committed in its own transactions on entry and exit so that
+    other connections observe it while the block is active.
+    """
+    enter_maintenance()
+    try:
+        yield _state()
+    finally:
+        exit_maintenance()
 
 
 def enter_maintenance():

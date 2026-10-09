@@ -144,6 +144,61 @@ class IssueAtomicityTests(TestCase):
         self.assertEqual(a.on_hand, before_a)
         self.assertEqual(b.on_hand, 10)
 
+    def test_shortage_proposal_never_exceeds_requested_quantities(self):
+        m = make_missionary(self.admin)
+        a = make_item(self.admin, opening_qty=3)
+        b = make_item(self.admin, opening_qty=10)
+        with self.assertRaises(InsufficientStockError) as ctx:
+            issuing.create_issue(
+                actor=self.admin, missionary_id=m.pk,
+                lines=[
+                    {"item_id": str(a.pk), "quantity": 5},
+                    {"item_id": str(b.pk), "quantity": 2},
+                ],
+                idempotency_key="short-proposal-values",
+            )
+        proposal = {
+            entry["item_id"]: entry["quantity"] for entry in ctx.exception.proposal
+        }
+        self.assertEqual(proposal[str(a.pk)], 3)
+        self.assertEqual(proposal[str(b.pk)], 2)
+        # Confirming the proposal issues exactly the revised list.
+        issue = issuing.create_issue(
+            actor=self.admin, missionary_id=m.pk,
+            lines=ctx.exception.proposal,
+            idempotency_key="short-proposal-confirm",
+        )
+        quantities = {
+            str(line.item_id): line.quantity for line in issue.lines.all()
+        }
+        self.assertEqual(quantities, proposal)
+
+    def test_malformed_quantities_raise_domain_errors(self):
+        m = make_missionary(self.admin)
+        item = make_item(self.admin, opening_qty=10)
+        with self.assertRaises(ValidationError):
+            issuing.create_issue(
+                actor=self.admin, missionary_id=m.pk,
+                lines=[{"item_id": str(item.pk), "quantity": "abc"}],
+                idempotency_key="bad-qty-1",
+            )
+        with self.assertRaises(ValidationError):
+            issuing.create_issue(
+                actor=self.admin, missionary_id=m.pk,
+                lines=[{"quantity": 2}],
+                idempotency_key="bad-qty-2",
+            )
+        with self.assertRaises(ValidationError):
+            inv.receive_stock(
+                actor=self.admin, item_id=item.pk, quantity="lots",
+                reason="restock",
+            )
+        with self.assertRaises(ValidationError):
+            inv.adjust_count(
+                actor=self.admin, item_id=item.pk, counted_qty="many",
+                reason="recount", expected_version=item.version,
+            )
+
     def test_confirmation_rechecks_and_succeeds_with_revised_list(self):
         m = make_missionary(self.admin)
         a = make_item(self.admin, opening_qty=3)
