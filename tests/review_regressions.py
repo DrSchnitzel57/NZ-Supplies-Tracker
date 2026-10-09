@@ -1213,3 +1213,542 @@ class StockExportQueryTests(TestCase):
         with CaptureQueriesContext(connection) as ctx2:
             rep.inventory_csv()
         self.assertLessEqual(len(ctx2), 4, [q["sql"][:80] for q in ctx2])
+
+
+class SeedFidelityTests(TestCase):
+    """Finding 1: every approved source key maps losslessly; remain works."""
+
+    def test_remain_key_maps_to_opening_stock(self):
+        from apps.transfers.seed import normalize_seed
+
+        roster, items, _ = normalize_seed({
+            "missionaries": [],
+            "items": [{"name": "Synthetic Item", "category": "Test",
+                       "remain": 7, "lowThreshold": 3}],
+        })
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["remaining"], 7)
+        self.assertEqual(items[0]["low_threshold"], 3)
+        self.assertEqual(items[0]["remain_raw"], "7")
+
+    def test_original_source_keys_all_mapped(self):
+        from apps.transfers.seed import normalize_seed, seed_to_bundle_rows
+
+        src = {"name": "Jane Doe", "id": "S-1",
+               "arrived": "arrived", "homeStake": "North Stake",
+               "missionArrival": "2025-01-05", "missionRelease": "2026-01-05",
+               "tLanguage": "Spanish", "type": "Sister",
+               "custom_note": "keep me"}
+        roster, _, _ = normalize_seed({"missionaries": [src], "items": []})
+        self.assertEqual(len(roster), 1)
+        person = roster[0]
+        self.assertEqual(person["arrival_status"], "arrived")
+        self.assertEqual(person["stake"], "North Stake")
+        self.assertEqual(person["arrival_date"], "2025-01-05")
+        self.assertEqual(person["release_date"], "2026-01-05")
+        self.assertEqual(person["language"], "Spanish")
+        self.assertEqual(person["title_prefix"], "Sister")
+        # Unrecognized fields survive verbatim; mapped keys are not duplicated.
+        self.assertEqual(person["intake_metadata"], {"custom_note": "keep me"})
+        rows = seed_to_bundle_rows({"missionaries": [src], "items": []})
+        self.assertEqual(len(rows["roster"]), 1)
+        bundle_row = rows["roster"][0]
+        self.assertEqual(bundle_row["arrival_status"], "arrived")
+        self.assertEqual(bundle_row["stake"], "North Stake")
+        self.assertEqual(bundle_row["language"], "Spanish")
+        self.assertEqual(bundle_row["title_prefix"], "Sister")
+        import json as _json
+        self.assertEqual(_json.loads(bundle_row["intake_metadata"]),
+                         {"custom_note": "keep me"})
+
+    def test_stock_out_and_threshold_variants(self):
+        from apps.transfers.seed import normalize_seed
+
+        _, items, _ = normalize_seed({
+            "missionaries": [],
+            "items": [
+                {"category": "C", "name": "A", "Stock": 9, "Out": 4},
+                {"category": "C", "name": "B", "onHand": 6, "low": 2},
+                {"category": "C", "name": "C", "qty": 3, "threshold": 1},
+                {"category": "C", "name": "D", "quantity": 8,
+                 "reorderLevel": 4},
+            ],
+        })
+        by_name = {i["name"]: i for i in items}
+        self.assertEqual(by_name["A"]["remaining"], 5)  # 9 - 4
+        self.assertEqual(by_name["B"]["remaining"], 6)
+        self.assertEqual(by_name["B"]["low_threshold"], 2)
+        self.assertEqual(by_name["C"]["remaining"], 3)
+        self.assertEqual(by_name["C"]["low_threshold"], 1)
+        self.assertEqual(by_name["D"]["remaining"], 8)
+        self.assertEqual(by_name["D"]["low_threshold"], 4)
+
+    def test_four_authorized_negative_corrections(self):
+        from apps.transfers.seed import seed_to_bundle_rows
+
+        seed = {"missionaries": [],
+                "items": [
+                    {"category": "C", "name": f"Neg{i}",
+                     "remaining": v} for i, v in
+                    enumerate([-3, -1, -2, -7])]}
+        rows = seed_to_bundle_rows(seed)
+        corrected = [r for r in rows["items"]
+                     if r["source_corrected"] == "true"]
+        self.assertEqual(len(corrected), 4)
+        for row, raw in zip(sorted(corrected, key=lambda r: r["name"]),
+                            ["-3", "-1", "-2", "-7"]):
+            self.assertEqual(row["on_hand"], "0")
+            self.assertEqual(row["source_remaining"], raw)
+        self.assertEqual(
+            len([a for a in rows["audits"]
+                 if a["action"] == "seed.correction"]), 4)
+        for movement in rows["movements"]:
+            self.assertEqual(movement["kind"], "OPENING")
+            self.assertEqual(movement["delta"], movement["balance_after"])
+
+    def test_seed_bundle_import_preserves_metadata_and_corrections(self):
+        from apps.transfers import services as transfers
+        from apps.transfers.seed import seed_to_bundle_rows
+
+        admin, _ = make_admin()
+        seed = {
+            "missionaries": [{
+                "id": "M-9", "name": "Alex Rivera", "type": "Elder",
+                "arrived": "arrived", "homeStake": "South Stake",
+                "missionArrival": "2025-03-01", "missionRelease": "2026-03-01",
+                "tLanguage": "French", "custom_note": "keep me"}],
+            "items": [
+                {"category": "Food", "name": "Rice", "remain": 7,
+                 "lowThreshold": 3},
+                {"category": "Food", "name": "Bad", "remaining": -4},
+            ],
+        }
+        rows = seed_to_bundle_rows(seed)
+        from apps.transfers import bundle as bundle_mod
+        data = bundle_mod.build_bundle(
+            source="seed:test", settings_rows=[], roster_rows=rows["roster"],
+            item_rows=rows["items"], issue_rows=[], line_rows=[],
+            movement_rows=rows["movements"], audit_rows=rows["audits"])
+        transfers.import_bundle(actor=admin, data=data, filename="seed.zip")
+        from apps.roster.models import Missionary
+        person = Missionary.objects.get(external_id="M-9")
+        self.assertEqual(person.title_prefix, "Elder")
+        self.assertEqual(person.stake, "South Stake")
+        self.assertEqual(person.language, "French")
+        self.assertEqual(person.intake_metadata, {"custom_note": "keep me"})
+        from apps.inventory.models import Item
+        rice = Item.objects.get(name="Rice")
+        self.assertEqual(rice.on_hand, 7)
+        self.assertEqual(rice.low_threshold, 3)
+        bad = Item.objects.get(name="Bad")
+        self.assertEqual(bad.on_hand, 0)
+        self.assertEqual(bad.source_remaining, -4)
+        self.assertTrue(bad.source_corrected)
+        # Export round-trips the metadata losslessly.
+        data2 = transfers.export_bundle(actor=admin)
+        parsed = bundle_mod.parse_bundle(data2)
+        roster2 = {r["external_id"]: r for r in parsed["tables"]["roster.csv"]}
+        import json as _json
+        self.assertEqual(_json.loads(roster2["M-9"]["intake_metadata"]),
+                         {"custom_note": "keep me"})
+
+    def test_unparseable_dates_preserved_not_dropped(self):
+        from apps.transfers.seed import normalize_seed
+
+        roster, _, _ = normalize_seed({
+            "missionaries": [{"id": "D-1", "name": "Dated Person",
+                              "missionArrival": "not-a-date"}],
+            "items": [],
+        })
+        self.assertEqual(roster[0]["arrival_date"], "")
+        self.assertEqual(roster[0]["intake_metadata"].get("arrival_date_raw"),
+                         "not-a-date")
+
+
+class LedgerChainTests(TestCase):
+    """Finding 6: aggregate-correct but chain-invalid bundles are rejected."""
+
+    def setUp(self):
+        self.admin, _ = make_admin()
+
+    def _mutate(self, table, row_id, **changes):
+        from apps.transfers import bundle as bundle_mod
+
+        data = _valid_bundle_bytes(actor=self.admin)
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        tables = {n: zf.read(n) for n in bundle_mod.TABLE_FILES}
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        rows = list(csv.DictReader(io.StringIO(tables[table].decode())))
+        fields = bundle_mod.TABLE_HEADERS[table]
+        for row in rows:
+            if row["id"] == str(row_id):
+                row.update({k: str(v) for k, v in changes.items()})
+        tables[table] = _csv_bytes(fields, rows)
+        manifest["checksums"] = {n: bundle_mod._sha(raw)
+                                 for n, raw in tables.items()}
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as out:
+            out.writestr("manifest.json", json.dumps(manifest).encode())
+            for n in bundle_mod.TABLE_FILES:
+                out.writestr(n, tables[n])
+        return buf.getvalue()
+
+    def test_opening_balance_must_equal_delta(self):
+        from apps.transfers import bundle as bundle_mod
+
+        item = make_item(self.admin, opening_qty=0)
+        # Aggregate sums still match (delta 0 == cached 0) but the stored
+        # running balance 999 breaks the OPENING chain.
+        bad = self._mutate("movements.csv", item.movements.get().pk,
+                           balance_after="999")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.parse_bundle(bad)
+
+    def test_issue_direction_enforced(self):
+        from apps.inventory.models import StockMovement
+        from apps.issuing import services as issuing
+        from apps.transfers import bundle as bundle_mod
+
+        person = make_missionary(self.admin)
+        item = make_item(self.admin, opening_qty=10)
+        issuing.create_issue(
+            actor=self.admin, missionary_id=person.pk,
+            lines=[{"item_id": str(item.pk), "quantity": 2}],
+            note="", idempotency_key="chain-issue-1")
+        movement = StockMovement.objects.filter(
+            kind="ISSUE", item=item).get()
+        bad = self._mutate("movements.csv", movement.pk, delta="2")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.parse_bundle(bad)
+
+    def test_receipt_direction_and_missing_opening_rejected(self):
+        from apps.inventory.models import StockMovement
+        from apps.transfers import bundle as bundle_mod
+
+        item = make_item(self.admin, opening_qty=10)
+        receipt = None
+        from apps.inventory import services as inv
+        _, receipt = inv.receive_stock(
+            actor=self.admin, item_id=item.pk, quantity=5,
+            reason="delivery", idempotency_key="chain-rx-1")
+        bad = self._mutate("movements.csv", receipt.pk, delta="-5")
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.parse_bundle(bad)
+        # Drop the OPENING row and repair sums: RECEIPT-only ledger with a
+        # matching cached stock still fails (no leading OPENING).
+        data = _valid_bundle_bytes(actor=self.admin)
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        tables = {n: zf.read(n).decode() for n in bundle_mod.TABLE_FILES}
+        movements = list(csv.DictReader(io.StringIO(tables["movements.csv"])))
+        opening = [m for m in movements if m["kind"] == "OPENING"
+                   and m["item_id"] == str(item.pk)][0]
+        kept = [m for m in movements if m["id"] != opening["id"]]
+        items = list(csv.DictReader(io.StringIO(tables["items.csv"])))
+        for row in items:
+            if row["id"] == str(item.pk):
+                row["on_hand"] = "5"  # receipt delta alone
+        manifest = json.loads(zf.read("manifest.json").decode())
+        raw_tables = {n: (tables[n].encode() if n not in
+                          ("movements.csv", "items.csv") else b"")
+                      for n in bundle_mod.TABLE_FILES}
+        raw_tables["movements.csv"] = _csv_bytes(
+            bundle_mod.MOVEMENT_FIELDS, kept)
+        raw_tables["items.csv"] = _csv_bytes(bundle_mod.ITEM_FIELDS, items)
+        manifest["checksums"] = {n: bundle_mod._sha(raw_tables[n])
+                                 for n in bundle_mod.TABLE_FILES}
+        manifest["counts"]["movements"] = len(kept)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as out:
+            out.writestr("manifest.json", json.dumps(manifest).encode())
+            for n in bundle_mod.TABLE_FILES:
+                out.writestr(n, raw_tables[n])
+        with self.assertRaises(bundle_mod.BundleError):
+            bundle_mod.parse_bundle(buf.getvalue())
+
+    def test_running_balance_mismatch_rejected_despite_matching_sums(self):
+        from apps.inventory import services as inv
+        from apps.inventory.models import StockMovement
+        from apps.transfers import bundle as bundle_mod
+
+        item = make_item(self.admin, opening_qty=10)
+        _, receipt = inv.receive_stock(
+            actor=self.admin, item_id=item.pk, quantity=5,
+            reason="delivery", idempotency_key="chain-rx-2")
+        # Correct running balance would be 15; store 999 instead but keep
+        # the cached stock at the true sum (15) so aggregates still match.
+        bad = self._mutate("movements.csv", receipt.pk,
+                           balance_after="999")
+        # Repair the cached stock to the delta sum (10 + 5 = 15) so only the
+        # running-chain check can catch this.
+        from apps.transfers import bundle as _b
+        data = bad
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        tables = {n: zf.read(n) for n in _b.TABLE_FILES}
+        manifest = json.loads(zf.read("manifest.json").decode())
+        items = list(csv.DictReader(io.StringIO(tables["items.csv"].decode())))
+        for row in items:
+            if row["id"] == str(item.pk):
+                row["on_hand"] = "15"
+        tables["items.csv"] = _csv_bytes(_b.ITEM_FIELDS, items)
+        manifest["checksums"] = {n: _b._sha(raw) for n, raw in tables.items()}
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as out:
+            out.writestr("manifest.json", json.dumps(manifest).encode())
+            for n in _b.TABLE_FILES:
+                out.writestr(n, tables[n])
+        with self.assertRaises(_b.BundleError):
+            _b.parse_bundle(buf.getvalue())
+        _ = StockMovement  # keep import used
+
+
+class ExportSnapshotTests(TransactionTestCase):
+    """Finding 5: exports are a single consistent snapshot under writes."""
+
+    def test_interleaved_write_still_exports_consistent_bundle(self):
+        import threading
+
+        from apps.inventory import services as inv
+        from apps.transfers import bundle as bundle_mod
+        from apps.transfers import services as transfers
+
+        admin, _ = make_admin()
+        item = make_item(admin, opening_qty=10)
+        errors: list[Exception] = []
+        exports: list[bytes] = []
+
+        def _writer():
+            try:
+                for n in range(5):
+                    inv.receive_stock(
+                        actor=admin, item_id=item.pk, quantity=1,
+                        reason=f"concurrent {n}",
+                        idempotency_key=f"snap-w-{n}")
+            except Exception as exc:  # noqa: BLE001 - collected below
+                errors.append(exc)
+
+        def _reader():
+            try:
+                for _ in range(5):
+                    data = transfers.export_bundle(actor=admin)
+                    # Every export must be self-consistent: its own parser
+                    # (the same gate the importer uses) accepts it.
+                    bundle_mod.parse_bundle(data)
+                    exports.append(data)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=_writer),
+                   threading.Thread(target=_reader)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(len(exports), 5)
+        item.refresh_from_db()
+        self.assertEqual(item.on_hand, 15)
+
+
+class ReversalSnapshotTests(TestCase):
+    """Finding 7: reversal attribution survives renames, deletes, reimport."""
+
+    def test_reversal_actor_round_trips_to_different_destination(self):
+        from apps.issuing import services as issuing
+        from apps.transfers import bundle as bundle_mod
+        from apps.transfers import services as transfers
+
+        source_admin, _ = make_admin(username="synthetic-source-actor")
+        person = make_missionary(source_admin)
+        item = make_item(source_admin, opening_qty=10)
+        issue = issuing.create_issue(
+            actor=source_admin, missionary_id=person.pk,
+            lines=[{"item_id": str(item.pk), "quantity": 2}],
+            note="", idempotency_key="rev-snap-1")
+        issuing.reverse_issue(actor=source_admin, issue_id=issue.pk,
+                              reason="wrong person")
+        issue.refresh_from_db()
+        self.assertEqual(issue.reversed_by_username, "synthetic-source-actor")
+        data = transfers.export_bundle(actor=source_admin)
+        # Destination has none of the source accounts: flush everything
+        # synthetic and provision a different admin.
+        _wipe_operational()
+        User.objects.all().delete()
+        dest_admin, _ = make_admin(username="synthetic-dest-actor")
+        transfers.import_bundle(actor=dest_admin, data=data,
+                                filename="reversal.zip")
+        from apps.issuing.models import Issue
+        got = Issue.objects.get(pk=issue.pk)
+        self.assertEqual(got.status, "REVERSED")
+        self.assertEqual(got.reversed_by_username, "synthetic-source-actor")
+        self.assertIsNone(got.reversed_by)
+        # A second export/import preserves the snapshot again (no accounts).
+        data2 = transfers.export_bundle(actor=dest_admin)
+        parsed = bundle_mod.parse_bundle(data2)
+        issues = {r["id"]: r for r in parsed["tables"]["issues.csv"]}
+        self.assertEqual(issues[str(issue.pk)]["reversed_by_username"],
+                         "synthetic-source-actor")
+
+    def test_renamed_and_deleted_users_keep_snapshot(self):
+        from apps.issuing import services as issuing
+        from apps.transfers import services as transfers
+
+        admin, _ = make_admin(username="snap-keeper")
+        person = make_missionary(admin)
+        item = make_item(admin, opening_qty=10)
+        issue = issuing.create_issue(
+            actor=admin, missionary_id=person.pk,
+            lines=[{"item_id": str(item.pk), "quantity": 1}],
+            note="", idempotency_key="rev-snap-2")
+        issuing.reverse_issue(actor=admin, issue_id=issue.pk, reason="oops")
+        # Rename the actor: the stored snapshot must not change.
+        admin.username = "renamed-actor"
+        admin.save()
+        data = transfers.export_bundle(actor=admin)
+        from apps.transfers import bundle as bundle_mod
+        parsed = bundle_mod.parse_bundle(data)
+        issues = {r["id"]: r for r in parsed["tables"]["issues.csv"]}
+        self.assertEqual(issues[str(issue.pk)]["reversed_by_username"],
+                         "snap-keeper")
+        # Delete the actor entirely: the snapshot still exports.
+        admin.delete()
+        fresh, _ = make_admin(username="exporter")
+        data2 = transfers.export_bundle(actor=fresh)
+        parsed2 = bundle_mod.parse_bundle(data2)
+        issues2 = {r["id"]: r for r in parsed2["tables"]["issues.csv"]}
+        self.assertEqual(issues2[str(issue.pk)]["reversed_by_username"],
+                         "snap-keeper")
+
+
+class ProductionProbeTests(TestCase):
+    """Finding 2 (probes): LAN-only hosts still allow internal readiness."""
+
+    def test_readyz_allows_loopback_with_lan_only_config(self):
+        # Production sets DJANGO_ALLOWED_HOSTS to the LAN IP only; the app
+        # additionally allows loopback/service names so container probes
+        # (Host 127.0.0.1:8000) see real state instead of 400.
+        from django.conf import settings as _settings
+        self.assertIn("127.0.0.1", _settings.ALLOWED_HOSTS)
+        self.assertIn("localhost", _settings.ALLOWED_HOSTS)
+        response = self.client.get(
+            "/readyz/", HTTP_HOST="127.0.0.1:8000",
+            HTTP_X_FORWARDED_PROTO="https")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+    def test_compose_image_tag_derives_from_version(self):
+        import json as _json
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copy("compose.yaml", Path(tmp) / "compose.yaml")
+            (Path(tmp) / ".env").write_text(
+                "DJANGO_SECRET_KEY=synthetic-only-not-a-real-secret-123\n"
+                "DJANGO_ALLOWED_HOSTS=127.0.0.1\n"
+                "DJANGO_CSRF_TRUSTED_ORIGINS=https://127.0.0.1:8443\n"
+                "APP_HOST=127.0.0.1\nAPP_PORT=8443\nVERSION=0.4.0\n"
+                "IMAGE_BASE=ghcr.io/example/supplies-tracker\n")
+            proc = subprocess.run(
+                ["docker", "compose", "-f", "compose.yaml", "config",
+                 "--format", "json"],
+                capture_output=True, text=True, timeout=120,
+                cwd=tmp,
+                env={**__import__("os").environ,
+                     "VERSION": "1.2.3",
+                     "IMAGE_BASE": "ghcr.io/example/supplies-tracker"})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            config = _json.loads(proc.stdout)
+            image = config["services"]["app"]["image"]
+            self.assertEqual(image, "ghcr.io/example/supplies-tracker:1.2.3")
+            app_env = config["services"]["app"].get("environment") or {}
+            self.assertEqual(app_env.get("APP_VERSION"), "1.2.3")
+            # Legacy IMAGE fallback also resolves with the requested tag.
+            (Path(tmp) / ".env").write_text(
+                "DJANGO_SECRET_KEY=synthetic-only-not-a-real-secret-123\n"
+                "DJANGO_ALLOWED_HOSTS=127.0.0.1\n"
+                "APP_HOST=127.0.0.1\nAPP_PORT=8443\nVERSION=0.4.0\n"
+                "IMAGE=ghcr.io/example/supplies-tracker\n")
+            proc2 = subprocess.run(
+                ["docker", "compose", "-f", "compose.yaml", "config",
+                 "--format", "json"],
+                capture_output=True, text=True, timeout=120,
+                cwd=tmp,
+                env={**__import__("os").environ,
+                     "VERSION": "1.2.3",
+                     "IMAGE": "ghcr.io/example/supplies-tracker"})
+            self.assertEqual(proc2.returncode, 0, proc2.stderr)
+            config2 = _json.loads(proc2.stdout)
+            self.assertEqual(config2["services"]["app"]["image"],
+                             "ghcr.io/example/supplies-tracker:1.2.3")
+
+
+class RestoreTakeoverTests(TransactionTestCase):
+    """Findings 3+4: initialized verify plus explicit takeover recovery."""
+
+    def test_verify_backup_command_initializes_django(self):
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        from apps.operations import backup as backup_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = os.path.join(tmp, "v.sqlite3")
+            backup_mod.backup_sqlite(
+                source_path=backup_mod.live_db_path(), dest_path=dest)
+            call_command("verify_backup", dest)
+
+    def test_failed_update_window_needs_takeover_then_recovers(self):
+        import io as _io
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        from apps.audit.models import AuditEvent
+        from apps.operations import backup as backup_mod
+        from apps.operations import guards
+        from apps.roster.models import Missionary
+
+        admin, _ = make_admin()
+        person = make_missionary(admin)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "pre.sqlite3")
+            backup_mod.backup_sqlite(
+                source_path=backup_mod.live_db_path(), dest_path=src)
+            make_missionary(admin)  # newer live work the backup lacks
+            # A failed update holds its window (writes closed) and crashes,
+            # leaving the window held with newer live work present.
+            guards.enter_maintenance(owner="update-1.2.3",
+                                     reason="update to 1.2.3")
+            # Plain restore refuses to share the held window (fail closed).
+            with self.assertRaises(Exception) as ctx:
+                call_command("restore_db", src, "--allow-newer-data-loss",
+                             "--owner", "restore-db")
+            self.assertIn("already held", str(ctx.exception))
+            self.assertTrue(guards.is_maintenance_active())
+            self.assertEqual(
+                guards.maintenance_status()["owner"], "update-1.2.3")
+            # Explicit audited takeover recovers: offline restore, preserved
+            # pre-restore copy, migrate + readiness, window left held.
+            out = _io.StringIO()
+            call_command("restore_db", src, "--allow-newer-data-loss",
+                         "--owner", "restore-db", "--force-takeover",
+                         "--skip-migrate", stdout=out)
+            self.assertIn("maintenance-token:", out.getvalue())
+            self.assertTrue(AuditEvent.objects.filter(
+                action="maintenance.takeover").exists())
+            fresh = out.getvalue().split(
+                "maintenance-token:")[1].strip().split()[0]
+            self.assertTrue(guards.is_maintenance_active())
+            guards.exit_maintenance(fresh)
+            self.assertFalse(guards.is_maintenance_active())
+            self.assertEqual(Missionary.objects.count(), 1)
+            self.assertTrue(
+                Missionary.objects.filter(pk=person.pk).exists())
+            # The pre-restore window died with the restored file; the fresh
+            # token is the only release path (documented ownership protocol).
+

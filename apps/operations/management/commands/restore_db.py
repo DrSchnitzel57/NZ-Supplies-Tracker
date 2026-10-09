@@ -54,6 +54,16 @@ class Command(BaseCommand):
                 "--expected-version; restore the matching release image first.")
         owner = options["owner"]
         reason = str(options["backup"])
+        force_takeover = bool(options["force_takeover"])
+        # Capture the previous holder for the post-restore audit: the file
+        # restore below replaces the maintenance row (and any pre-restore
+        # takeover audit with it), so the takeover is re-recorded after the
+        # swap where it survives.
+        try:
+            previous_status = guards.maintenance_status()
+            previous_owner = previous_status.get("owner", "")
+        except Exception:
+            previous_owner = ""
         # The pre-restore window is entered directly (not via the
         # contextmanager): the restore below replaces the maintenance row,
         # so this hold is deliberately abandoned and superseded by the
@@ -61,7 +71,7 @@ class Command(BaseCommand):
         try:
             token = guards.enter_maintenance(owner=owner, reason=reason,
                                              token=options["token"],
-                                             force=bool(options["force_takeover"]))
+                                             force=force_takeover)
         except MaintenanceActiveError as exc:
             raise CommandError(
                 f"restore refused: {exc}; "
@@ -102,6 +112,21 @@ class Command(BaseCommand):
             token = guards.enter_maintenance(
                 owner=owner, reason=reason + " (post-restore takeover)",
                 force=True)
+        if force_takeover and previous_owner and previous_owner != owner:
+            # Re-record the explicit pre-restore takeover after the swap so
+            # the audited recovery protocol survives the file replacement.
+            try:
+                from apps.audit.models import AuditEvent
+
+                AuditEvent.objects.create(
+                    actor=None, action="maintenance.takeover",
+                    target_type="system", target_id="maintenance",
+                    detail={"previous_owner": previous_owner,
+                            "new_owner": owner,
+                            "reason": reason + " (restore --force-takeover)"},
+                )
+            except Exception:
+                pass
         try:
             if not options["skip_migrate"]:
                 from django.core.management import call_command
