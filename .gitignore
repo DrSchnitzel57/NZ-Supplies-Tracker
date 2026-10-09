@@ -1,0 +1,10 @@
+# Local-only source contains personal roster data.
+/MTC Missionary Supplies Tracker.html
+
+# Generated imports, local databases, backups and deployment credentials.
+/.local/
+*.sqlite3
+*.sqlite3-*
+.env
+.env.*
+!.env.example

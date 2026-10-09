@@ -1,0 +1,25 @@
+MTC Missionary Supplies Tracker - Local Edition
+================================================
+
+Build Oct 7, 2026 - v38
+
+HOW TO USE
+----------
+1. Double-click "MTC Missionary Supplies Tracker.html" to open it in any
+   modern web browser (Chrome, Edge, Safari, Firefox).
+2. The app runs entirely on your computer. Your data is saved in that
+   browser's local storage on this computer - no internet or login needed.
+
+OFFLINE NOTES
+-------------
+- The app, data entry, inventory edits, CSV imports and CSV exports all
+  work offline.
+- PDF export, Excel (.xlsx) import, and the web fonts load from the
+  internet the first time, so for best results open it online once; after
+  that the browser caches them. CSV import/export always works offline.
+- Exports (CSV / PDF) download straight to your Downloads folder in this
+  edition.
+
+Keep a backup copy of this HTML file. To move the app to another computer,
+copy the HTML file over - note that saved data stays in the browser it was
+entered on, so export your lists first if you need to carry data across.
