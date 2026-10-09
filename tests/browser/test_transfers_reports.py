@@ -1,109 +1,102 @@
-"""Browser-level transfer/report flows (synthetic data, Django test client).
+"""Real import/export/report flows in Chromium (synthetic data, LAN-only)."""
 
-Covers spreadsheet preview/partial import and CSV/PDF report downloads using
-the same HTML a browser receives.
-"""
+from __future__ import annotations
 
+import csv
 import io
-import uuid
 
-import pytest
-from django.test import Client
-
-from tests.factories import make_admin, make_item, make_missionary, make_staff
-
-pytestmark = pytest.mark.django_db
+from apps.inventory.models import Item
+from apps.roster.models import Missionary
+from tests.browser.conftest import assert_no_internet, staff_login, tag
+from tests.factories import make_item, make_missionary
 
 
-def _login_staff(suffix):
-    staff, pw = make_staff(username=f"tr-{suffix}-{uuid.uuid4().hex[:6]}")
-    client = Client()
-    assert client.login(username=staff.username, password=pw)
-    return client, staff, pw
+def test_roster_import_preview_subset_confirm(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, "imp")
+    page.goto(f"{live_server.url}/transfers/roster/")
+    csv_bytes = b"external_id,name,email\nB1,Browser One,a@example.test\nB2,Browser Two,\n"
+    with page.expect_file_chooser() as chooser:
+        page.click("input[type=file]")
+    chooser.value.set_files(
+        {"name": "roster.csv", "mimeType": "text/csv", "buffer": csv_bytes})
+    page.click("main button[type=submit]")
+    page.wait_for_selector("text=Import preview")
+    assert "B1" in page.content()
+    # Uncheck the second row: only the approved subset applies.
+    page.uncheck("input[name=row-3]")
+    with page.expect_navigation():
+        page.click("form[action$='/confirm/'] button:not([name])")
+    assert "Import applied" in page.content()
+    assert Missionary.objects.filter(external_id="B1").exists()
+    assert not Missionary.objects.filter(external_id="B2").exists()
+    assert_no_internet(externals)
 
 
-def _login_admin(suffix):
-    admin, pw = make_admin(username=f"tra-{suffix}-{uuid.uuid4().hex[:6]}")
-    client = Client()
-    assert client.login(username=admin.username, password=pw)
-    return client, admin, pw
+def test_apply_none_writes_nothing(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, "none")
+    page.goto(f"{live_server.url}/transfers/roster/")
+    csv_bytes = b"external_id,name\nN9,Nobody Nine\n"
+    with page.expect_file_chooser() as chooser:
+        page.click("input[type=file]")
+    chooser.value.set_files(
+        {"name": "r.csv", "mimeType": "text/csv", "buffer": csv_bytes})
+    page.click("main button[type=submit]")
+    page.wait_for_selector("text=Import preview")
+    with page.expect_navigation():
+        page.click("form[action$='/confirm/'] button[value='none']")
+    assert "Import applied" in page.content()
+    assert "0 added" in page.content()
+    assert not Missionary.objects.filter(external_id="N9").exists()
+    assert_no_internet(externals)
 
 
-def test_inventory_upload_preview_and_partial_apply():
-    client, staff, _ = _login_staff("prev")
+def test_inventory_stock_minus_out_and_exports(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, "inv")
     item = make_item(staff, opening_qty=10)
-    csv_body = (
-        "category,item,remaining,reason\n"
-        f"{item.category},{item.name},12,recount\n"
-        "NewCat,New Thing,5,delivery\n"
-        "BadCat,,not-a-number,oops\n"
-    )
-    response = None
-    # Django test client file upload:
-    from django.core.files.uploadedfile import SimpleUploadedFile
-    upload = SimpleUploadedFile("items.csv", csv_body.encode(), content_type="text/csv")
-    response = client.post("/transfers/inventory/", {"mode": "add_update", "file": upload})
-    assert response.status_code == 302
-    preview_url = response["Location"]
-    html = client.get(preview_url).content.decode()
-    assert "Import preview" in html
-    assert "Valid rows" in html
-    assert "Rows needing fixes" in html
-    # Approve only the first valid row (partial subset).
-    import re
-    token = preview_url.strip("/").split("/")[-1]
-    from apps.transfers.models import RowImportPreview
-    preview = RowImportPreview.objects.get(token=token)
-    valid_rows = [r["row"] for r in preview.rows if not r.get("error")]
-    assert len(valid_rows) == 2
-    first = valid_rows[0]
-    confirm = client.post(f"/transfers/preview/{token}/confirm/", {f"row-{first}": "on"})
-    assert confirm.status_code == 302
+    page.goto(f"{live_server.url}/transfers/inventory/")
+    csv_bytes = (
+        f"category,name,stock,out,reason\n{item.category},{item.name},12,4,recount\n"
+    ).encode()
+    with page.expect_file_chooser() as chooser:
+        page.click("input[type=file]")
+    chooser.value.set_files(
+        {"name": "inv.csv", "mimeType": "text/csv", "buffer": csv_bytes})
+    page.click("main button[type=submit]")
+    page.wait_for_selector("text=Import preview")
+    assert "recount" in page.content()
+    assert "count 8" in page.content()  # stock-minus-out delta shown, not raw cells
+    with page.expect_navigation():
+        page.click("form[action$='/confirm/'] button:not([name])")
     item.refresh_from_db()
-    assert item.on_hand == 12
-    from apps.inventory.models import Item
-    assert not Item.objects.filter(name="New Thing").exists()
+    assert item.on_hand == 8
+    from apps.issuing.models import Issue
+    assert Issue.objects.count() == 0  # never fabricates issues
+    # CSV + PDF exports download real content.
+    page.goto(f"{live_server.url}/reports/")
+    with page.expect_download() as dl:
+        page.click("a[href='/reports/inventory.csv']")
+    path = dl.value.path()
+    rows = list(csv.DictReader(io.StringIO(open(path).read())))
+    assert any(r["available"] == "8" for r in rows)
+    with page.expect_download() as dl2:
+        page.click("a[href='/reports/family/per-item/?format=pdf']")
+    assert open(dl2.value.path(), "rb").read(4) == b"%PDF"
+    assert_no_internet(externals)
 
 
-def test_roster_alias_headers_and_report_downloads():
-    client, staff, _ = _login_staff("rep")
-    from django.core.files.uploadedfile import SimpleUploadedFile
-    csv_body = "missionary id,full name,e-mail\nAL-10,Alias Ten,a10@example.test\n"
-    upload = SimpleUploadedFile("roster.csv", csv_body.encode(), content_type="text/csv")
-    response = client.post("/transfers/roster/", {"mode": "add_update", "file": upload})
-    assert response.status_code == 302
-    confirm = client.post(response["Location"] + "confirm/", {})
-    assert confirm.status_code == 302
-    from apps.roster.models import Missionary
-    assert Missionary.objects.filter(external_id="AL-10").exists()
-    # Report screens and CSV/PDF downloads render for staff.
-    for url in ["/reports/", "/reports/roster.csv", "/reports/inventory.csv",
-                "/reports/family/per-item/", "/reports/family/history/?format=pdf",
-                "/reports/family/low-stock/?format=csv"]:
-        resp = client.get(url)
-        assert resp.status_code == 200, url
-    pdf = client.get("/reports/family/per-person/?format=pdf")
-    assert pdf.content.startswith(b"%PDF")
-
-
-def test_replacement_preview_blocks_partial_and_needs_admin():
-    _, staff, _ = _login_staff("repl")
-    client = Client()
-    staff_pw = None
-    # Re-login to keep client bound; staff attempts replacement.
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-    user = User.objects.get(username=staff.username)
-    client.force_login(user)
-    from django.core.files.uploadedfile import SimpleUploadedFile
-    upload = SimpleUploadedFile("r.csv", b"external_id,name\nN-1,New One\n", content_type="text/csv")
-    response = client.post("/transfers/roster/", {"mode": "replace", "file": upload})
-    # Staff is blocked from replacement uploads.
-    assert response.status_code == 302
-    assert "Import preview" not in client.get("/transfers/roster/").content.decode() or True
-    # Admin can upload a replacement preview.
-    admin_client, admin, _ = _login_admin("repl")
-    upload2 = SimpleUploadedFile("r.csv", b"external_id,name\nN-1,New One\n", content_type="text/csv")
-    response2 = admin_client.post("/transfers/roster/", {"mode": "replace", "file": upload2})
-    assert response2.status_code == 302
-    assert "/transfers/preview/" in response2["Location"]
+def test_report_families_serve_csv_and_pdf(page, live_server, externals):
+    staff_login(page, live_server, "rep")
+    for family in ("per-item", "per-person", "low-stock", "stock",
+                   "category", "intake", "history"):
+        page.goto(f"{live_server.url}/reports/")
+        with page.expect_download() as dl:
+            page.click(f"a[href='/reports/family/{family}/?format=csv']")
+        data = open(dl.value.path(), "rb").read()
+        assert len(data) > 0
+        with page.expect_download() as dl2:
+            page.click(f"a[href='/reports/family/{family}/?format=pdf']")
+        assert open(dl2.value.path(), "rb").read(4) == b"%PDF"
+    page.goto(f"{live_server.url}/reports/")
+    assert "Available stock" in page.content()
+    assert "Arrivals overview" in page.content()
+    assert_no_internet(externals)

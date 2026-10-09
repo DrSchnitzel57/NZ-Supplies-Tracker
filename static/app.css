@@ -28,7 +28,9 @@ button, .btn { cursor: pointer; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--gap); }
 .card { border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.8rem; background: #fff; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; margin: 0.75rem 0; }
-.toolbar label { display: grid; gap: 0.2rem; font-size: 0.9rem; }
+.toolbar > * { min-width: 0; max-width: 100%; }
+.toolbar label { display: grid; gap: 0.2rem; font-size: 0.9rem; min-width: 0; flex: 1 1 12rem; }
+.toolbar select, .toolbar input { width: 100%; min-width: 0; }
 .badge-reversed { background: #fee2e2; padding: 0.1rem 0.45rem; border-radius: 0.4rem; }
 .badge-low { background: #fef3c7; padding: 0.1rem 0.45rem; border-radius: 0.4rem; }
 .illus { border: 2px dashed #0ea5e9; border-radius: 0.5rem; padding: 0.8rem; background: #f0f9ff; margin: 0.75rem 0; font-family: ui-monospace, monospace; white-space: pre-wrap; }
