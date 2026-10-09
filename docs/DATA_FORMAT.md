@@ -51,7 +51,12 @@ cross-checked: each item's Available must equal its summed movement ledger
 (for example Available=999 with 10 units of recorded movement fails); each
 issue's lines must match its ISSUE movements, reversed issues must carry
 matching REVERSAL movements plus timestamp and reason, and non-issue
-movement kinds must not link issues.
+movement kinds must not link issues. Ordered per-item chains are validated
+in deterministic (created_at, id) order: exactly one leading OPENING with
+delta == balance, RECEIPT positive / ISSUE negative / REVERSAL positive
+deltas, every row satisfying balance == previous + delta with no historical
+negative, so aggregate-correct but chain-invalid bundles (for example
+OPENING delta 0 with balance 999) are rejected.
 
 ## Tables and types
 
@@ -70,6 +75,9 @@ Booleans are `true`/`false`. Integers are plain whole numbers.
   - `source_remaining` preserves the original source value when it was
     negative; `source_corrected` is `true` only for authorized corrections.
 - `issues.csv`: `id,missionary_id,missionary_name,missionary_external_id,issued_by_username,issued_at,note,status,reversed_at,reversal_reason,reversed_by_username`
+  - `reversed_by_username` is a durable snapshot set at reversal time; it
+    survives renames, deletes and re-imports to different accounts without
+    exporting accounts/passwords/sessions.
 - `issue_lines.csv`: `id,issue_id,item_id,quantity,item_category,item_name,item_size`
 - `movements.csv`: `id,item_id,kind,delta,balance_after,reason,issue_id,created_by_username,created_at`
   - `kind` is one of `OPENING,RECEIPT,COUNT_ADJUST,ISSUE,REVERSAL`.
@@ -151,12 +159,16 @@ without executing the HTML and writes a standard v1 bundle. Supported
 source shapes: an object with roster-like keys (`missionaries`, `people`,
 `roster`) and item-like keys (`items`, `inventory`), each a list; roster
 entries accept `external_id/id/extId` + `name/fullName` + `email`, plus
-`Elder`/`Sister` name prefixes (split into `title_prefix`), `stake`,
-`mission`, `language`, `arrival`/`release` dates, `personalEmail` and any
-other fields (preserved verbatim in `intake_metadata`); items accept
+`Elder`/`Sister` name prefixes (split into `title_prefix`), the exact source
+keys `type` → title, `arrived` → arrival status, `homeStake` → stake,
+`mission` , `tLanguage` → language, `missionArrival`/`missionRelease` →
+arrival/release dates, `personalEmail` and any
+other fields (preserved verbatim in `intake_metadata`, carried through
+bundles/models/forms/import/export); items accept
 `category/cat` + `name/item` + `size` + quantity keys (`remaining`,
 `remain`, `stock`, `onHand`, `qty`) and optional `out`, plus
-`lowThreshold` variants. Comments inside strings are never stripped and
+`lowThreshold` variants. Unparseable dates are kept as `*_raw` metadata
+instead of being silently dropped. Comments inside strings are never stripped and
 apostrophes (O'Brien) survive single/double-quote-tolerant parsing.
 Source-negative remaining values are preserved in `source_remaining` with
 `source_corrected=true`; live `on_hand` is zeroed and authorized

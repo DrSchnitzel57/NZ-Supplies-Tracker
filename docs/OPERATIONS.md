@@ -26,7 +26,10 @@ browser UI for accounts and daily work. All examples use synthetic values.
 
 1. Copy `.env.example` to `.env`; set `DJANGO_SECRET_KEY` (long random),
    `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `APP_HOST`,
-   `APP_PORT`, `IMAGE`, `VERSION`.
+   `APP_PORT`, `IMAGE_BASE`, `VERSION`. `IMAGE_BASE` names the repository
+   WITHOUT a tag (legacy `IMAGE` is honored as a fallback but must also be
+   tagless); `VERSION` is the single pin and the running image is always
+   `IMAGE_BASE:VERSION` with `APP_VERSION` equal to `VERSION`.
 2. Pull and start the pinned release (host never builds source):
    `docker compose pull && docker compose up -d && docker compose exec app python manage.py migrate`
 3. Check readiness: app `/readyz` returns `{"ok": true}`; `/healthz` is the
@@ -60,8 +63,9 @@ browser UI for accounts and daily work. All examples use synthetic values.
 - Artifacts are permission-restricted (0600 files, 0700 dirs); verification
   refuses backups with unsafe permissions. Restored/copied files keep 0600:
   after copying a backup onto the host, run `chmod 600` before verifying.
-- Verify with
-  `python manage.py shell -c "from apps.operations import backup; backup.verify_sqlite_backup('PATH')"`.
+- Verify with `docker compose exec app python manage.py verify_backup PATH`
+  (initialized Django entrypoint; never a bare `python -c` without settings,
+  which cannot run the schema/release checks).
 - Monitor backup age/size; a failed backup must block reset/update (fail
   closed) and never report silent success.
 - Crashed operations keep writes closed (fail closed): inspect with
@@ -73,30 +77,39 @@ browser UI for accounts and daily work. All examples use synthetic values.
 
 ## Updates (controlled, brief interruption)
 
-- `bash scripts/update.sh X.Y.Z`: validates config/release (the requested pin
-  always wins over `.env`), enters an owned maintenance window (a held
-  window aborts the update instead of sharing it), takes a verified backup
-  to an exact file, pulls the pinned image, migrates, restarts, checks
-  readiness, then exits maintenance with its token.
+- `bash scripts/update.sh X.Y.Z [--takeover]`: validates config/release (the requested pin
+  always wins over `.env`; a tag inside `IMAGE_BASE`/`IMAGE` is refused),
+  enters an owned maintenance window (a held
+  window aborts the update instead of sharing it; `--takeover` takes over
+  explicitly and audited after a crash), takes a verified backup
+  to an exact file, pulls `IMAGE_BASE:X.Y.Z`, migrates, restarts, checks
+  readiness including the serving `APP_VERSION`, durably records the new
+  `VERSION` in `.env` (atomic, only on success, so later plain Compose runs
+  the same release), then exits maintenance with its token.
 - Coordinates other writers and operator runs via the owned maintenance
   window; concurrent writes fail with a clear maintenance message, not
   corruption. Restore order is always verify → restore → migrate →
   readiness → reopen writes.
 - On failure the script keeps mutation access closed and prints exact
-  recovery steps (inspect logs, restore recovery backup, re-run) plus the
+  recovery steps (inspect logs, restore recovery backup with `--takeover`,
+  retry update with `--takeover`, owner/token, audited force-takeover
+  command) plus the
   run's maintenance token for a deliberate release after recovery.
 - No unattended `latest` upgrades; no zero-downtime promise.
 
 ## Rollback
 
-- `bash scripts/restore.sh BACKUP X.Y.Z [--allow-newer-data-loss]`: verifies
-  the backup (integrity + schema + release), pulls the matching image, stops
+- `bash scripts/restore.sh BACKUP X.Y.Z [--allow-newer-data-loss] [--takeover]`: verifies
+  the backup via `verify_backup` (integrity + schema + release), pulls the matching image, stops
   writers, restores under exclusive maintenance, re-acquires the window
-  (restoring replaces the maintenance row), migrates, rechecks readiness,
-  then releases the printed maintenance token — only after the script's own
+  (restoring replaces the maintenance row; `--takeover` takes over a window
+  held by a failed update explicitly and audited, writes stay closed),
+  migrates, rechecks readiness including `APP_VERSION`, persists `VERSION`
+  in `.env`, then releases the printed maintenance token — only after the script's own
   readiness gate. Without the flag, restore refuses when live data holds
-  newer work. Pre-write refusals reopen the window; post-restore failures
-  keep it held and print the token for deliberate recovery.
+  newer work or when another operation holds the window. Pre-write refusals reopen the window; post-restore failures
+  keep it held and print the token for deliberate recovery. The takeover is
+  re-recorded after the file swap so the audit survives the restore.
 - Image rollback alone cannot undo an incompatible migration; always pair
   the image with its compatible database backup.
 

@@ -112,16 +112,17 @@ class Command(BaseCommand):
             token = guards.enter_maintenance(
                 owner=owner, reason=reason + " (post-restore takeover)",
                 force=True)
-        if force_takeover and previous_owner and previous_owner != owner:
+        if force_takeover:
             # Re-record the explicit pre-restore takeover after the swap so
-            # the audited recovery protocol survives the file replacement.
+            # the audited recovery protocol survives the file replacement,
+            # even when the previous owner matches (a crashed retry).
             try:
                 from apps.audit.models import AuditEvent
 
                 AuditEvent.objects.create(
                     actor=None, action="maintenance.takeover",
                     target_type="system", target_id="maintenance",
-                    detail={"previous_owner": previous_owner,
+                    detail={"previous_owner": previous_owner or "",
                             "new_owner": owner,
                             "reason": reason + " (restore --force-takeover)"},
                 )

@@ -76,3 +76,109 @@ was declined.
 - **`maintenance_mode` masking nit (accepted):** release errors no longer
   mask the block's own exception
   (`test_release_failure_never_masks_the_blocks_own_error`).
+
+---
+
+# Remediation review — independent FIX of e8b3c76 (2026-10-09, worktree)
+
+Scope: the seven findings carried in the task prompt (seed data loss,
+unpinned release/misreported probes, uninitialized restore verify, held-guard
+recovery, export snapshot, ledger chains, reversal attribution) plus the
+deployment string-check coverage gap. The ignored
+`.local/review/independent-review-e8b3c76.md` and the private HTML were not
+present and were never accessed; all fixtures are synthetic source-shaped
+data. Prior SHIP claims in this file are treated as unverified; evidence
+below is from fresh runs on this branch.
+
+## Finding → fix → evidence (all behavioral, no string checks)
+
+1. Seed migration data loss (`remain` ignored, `intake_metadata` dropped,
+   `arrived/homeStake/missionArrival/missionRelease/tLanguage/type` lost):
+   `_norm_item` now selects `remain` (case-insensitive, Stock-minus-Out
+   aware); `_norm_person` maps all six original keys to agreed fields;
+   `seed_to_bundle_rows` writes `intake_metadata` JSON; unparseable dates are
+   kept as `*_raw` metadata. Evidence:
+   `SeedFidelityTests` (6 tests: remain→7, all six keys, Stock/Out/threshold
+   variants, four negative corrections, seed→bundle→import→export round trip,
+   date-raw preservation).
+2. Unpinned release + 400 probes: `compose.yaml` image is now
+   `${IMAGE_BASE:-${IMAGE:-repo}}:${VERSION}` (tag always from VERSION);
+   `.env.example` uses tagless `IMAGE_BASE`; scripts refuse tagged bases,
+   verify serving `APP_VERSION`, and atomically persist `VERSION` on success;
+   `settings.ALLOWED_HOSTS` always appends loopback/service names (no
+   wildcard) so `Host: 127.0.0.1:8000` probes return 200 with LAN-only config.
+   Evidence: `ProductionProbeTests` (loopback readyz + real `compose config`
+   JSON for 1.2.3/1.2.4/legacy IMAGE); deployment
+   `test_production_image_tag_matches_requested_version` (real config JSON,
+   two releases) and `test_update_script_persists_release_pin` (executes the
+   real persist function).
+3. Uninitialized restore verify: new `verify_backup` management command
+   (initialized Django) replaces bare `python -c`; `restore.sh` calls it.
+   Evidence: `RestoreTakeoverTests.test_verify_backup_command_initializes_django`
+   and deployment `test_restore_script_uses_initialized_verify` (real container).
+4. Held-guard recovery: `restore_db --force-takeover` (audited, writes stay
+   closed) plus re-recorded post-restore takeover audit that survives the file
+   swap; scripts accept `--takeover`, stop writers, keep writes closed through
+   offline WAL restore/preserved copy/readiness, and print owner/token plus
+   explicit takeover recovery steps. Evidence:
+   `RestoreTakeoverTests.test_failed_update_window_needs_takeover_then_recovers`
+   (refusal without takeover, audited recovery with it) and container drills
+   `test_protected_restore_drill_restores_data` (real restore with newer-work
+   guard) + `test_failed_update_rollback_in_stack` (held update → refusal →
+   audited takeover → readiness → reopen).
+5. Export snapshot: all tables read inside one transaction in deterministic
+   order with an in-memory ledger gate and bounded retry, so concurrent
+   writers yield old-or-new consistent bundles that always pass `parse_bundle`.
+   Evidence: `ExportSnapshotTests` (threaded writer+reader, 5 exports all parse).
+6. Ledger chains: deterministic `(created_at, id)` per-item validation —
+   exactly one leading OPENING with delta==balance, directional deltas,
+   running `balance == previous + delta`, no historical negatives, reversals
+   linked to REVERSED issues. Aggregate-correct/chain-invalid fixtures
+   rejected. Evidence: `LedgerChainTests` (4 tests: OPENING 0/999, ISSUE
+   direction, RECEIPT direction + missing OPENING, running 999 with matching sums).
+7. Reversal attribution: durable `Issue.reversed_by_username` (migration +
+   backfill + service snapshot + save fallback), export prefers snapshot,
+   import preserves it without accounts, reports/templates fall back to it.
+   Evidence: `ReversalSnapshotTests` (different-destination round trip,
+   rename/delete preservation).
+
+Coverage gap: `test_update_failure.py` string/index assertions replaced by
+real `compose config` JSON, real persist-function execution, tagged-base
+refusals and container `verify_backup`; `test_backup_restore.py` now really
+restores (`test_protected_restore_drill_restores_data`) and proves
+failed-update takeover (`test_failed_update_rollback_in_stack`). No critical
+test is skipped.
+
+## Fresh whole-system sweep (this worktree)
+
+- Re-traced write/auth/import/recovery paths: row-import revisions still
+  checked under lock; reset counts inside window; backup manifest/retention
+  verified-only; guards nest only with token; force takeovers audited.
+- One new in-scope issue found and fixed here: the pre-restore takeover audit
+  was lost by the file swap, leaving same-owner retries unaudited. Fixed by
+  re-recording `--force-takeover` after the swap (survives restore).
+- No other new blockers found in scope. Out of scope (deferred): certificate
+  trust setup, SMTP, signatures, multi-intake/offline sync, zero-downtime.
+
+## Automated evidence (this branch, serial runs)
+
+- `/tmp/opencode/workvenv/bin/python manage.py test --noinput`: 195 tests OK
+  (178 prior + 17 new).
+- `/tmp/opencode/workvenv/bin/python manage.py makemigrations --check --dry-run`:
+  No changes detected. `manage.py check` passes.
+- `/tmp/opencode/workvenv/bin/python -m pytest tests/browser`: 17 passed.
+- `/tmp/opencode/workvenv/bin/python -m pytest tests/deployment`: 20 passed.
+- `docker compose -f compose.test.yaml config --quiet` passes;
+  `docker build -t supplies-tracker:test .` succeeds (exclusions covered).
+- `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh` passes;
+  `git diff --check` passes.
+
+## Verdict and gates
+
+VERDICT: HOLD — all seven findings remediated with behavioral regressions and
+real container proof above, but rollout still requires (a) an independent
+review of this branch and (b) the user-owned manual gates: target-host
+networking/registry/reboot/restore drill, nontechnical staff trial, and the
+source manual gate (95/224/four corrections against the separately supplied
+private HTML, never force-added). No real-data initialization, push, publish,
+or deploy was performed from this worktree.
