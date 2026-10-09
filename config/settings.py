@@ -118,6 +118,10 @@ DATABASES = {
                 "PRAGMA foreign_keys=ON"
             ),
         },
+        # File-backed test database (not in-memory): backup/restore and
+        # multi-connection tests exercise the real file/WAL behavior, and
+        # connection close/reopen cycles behave like production.
+        "TEST": {"NAME": str(BASE_DIR / ".local" / "test_db.sqlite3")},
     }
 }
 

@@ -36,6 +36,11 @@ class IdleTimeoutMiddleware:
             last = request.session.get("last_activity")
             if last is not None and (now - float(last)) > timeout:
                 logout(request)
+                if request.path.startswith("/api/"):
+                    from django.http import JsonResponse
+
+                    return JsonResponse(
+                        {"ok": False, "error": "sign-in-required"}, status=401)
                 return redirect(f"{settings.LOGIN_URL}?expired=1")
         response = self.get_response(request)
         # Refresh idle timer only for authenticated, non-poll activity.

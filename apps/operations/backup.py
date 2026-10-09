@@ -83,7 +83,8 @@ def _code_migration_names() -> set[str]:
     from django.db import connection
     from django.db.migrations.loader import MigrationLoader
 
-    loader = MigrationLoader(connection, load=False)
+    connection.ensure_connection()
+    loader = MigrationLoader(connection)
     return {f"{app}.{name}" for (app, name) in loader.disk_migrations}
 
 
@@ -99,6 +100,25 @@ def _backup_migration_names(path: Path) -> set[str]:
     return {f"{app}.{name}" for (app, name) in rows}
 
 
+def _is_uri(path: str | Path) -> bool:
+    return str(path).startswith("file:")
+
+
+def _connect_readonly(src: Path):
+    if src.exists():
+        return sqlite3.connect(str(src))
+    if _is_uri(src):
+        # Shared-cache memory databases (used by the test suite) have no
+        # filesystem path; connect by URI instead.
+        try:
+            conn = sqlite3.connect(str(src), uri=True)
+            conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchall()
+            return conn
+        except Exception as exc:
+            raise ValueError(f"live database not found: {src}") from exc
+    raise ValueError(f"live database not found: {src}")
+
+
 def backup_sqlite(*, source_path: str | Path, dest_path: str | Path) -> dict:
     """Copy the live SQLite file to dest and verify integrity + checksum.
 
@@ -108,7 +128,9 @@ def backup_sqlite(*, source_path: str | Path, dest_path: str | Path) -> dict:
     """
     src = Path(source_path)
     dst = Path(dest_path)
-    if not src.exists():
+    if _is_uri(src):
+        _connect_readonly(src).close()
+    elif not src.exists():
         raise ValueError(f"live database not found: {src}")
     if dst.suffix != ".sqlite3":
         raise ValueError("backup destination must end in .sqlite3")
@@ -123,15 +145,21 @@ def backup_sqlite(*, source_path: str | Path, dest_path: str | Path) -> dict:
     tmp = Path(tmp_name)
     try:
         _restrict(tmp)
-        src_conn = sqlite3.connect(str(src))
+        src_conn = _connect_readonly(src)
         try:
             dst_conn = sqlite3.connect(str(tmp))
             try:
+                dst_conn.execute("PRAGMA journal_mode=DELETE").fetchall()
                 src_conn.backup(dst_conn)
             finally:
                 dst_conn.close()
         finally:
             src_conn.close()
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                Path(str(tmp) + suffix).unlink()
+            except OSError:
+                pass
         _fsync_file(tmp)
         verify_sqlite_backup(tmp)
         digest = hashlib.sha256(tmp.read_bytes()).hexdigest()
@@ -149,7 +177,9 @@ def backup_sqlite(*, source_path: str | Path, dest_path: str | Path) -> dict:
         os.replace(str(tmp) + MANIFEST_SUFFIX, str(dst) + MANIFEST_SUFFIX)
         _fsync_dir(dst.parent)
     finally:
-        for leftover in (tmp, Path(str(tmp) + MANIFEST_SUFFIX)):
+        for leftover in (tmp, Path(str(tmp) + MANIFEST_SUFFIX),
+                         Path(str(tmp) + "-wal"), Path(str(tmp) + "-shm"),
+                         Path(str(tmp) + "-journal")):
             try:
                 if leftover.exists():
                     leftover.unlink()
@@ -162,15 +192,18 @@ def backup_sqlite(*, source_path: str | Path, dest_path: str | Path) -> dict:
 def verify_sqlite_backup(path: str | Path) -> None:
     """Raise unless the backup passes integrity_check and schema/release checks."""
     path = Path(path)
-    if not path.exists() or path.stat().st_size == 0:
+    uri = _is_uri(path)
+    if not uri and (not path.exists() or path.stat().st_size == 0):
         raise ValueError("backup is missing or empty")
-    try:
-        mode = oct(path.stat().st_mode & 0o777)
-    except OSError as exc:
-        raise ValueError(f"backup is not readable: {exc}") from exc
-    if mode != "0o600":
-        raise ValueError(f"backup has unsafe permissions {mode}; refusing to trust it")
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    if not uri:
+        try:
+            mode = oct(path.stat().st_mode & 0o777)
+        except OSError as exc:
+            raise ValueError(f"backup is not readable: {exc}") from exc
+        if mode != "0o600":
+            raise ValueError(f"backup has unsafe permissions {mode}; refusing to trust it")
+    conn = (_connect_readonly(path) if uri
+            else sqlite3.connect(f"file:{path}?mode=ro", uri=True))
     try:
         try:
             rows = conn.execute("PRAGMA integrity_check").fetchall()
@@ -358,11 +391,26 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
     src = Path(backup_path)
     dst = Path(dest_path)
     verify_sqlite_backup(src)
-    expected = backup_digest(src)
+    expected = backup_digest(src) if not _is_uri(src) else None
     _close_django_connections()
     if dst.exists():
         _checkpoint(dst)
         _close_django_connections()
+    if _is_uri(dst):
+        # Memory/file-URI destination (tests): restore directly; there is no
+        # filesystem image to stage, preserve or unlink sidecars for.
+        src_conn = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+        try:
+            dst_conn = sqlite3.connect(str(dst), uri=True)
+            try:
+                src_conn.backup(dst_conn)
+            finally:
+                dst_conn.close()
+        finally:
+            src_conn.close()
+        _close_django_connections()
+        verify_sqlite_backup(dst)
+        return {"path": str(dst), "sha256": "", "bytes": 0}
     dst.parent.mkdir(parents=True, exist_ok=True)
     _restrict(dst.parent)
     preserved = None
@@ -376,11 +424,17 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
         try:
             keep_conn = sqlite3.connect(str(preserved))
             try:
+                keep_conn.execute("PRAGMA journal_mode=DELETE").fetchall()
                 live_conn.backup(keep_conn)
             finally:
                 keep_conn.close()
         finally:
             live_conn.close()
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                Path(str(preserved) + suffix).unlink()
+            except OSError:
+                pass
         _restrict(preserved)
         _fsync_file(preserved)
     tmp_fd, tmp_name = tempfile.mkstemp(prefix=dst.name + ".tmp-",
@@ -395,11 +449,17 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
         try:
             dst_conn = sqlite3.connect(str(tmp))
             try:
+                dst_conn.execute("PRAGMA journal_mode=DELETE").fetchall()
                 src_conn.backup(dst_conn)
             finally:
                 dst_conn.close()
         finally:
             src_conn.close()
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                Path(str(tmp) + suffix).unlink()
+            except OSError:
+                pass
         _fsync_file(tmp)
         verify_sqlite_backup(tmp)
         if backup_digest(tmp) != expected:

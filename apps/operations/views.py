@@ -90,12 +90,12 @@ def dashboard_api(request):
     # reflects the actual idle timer, not page-load time.
     last = request.session.get("last_activity")
     timeout = getattr(settings, "SESSION_IDLE_TIMEOUT", 1800)
-    expires_in = None
+    expires_in = timeout  # just signed in; the timer starts from now
     if last is not None:
         try:
             expires_in = max(0, int(timeout - (timezone.now().timestamp() - float(last))))
         except (TypeError, ValueError):
-            expires_in = None
+            expires_in = timeout
     return JsonResponse(
         {
             "people": Missionary.objects.filter(is_archived=False).count(),
