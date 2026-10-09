@@ -69,7 +69,8 @@ fi
 
 echo "==> verified backup to $BACKUP_FILE"
 docker compose run --rm app \
-  python manage.py backup_db --dest "/app/data/backups/$BACKUP_FILE" --quiesce
+  python manage.py backup_db --dest "/app/data/backups/$BACKUP_FILE" --quiesce \
+    --owner "update-$VERSION" --token "$MAINT_TOKEN"
 
 echo "==> pulling pinned image and restarting"
 VERSION="$VERSION" docker compose pull app

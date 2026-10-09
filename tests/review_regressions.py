@@ -97,11 +97,49 @@ class OwnedGuardTests(TestCase):
 
         with guards.maintenance_mode(owner="job", reason="outer") as outer:
             self.assertTrue(guards.is_maintenance_active())
-            with guards.maintenance_mode(owner="job", reason="inner") as inner:
+            with guards.maintenance_mode(owner="job", reason="inner",
+                                         token=outer) as inner:
                 self.assertEqual(inner, outer)
                 self.assertTrue(guards.is_maintenance_active())
             self.assertTrue(guards.is_maintenance_active())
         self.assertFalse(guards.is_maintenance_active())
+
+    def test_nesting_requires_the_outer_token(self):
+        from apps.operations import guards
+
+        token = guards.enter_maintenance(owner="job", reason="outer")
+        try:
+            with self.assertRaises(MaintenanceActiveError):
+                with guards.maintenance_mode(owner="job", reason="no-token"):
+                    pass
+            with self.assertRaises(MaintenanceActiveError):
+                with guards.maintenance_mode(owner="job", reason="wrong",
+                                             token="0" * 32):
+                    pass
+            self.assertTrue(guards.is_maintenance_active())
+            self.assertEqual(guards.maintenance_status()["owner"], "job")
+        finally:
+            guards.exit_maintenance(token)
+
+    def test_release_failure_never_masks_the_blocks_own_error(self):
+        from apps.operations import guards
+
+        token = guards.enter_maintenance(owner="job", reason="outer")
+        try:
+            with self.assertRaisesRegex(ValueError, "inner boom"):
+                with guards.maintenance_mode(owner="job", reason="inner",
+                                             token=token):
+                    # A forced takeover steals the window mid-block; the
+                    # release then fails, but the original error must surface.
+                    guards.enter_maintenance(owner="intruder", reason="x",
+                                             force=True)
+                    raise ValueError("inner boom")
+        finally:
+            status = guards.maintenance_status()
+            if status["active"]:
+                takeover = guards.enter_maintenance(
+                    owner="cleanup", reason="test", force=True)
+                guards.exit_maintenance(takeover)
 
     def test_foreign_token_cannot_clear_window(self):
         from apps.operations import guards
@@ -338,7 +376,17 @@ class ResetRestoreCommandTests(TransactionTestCase):
             with self.assertRaises(Exception):
                 call_command("restore_db", src)
             self.assertTrue(Item.objects.exists())  # untouched
-            call_command("restore_db", src, "--allow-newer-data-loss")
+            # A completed restore leaves the window held for the caller,
+            # with the release token printed (mirrors the script protocol).
+            import io as _io
+            out = _io.StringIO()
+            call_command("restore_db", src, "--allow-newer-data-loss",
+                         stdout=out)
+            self.assertIn("maintenance-token:", out.getvalue())
+            from apps.operations import guards as _guards
+            self.assertTrue(_guards.is_maintenance_active())
+            fresh = out.getvalue().split("maintenance-token:")[1].strip().split()[0]
+            _guards.exit_maintenance(fresh)
             self.assertFalse(Item.objects.exists())
             self.assertTrue(
                 __import__("apps.roster.models", fromlist=["Missionary"])
@@ -1005,3 +1053,163 @@ class ReadinessTests(TestCase):
         # the real state, not a 301.
         self.assertEqual(self.client.get("/readyz/").status_code, 200)
         self.assertEqual(self.client.get("/healthz/").status_code, 200)
+
+
+class MaintenanceCompositionTests(TransactionTestCase):
+    # Real commits: backup/restore commands touch the live file database.
+
+    def test_nested_quiesced_backup_joins_outer_window(self):
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        from apps.operations import guards
+
+        admin, _ = make_admin()
+        make_missionary(admin)
+        token = guards.enter_maintenance(owner="update-1.2.3", reason="update")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                dest = os.path.join(tmp, "nested.sqlite3")
+                # Inner command joins with matching owner + token.
+                call_command("backup_db", "--dest", dest, "--quiesce",
+                             "--owner", "update-1.2.3", "--token", token)
+                self.assertTrue(os.path.exists(dest))
+                # Wrong owner or missing token aborts; outer window intact.
+                with self.assertRaises(Exception):
+                    call_command("backup_db", "--dest", dest, "--quiesce",
+                                 "--owner", "intruder", "--token", token)
+                with self.assertRaises(Exception):
+                    call_command("backup_db", "--dest", dest, "--quiesce",
+                                 "--owner", "update-1.2.3")
+                self.assertTrue(guards.is_maintenance_active())
+                self.assertEqual(
+                    guards.maintenance_status()["owner"], "update-1.2.3")
+        finally:
+            guards.exit_maintenance(token)
+        self.assertFalse(guards.is_maintenance_active())
+
+    def test_nested_restore_joins_outer_window(self):
+        import io as _io
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+
+        from apps.operations import backup as backup_mod
+        from apps.operations import guards
+        from apps.roster.models import Missionary
+
+        admin, _ = make_admin()
+        person = make_missionary(admin)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "outer.sqlite3")
+            backup_mod.backup_sqlite(
+                source_path=backup_mod.live_db_path(), dest_path=src)
+            token = guards.enter_maintenance(owner="restore-1.2.3",
+                                             reason="restore")
+            out = _io.StringIO()
+            try:
+                # The restore replaces the maintenance row, so the command
+                # re-acquires after restoring and leaves the window held for
+                # the caller with a fresh printed token.
+                call_command("restore_db", src, "--allow-newer-data-loss",
+                             "--skip-migrate",
+                             "--owner", "restore-1.2.3", "--token", token,
+                             stdout=out)
+                self.assertIn("maintenance-token:", out.getvalue())
+                fresh = out.getvalue().split("maintenance-token:")[1].strip().split()[0]
+                self.assertTrue(
+                    Missionary.objects.filter(pk=person.pk).exists())
+                self.assertTrue(guards.is_maintenance_active())
+                self.assertEqual(
+                    guards.maintenance_status()["owner"], "restore-1.2.3")
+                with self.assertRaises(Exception):
+                    call_command("restore_db", src, "--allow-newer-data-loss",
+                                 "--skip-migrate", "--owner", "intruder",
+                                 "--token", token)
+                self.assertTrue(guards.is_maintenance_active())
+                guards.exit_maintenance(fresh)
+                self.assertFalse(guards.is_maintenance_active())
+            finally:
+                if guards.is_maintenance_active():
+                    takeover = guards.enter_maintenance(
+                        owner="cleanup", reason="test", force=True)
+                    guards.exit_maintenance(takeover)
+
+    def test_reset_counts_checked_inside_the_window(self):
+        from unittest import mock
+
+        from apps.operations import guards
+        from apps.operations import reset as reset_service
+        from apps.roster.models import Missionary
+        from apps.roster import services as roster_services
+
+        admin, _ = make_admin()
+        make_missionary(admin)
+        counts = reset_service.current_counts()
+        real_mode = reset_service.maintenance_mode
+
+        def _sneak_in(*args, **kwargs):
+            # Work arriving as the window is acquired (after the screen
+            # rendered) must abort the reset, not be silently deleted.
+            roster_services.create_missionary(
+                actor=admin, external_id="SNEAK-1", name="Sneak")
+            return real_mode(*args, **kwargs)
+
+        with mock.patch.object(reset_service, "maintenance_mode",
+                               side_effect=_sneak_in):
+            with self.assertRaises(ValidationError):
+                reset_service.reset_to_empty(
+                    actor=admin, confirmation="RESET",
+                    expected_counts={k: str(v) for k, v in counts.items()})
+        self.assertEqual(Missionary.objects.count(), 2)
+        self.assertFalse(guards.is_maintenance_active())
+
+
+class ApiAccountStatusTests(TestCase):
+    def test_api_json_for_password_change_and_deactivation(self):
+        staff, pw = make_staff()
+        self.client.login(username=staff.username, password=pw)
+        staff.must_change_password = True
+        staff.save()
+        response = self.client.get("/api/stock/")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "password-change-required")
+        staff.must_change_password = False
+        staff.is_active = False
+        staff.save()
+        response = self.client.get("/api/stock/")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "sign-in-required")
+
+
+class TitleRowNumberingTests(TestCase):
+    def test_row_numbers_account_for_title_rows(self):
+        from apps.transfers.row_imports import build_preview
+
+        rows = [["Inventory January"], ["More context"],
+                ["category", "name", "remaining"],
+                ["Cat", "Widget", "5"], ["", "No Category", "3"]]
+        preview = build_preview(kind="inventory", rows=rows, mode="add_update")
+        self.assertEqual([e["row"] for e in preview["valid"]], [4])
+        self.assertEqual([e["row"] for e in preview["errors"]], [5])
+
+
+class StockExportQueryTests(TestCase):
+    def test_stock_exports_avoid_per_item_queries(self):
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        from apps.reports import services as rep
+
+        staff, _ = make_staff()
+        for i in range(5):
+            make_item(staff, opening_qty=i + 1)
+        with CaptureQueriesContext(connection) as ctx:
+            rep.report_csv("stock")
+        self.assertLessEqual(len(ctx), 4, [q["sql"][:80] for q in ctx])
+        with CaptureQueriesContext(connection) as ctx2:
+            rep.inventory_csv()
+        self.assertLessEqual(len(ctx2), 4, [q["sql"][:80] for q in ctx2])

@@ -81,13 +81,28 @@ class AccountStatusMiddleware:
                 fresh = user.__class__.objects.get(pk=user.pk)
             except user.__class__.DoesNotExist:
                 logout(request)
-                return redirect(f"{settings.LOGIN_URL}?expired=1")
+                return self._auth_failure(request)
             if not fresh.is_active:
                 logout(request)
-                return redirect(f"{settings.LOGIN_URL}?expired=1")
+                return self._auth_failure(request)
             if fresh.must_change_password and not self._exempt(request.path):
+                if request.path.startswith("/api/"):
+                    from django.http import JsonResponse
+
+                    return JsonResponse(
+                        {"ok": False, "error": "password-change-required"},
+                        status=403)
                 return redirect(PASSWORD_CHANGE_PATH)
         return self.get_response(request)
+
+    @staticmethod
+    def _auth_failure(request):
+        if request.path.startswith("/api/"):
+            from django.http import JsonResponse
+
+            return JsonResponse({"ok": False, "error": "sign-in-required"},
+                                status=401)
+        return redirect(f"{settings.LOGIN_URL}?expired=1")
 
     @staticmethod
     def _exempt(path: str) -> bool:

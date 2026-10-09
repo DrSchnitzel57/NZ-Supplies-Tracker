@@ -2,7 +2,9 @@
 # Restore a compatible backup + matching image release.
 # Usage: bash scripts/restore.sh BACKUP VERSION [--allow-newer-data-loss]
 # Never discards newer live work without the explicit flag.
-# Order is always: verify, maintenance, restore, migrate, readiness, reopen.
+# Order is always: verify, stop writers, restore, migrate, readiness, reopen.
+# restore_db owns the maintenance window across restore+migrate and prints
+# its token; this script releases it only after its own readiness gate.
 set -euo pipefail
 
 BACKUP="${1:-}"
@@ -47,7 +49,7 @@ if [[ -z "$BACKUP_ABS" || ! -f "$BACKUP_ABS" ]]; then
 fi
 BACKUP_DIR="$(dirname "$BACKUP_ABS")"
 BACKUP_NAME="$(basename "$BACKUP_ABS")"
-MAINT_TOKEN=""
+RESTORE_TOKEN=""
 
 trap 'echo "RESTORE FAILED: writes remain closed. Re-run restore or update; check docker compose logs app." >&2' ERR
 
@@ -58,22 +60,19 @@ docker compose run --rm -v "$BACKUP_DIR:/restore-src:ro" app \
 echo "==> pulling matching release image"
 docker pull "${IMAGE_BASE}:$VERSION"
 
-echo "==> restoring under exclusive maintenance"
-ENTER_OUT="$(VERSION="$VERSION" docker compose run --rm app python manage.py maintenance --enter --owner "restore-$VERSION" --reason "restore $BACKUP_NAME")"
-echo "$ENTER_OUT"
-MAINT_TOKEN="$(echo "$ENTER_OUT" | sed -n 's/.*token=//p' | tr -d '[:space:]')"
-if [[ -z "$MAINT_TOKEN" ]]; then
-  echo "refusing: could not acquire maintenance window; live data untouched" >&2
-  exit 1
-fi
-VERSION="$VERSION" docker compose up -d app
-# restore_db performs: verify, preserve, restore, migrate, readiness — and
-# only then (via this script) do we reopen writes below.
-VERSION="$VERSION" docker compose run --rm \
+echo "==> stopping writers, then restoring (restore_db holds maintenance)"
+VERSION="$VERSION" docker compose stop app
+RESTORE_OUT="$(VERSION="$VERSION" docker compose run --rm \
   -v "$BACKUP_DIR:/restore-src:ro" \
   -e APP_VERSION="$VERSION" app \
   python manage.py restore_db "/restore-src/$BACKUP_NAME" \
-    --expected-version "$VERSION" $EXTRA
+    --expected-version "$VERSION" $EXTRA)"
+echo "$RESTORE_OUT"
+RESTORE_TOKEN="$(echo "$RESTORE_OUT" | sed -n 's/.*maintenance-token: //p' | tr -d '[:space:]')"
+if [[ -z "$RESTORE_TOKEN" ]]; then
+  echo "refusing: restore did not report a maintenance token; writes stay closed" >&2
+  exit 1
+fi
 VERSION="$VERSION" docker compose up -d app
 echo "==> readiness gate before reopening"
 for i in $(seq 1 30); do
@@ -87,7 +86,7 @@ for i in $(seq 1 30); do
   fi
   sleep 2
 done
-docker compose exec -T app python manage.py maintenance --exit --token "$MAINT_TOKEN"
-MAINT_TOKEN=""
+docker compose exec -T app python manage.py maintenance --exit --token "$RESTORE_TOKEN"
+RESTORE_TOKEN=""
 trap - ERR
 echo "restore complete: backup=$BACKUP_NAME version=$VERSION"

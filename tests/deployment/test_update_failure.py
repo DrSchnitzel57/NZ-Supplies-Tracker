@@ -86,11 +86,14 @@ def test_restore_script_refuses_bad_input(tmp_path):
         ["bash", script, str(backup), "1.2.3", "--bogus-flag"],
         capture_output=True, text=True, cwd=tmp_path, timeout=60)
     assert proc.returncode == 2
-    # Restore order is verify, restore, migrate, readiness, reopen.
+    # Restore order is verify, stop writers, restore, migrate, readiness,
+    # reopen — and restore_db reports the token that reopens writes.
     text = open(script).read()
     assert text.index("verify") < text.index("restore_db")
+    assert text.index("stop") < text.index("restore_db")
     assert text.index("restore_db") < text.index("readyz") or \
         text.index("restore_db") < text.index("readiness")
+    assert "maintenance-token" in text
     assert "realpath" in text
 
 

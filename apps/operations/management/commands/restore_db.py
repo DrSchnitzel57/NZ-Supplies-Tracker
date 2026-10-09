@@ -3,8 +3,16 @@
 Refuses when the backup fails integrity/schema/release checks, when the
 target database has newer work without --allow-newer-data-loss, or when the
 backup was created by newer code than is running here. The order is always
-restore, then migrate, then readiness check, and only then reopen writes —
-a restored database that still needs migrations never serves traffic.
+verify, restore, re-acquire, migrate, readiness — and only then may the
+caller reopen writes with the printed token.
+
+Why re-acquire: restoring a database file replaces the maintenance row
+itself, so any window held before the restore no longer exists afterwards.
+The command therefore acquires a fresh window after restoring (force-taking
+over a stale flag carried inside the backup, audited) and LEAVES it held:
+callers release it with ``maintenance --exit --token <printed-token>`` only
+after their own readiness gate. On any failure the current window stays
+held and the token is printed for deliberate operator recovery.
 """
 
 from __future__ import annotations
@@ -12,7 +20,6 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.operations import backup as backup_mod
-from apps.operations.guards import maintenance_mode
 
 
 class Command(BaseCommand):
@@ -26,16 +33,34 @@ class Command(BaseCommand):
                             help="Require running APP_VERSION to match")
         parser.add_argument("--skip-migrate", action="store_true",
                             help="Do not run migrations after restore (testing only)")
+        parser.add_argument("--owner", default="restore-db",
+                            help="Window owner (must match the outer holder to nest)")
+        parser.add_argument("--token", default=None,
+                            help="Outer window token for nesting under a script-held window")
 
     def handle(self, *args, **options):
         from django.conf import settings
+
+        from apps.common.errors import MaintenanceActiveError
+        from apps.operations import guards
 
         expected = options["expected_version"]
         if expected and getattr(settings, "APP_VERSION", "") != expected:
             raise CommandError(
                 "backup/image mismatch: running version does not match "
                 "--expected-version; restore the matching release image first.")
-        with maintenance_mode(owner="restore-db", reason=str(options["backup"])):
+        owner = options["owner"]
+        reason = str(options["backup"])
+        # The pre-restore window is entered directly (not via the
+        # contextmanager): the restore below replaces the maintenance row,
+        # so this hold is deliberately abandoned and superseded by the
+        # post-restore re-acquire.
+        try:
+            token = guards.enter_maintenance(owner=owner, reason=reason,
+                                             token=options["token"])
+        except MaintenanceActiveError as exc:
+            raise CommandError(f"restore refused: {exc}")
+        try:
             try:
                 backup_mod.verify_sqlite_backup(options["backup"])
             except ValueError as exc:
@@ -48,21 +73,43 @@ class Command(BaseCommand):
                     raise CommandError(
                         "restore refused: live database holds newer work; "
                         "re-run with --allow-newer-data-loss to confirm discard.")
-            try:
-                info = backup_mod.restore_sqlite(
-                    backup_path=options["backup"], dest_path=live)
-            except Exception as exc:
-                raise CommandError(f"restore failed; live data preserved: {exc}")
+        except BaseException:
+            # Refused before anything was written: reopen the window.
+            guards.exit_maintenance(token)
+            raise
+        try:
+            info = backup_mod.restore_sqlite(
+                backup_path=options["backup"], dest_path=live)
+        except Exception as exc:
+            # Staged restores never swap on failure, so the flag is intact.
+            guards.exit_maintenance(token)
+            raise CommandError(f"restore failed; live data preserved: {exc}")
+        # The restore replaced the maintenance row: re-acquire a fresh
+        # window (the backup may even carry a stale held flag, which is
+        # taken over explicitly and audited — no live process can own a
+        # window across a file restore).
+        try:
+            token = guards.enter_maintenance(owner=owner,
+                                             reason=reason + " (post-restore)")
+        except MaintenanceActiveError:
+            token = guards.enter_maintenance(
+                owner=owner, reason=reason + " (post-restore takeover)",
+                force=True)
+        try:
             if not options["skip_migrate"]:
                 from django.core.management import call_command
 
-                try:
-                    call_command("migrate", "--noinput")
-                except Exception as exc:
-                    raise CommandError(
-                        f"restore applied but migrate failed; writes stay closed: {exc}")
+                call_command("migrate", "--noinput")
                 _assert_ready()
-        self.stdout.write(f"restore ok: {info['bytes']} bytes sha256={info['sha256'][:16]}…")
+        except BaseException:
+            # The current window stays held; print its token for deliberate
+            # operator recovery, then re-raise the original failure.
+            self.stdout.write(f"maintenance-token: {token}")
+            raise
+        self.stdout.write(
+            f"restore ok: {info['bytes']} bytes sha256={info['sha256'][:16]}…")
+        self.stdout.write(f"maintenance-token: {token}")
+        return
 
 
 def _assert_ready() -> None:

@@ -44,19 +44,22 @@ def reset_to_empty(*, actor, confirmation: str, backup_path: str | None = None,
     permissions.require_admin(actor)
     if (confirmation or "").strip() != RESET_CONFIRMATION_WORD:
         raise ValidationError("typed confirmation must be RESET")
-    if expected_counts is not None:
-        live = current_counts()
-        for key in ("people", "items", "issues"):
-            try:
-                want = int(expected_counts.get(key))
-            except (TypeError, ValueError, AttributeError):
-                raise ValidationError(
-                    "confirm the current counts again before resetting") from None
-            if want != live[key]:
-                raise ValidationError(
-                    "data changed since the confirmation screen; "
-                    "review the new counts and confirm again")
     with maintenance_mode(owner="reset", reason="full reset to empty"):
+        # Newer-work confirmation is validated INSIDE the held window so
+        # work arriving between the confirmation screen and window
+        # acquisition aborts instead of being silently deleted.
+        if expected_counts is not None:
+            live = current_counts()
+            for key in ("people", "items", "issues"):
+                try:
+                    want = int(expected_counts.get(key))
+                except (TypeError, ValueError, AttributeError):
+                    raise ValidationError(
+                        "confirm the current counts again before resetting") from None
+                if want != live[key]:
+                    raise ValidationError(
+                        "data changed since the confirmation screen; "
+                        "review the new counts and confirm again")
         # Backup first, OUTSIDE the data transaction: file IO is not
         # transactional, and holding the write lock during a slow copy would
         # amplify contention. Any backup failure aborts before deletion.

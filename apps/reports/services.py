@@ -111,19 +111,29 @@ def roster_csv(*, include_archived: bool = True):
 
 
 def inventory_csv(*, include_archived: bool = True):
-    from apps.inventory import services as inv
     qs = Item.objects.order_by("category", "name", "size")
     if not include_archived:
         qs = qs.filter(is_archived=False)
+    items = list(qs.iterator())
+    net_map = _net_out_map([i.pk for i in items])
     rows = []
-    for i in qs.iterator():
+    for i in items:
         rows.append({"category": i.category, "name": i.name, "size": i.size,
-                     "available": i.on_hand, "given_out_net": inv.net_out(i.pk),
+                     "available": i.on_hand, "given_out_net": net_map.get(i.pk, 0),
                      "alert_level": i.low_threshold,
                      "archived": "yes" if i.is_archived else "no"})
     return _csv_response(rows,
         ["category", "name", "size", "available", "given_out_net", "alert_level", "archived"],
         "inventory.csv")
+
+
+def _net_out_map(item_ids=None) -> dict:
+    """Net given-out per item in one query (active issue lines only)."""
+    qs = IssueLine.objects.filter(issue__status=Issue.ACTIVE)
+    if item_ids is not None:
+        qs = qs.filter(item_id__in=list(item_ids))
+    return {row["item_id"]: row["s"] or 0 for row in
+            qs.values("item_id").annotate(s=Sum("quantity"))}
 
 
 def _export_per_item(ctx):
@@ -184,11 +194,12 @@ def report_csv(family: str, include_archived: bool = False):
                 for i in _full_low(flag)]
         return _csv_response(rows, ["item", "available", "alert_level"], "report-low-stock.csv")
     if family == "stock":
-        from apps.inventory import services as inv
+        stock = _full_stock(flag)
+        net_map = _net_out_map([i.pk for i in stock])
         rows = [{"item": str(i), "available": i.on_hand,
-                 "given_out_net": inv.net_out(i.pk),
+                 "given_out_net": net_map.get(i.pk, 0),
                  "alert_level": i.low_threshold,
-                 "archived": "yes" if i.is_archived else "no"} for i in _full_stock(flag)]
+                 "archived": "yes" if i.is_archived else "no"} for i in stock]
         return _csv_response(rows, ["item", "available", "given_out_net",
                                    "alert_level", "archived"], "report-stock.csv")
     if family == "category":
@@ -253,10 +264,11 @@ def report_pdf(family: str, include_archived: bool = False):
         data = [["Item", "Available", "Alert level"]] + [
             [str(i), i.on_hand, i.low_threshold] for i in _full_low(flag)]
     elif family == "stock":
-        from apps.inventory import services as inv
+        stock = _full_stock(flag)
+        net_map = _net_out_map([i.pk for i in stock])
         data = [["Item", "Available", "Given out (net)", "Alert level"]] + [
-            [str(i), i.on_hand, inv.net_out(i.pk), i.low_threshold]
-            for i in _full_stock(flag)]
+            [str(i), i.on_hand, net_map.get(i.pk, 0), i.low_threshold]
+            for i in stock]
     elif family == "category":
         active_lines = IssueLine.objects.filter(issue__status=Issue.ACTIVE)
         if not include_archived:

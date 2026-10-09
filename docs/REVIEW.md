@@ -39,3 +39,40 @@ real isolated Compose TLS/backup/restore drills.
 | Roster archived matches never reactivated | Reactivate-then-update on archived matches | `test_archived_roster_match_reactivates` |
 | Export dropped `source_remaining/corrected`; import dropped timestamps/actor names | Model fields + snapsh
 ...[truncated 7370 chars]
+## Reviewer-feedback round (second agent review)
+
+All findings below were accepted and fixed with regressions. No finding
+was declined.
+
+- **Update/restore scripts vs owned guard (blocker, accepted):** nested
+  `backup_db --quiesce` / `restore_db` under a script-held window were
+  refused as foreign owners. Nesting now requires presenting the outer
+  token (`--owner` + `--token`, threaded through both scripts); same-owner
+  calls without the token are refused. Composition tests:
+  `MaintenanceCompositionTests.test_nested_quiesced_backup_joins_outer_window`,
+  `test_nested_restore_joins_outer_window`,
+  `test_nesting_requires_the_outer_token`.
+- **Restore wipes the maintenance row (found while fixing the above,
+  accepted):** `restore_db` now re-acquires a fresh window after restoring
+  (force-taking over a stale flag carried in the backup, audited), runs
+  migrate + readiness, and leaves the window held — printing
+  `maintenance-token:` for the caller. Pre-write refusals reopen instead.
+  `restore.sh` follows the corrected protocol (verify → stop writers →
+  restore → readiness gate → release with the printed token).
+- **Reset counts raced the window (blocker, accepted):** `expected_counts`
+  validation moved inside the held window; proven by
+  `test_reset_counts_checked_inside_the_window` (a row inserted at window
+  acquisition aborts the reset with nothing deleted).
+- **API JSON for forced-change/deactivated pollers (accepted):**
+  `AccountStatusMiddleware` returns JSON 401/403 for `/api/*`
+  (`ApiAccountStatusTests`).
+- **Title-row numbering dead code (accepted):** preview row numbers now use
+  `first_row=start + 2` (`TitleRowNumberingTests`).
+- **URI helper robustness (accepted):** read-only connects, no stray-file
+  checkpoint creation, no double URI prefixing, collision-free preservation
+  names.
+- **Stock N+1 (accepted):** one annotated query for stock/inventory exports
+  (`StockExportQueryTests` with query-count bounds).
+- **`maintenance_mode` masking nit (accepted):** release errors no longer
+  mask the block's own exception
+  (`test_release_failure_never_masks_the_blocks_own_error`).

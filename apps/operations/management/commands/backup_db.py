@@ -17,6 +17,10 @@ class Command(BaseCommand):
         parser.add_argument("--prefix", default="manual-")
         parser.add_argument("--quiesce", action="store_true",
                             help="Hold an owned maintenance window during the copy")
+        parser.add_argument("--owner", default="backup",
+                            help="Window owner for --quiesce (must match the outer holder to nest)")
+        parser.add_argument("--token", default=None,
+                            help="Outer window token for --quiesce nesting")
 
     def handle(self, *args, **options):
         dest = options["dest"]
@@ -24,10 +28,15 @@ class Command(BaseCommand):
             stamp = timezone.now().strftime("%Y%m%d-%H%M%S")
             dest = str(backup_mod.default_backup_dir() / f"{options['prefix']}{stamp}.sqlite3")
         if options["quiesce"]:
+            from apps.common.errors import MaintenanceActiveError
             from apps.operations.guards import maintenance_mode
 
-            with maintenance_mode(owner="backup", reason=str(dest)):
-                info = self._take(dest)
+            try:
+                with maintenance_mode(owner=options["owner"], reason=str(dest),
+                                      token=options["token"]):
+                    info = self._take(dest)
+            except MaintenanceActiveError as exc:
+                raise CommandError(f"backup refused: {exc}")
         else:
             info = self._take(dest)
         self.stdout.write(

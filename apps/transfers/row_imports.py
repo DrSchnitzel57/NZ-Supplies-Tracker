@@ -204,11 +204,6 @@ def build_preview(*, kind: str, rows: list[list[str]], mode: str) -> dict:
     headers = [(c or "").strip() for c in rows[start]]
     data = rows[start + 1:]
     if kind == "roster":
-        return _preview_roster(headers, data, mode)
-    return _preview_inventory(headers, data, mode)
-
-
-    if kind == "roster":
         return _preview_roster(headers, data, mode, first_row=start + 2)
     return _preview_inventory(headers, data, mode, first_row=start + 2)
 

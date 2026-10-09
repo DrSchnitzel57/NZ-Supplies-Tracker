@@ -88,30 +88,44 @@ def assert_maintenance_active() -> None:
 
 
 @contextmanager
-def maintenance_mode(owner: str = "operation", reason: str = ""):
+def maintenance_mode(owner: str = "operation", reason: str = "",
+                     token: str | None = None):
     """Hold an owned exclusive maintenance window for the block.
 
     Acquisition failure raises ``MaintenanceActiveError`` (the caller aborts);
     the window is released with the entry token, so exceptions inside the
-    block close only this holder's own window.
+    block close only this holder's own window. ``token`` presents an outer
+    holder's token to nest: host scripts own the outer window and pass the
+    token down to inner commands. A release failure never masks the block's
+    own exception.
     """
-    token = enter_maintenance(owner=owner, reason=reason)
+    import sys
+
+    entry = enter_maintenance(owner=owner, reason=reason, token=token)
     try:
-        yield token
+        yield entry
     finally:
-        exit_maintenance(token)
+        try:
+            exit_maintenance(entry)
+        except MaintenanceActiveError:
+            if sys.exception() is None:
+                raise
 
 
 def enter_maintenance(owner: str = "operation", reason: str = "",
-                      force: bool = False) -> str:
+                      force: bool = False, token: str | None = None) -> str:
     """Acquire the window. Returns the ownership token for ``exit_maintenance``.
 
     Raises ``MaintenanceActiveError`` when another owner holds it (unless
     ``force=True``, which takes over explicitly and audits the takeover).
+    Nesting under the same owner requires presenting the held ``token``:
+    host scripts capture it from ``--enter`` and pass it down, so an inner
+    command joins its own operation's window but can never join (or clear)
+    someone else's.
     """
     from apps.operations.models import MaintenanceState
 
-    token = secrets.token_hex(16)
+    fresh = secrets.token_hex(16)
     with transaction.atomic():
         try:
             state = MaintenanceState.objects.select_for_update().get(pk=1)
@@ -119,7 +133,12 @@ def enter_maintenance(owner: str = "operation", reason: str = "",
             state = MaintenanceState(pk=1)
         if state.maintenance_mode:
             if state.token and owner == state.owner and not force:
-                # Re-entrant hold by the same owner: deepen instead of failing.
+                # Re-entrant hold by the same owner presenting its token.
+                if token != state.token:
+                    raise MaintenanceActiveError(
+                        "maintenance already held by "
+                        f"{state.owner or 'another operation'}; present its "
+                        "token to nest, or abort instead of sharing the window")
                 state.depth += 1
                 state.save()
                 return state.token
@@ -131,21 +150,21 @@ def enter_maintenance(owner: str = "operation", reason: str = "",
             _audit_takeover(previous_owner=state.owner, new_owner=owner,
                             reason=reason)
             state.owner = owner
-            state.token = token
+            state.token = fresh
             state.reason = reason or ""
             state.depth = 1
             state.acquired_at = timezone.now()
             state.maintenance_mode = True
             state.save()
-            return token
+            return fresh
         state.maintenance_mode = True
         state.owner = owner
-        state.token = token
+        state.token = fresh
         state.reason = reason or ""
         state.depth = 1
         state.acquired_at = timezone.now()
         state.save()
-        return token
+        return fresh
 
 
 def exit_maintenance(token: str | None = None) -> bool:

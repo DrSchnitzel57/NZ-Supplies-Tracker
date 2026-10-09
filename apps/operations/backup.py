@@ -105,18 +105,19 @@ def _is_uri(path: str | Path) -> bool:
 
 
 def _connect_readonly(src: Path):
-    if src.exists():
-        return sqlite3.connect(str(src))
     if _is_uri(src):
-        # Shared-cache memory databases (used by the test suite) have no
-        # filesystem path; connect by URI instead.
+        # Shared-cache memory databases have no filesystem path; connect by
+        # URI instead. Production paths use mode=ro so verification can never
+        # modify the source.
         try:
             conn = sqlite3.connect(str(src), uri=True)
             conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchall()
             return conn
         except Exception as exc:
             raise ValueError(f"live database not found: {src}") from exc
-    raise ValueError(f"live database not found: {src}")
+    if not src.exists():
+        raise ValueError(f"live database not found: {src}")
+    return sqlite3.connect(f"file:{src}?mode=ro", uri=True)
 
 
 def backup_sqlite(*, source_path: str | Path, dest_path: str | Path) -> dict:
@@ -356,8 +357,13 @@ def prune_backups(*, backup_dir: str | Path, retention_days: int = RETENTION_DAY
 
 
 def _checkpoint(path: Path) -> None:
+    if not _is_uri(path) and not Path(path).exists():
+        return  # never create a stray file just to checkpoint it
     try:
-        conn = sqlite3.connect(str(path))
+        if _is_uri(path):
+            conn = sqlite3.connect(str(path), uri=True)
+        else:
+            conn = sqlite3.connect(str(path))
         try:
             conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
         finally:
@@ -399,7 +405,7 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
     if _is_uri(dst):
         # Memory/file-URI destination (tests): restore directly; there is no
         # filesystem image to stage, preserve or unlink sidecars for.
-        src_conn = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+        src_conn = _connect_readonly(src)
         try:
             dst_conn = sqlite3.connect(str(dst), uri=True)
             try:
@@ -416,8 +422,10 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
     preserved = None
     if preserve and dst.exists():
         import time
+        import uuid as _uuid
 
-        preserved = dst.parent / f"{dst.stem}.pre-restore-{int(time.time())}.sqlite3"
+        stamp = f"{int(time.time())}-{_uuid.uuid4().hex[:8]}"
+        preserved = dst.parent / f"{dst.stem}.pre-restore-{stamp}.sqlite3"
         # Preservation copy via the backup API (consistent snapshot), then
         # verify it before relying on it.
         live_conn = sqlite3.connect(str(dst))
@@ -445,7 +453,7 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
         _restrict(tmp)
         # Copy via SQLite backup API in reverse so WAL state stays consistent.
         # Source is read-only here.
-        src_conn = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+        src_conn = _connect_readonly(src)
         try:
             dst_conn = sqlite3.connect(str(tmp))
             try:
