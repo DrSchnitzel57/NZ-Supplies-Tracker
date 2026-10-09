@@ -22,4 +22,6 @@ urlpatterns = [
     path("roster/", include("apps.roster.urls")),
     path("inventory/", include("apps.inventory.urls")),
     path("issue/", include("apps.issuing.urls")),
+    path("transfers/", include("apps.transfers.urls")),
+    path("reports/", include("apps.reports.urls")),
 ]

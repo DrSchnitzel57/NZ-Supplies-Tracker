@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Import preview — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Import preview ({{ preview.kind }}, {{ preview.mode }})</h1>
+{% if stale %}<p class="error" role="alert">Source data changed since this preview was made. Re-upload and review again — confirmation is blocked.</p>{% endif %}
+<p class="help">{{ valid|length }} valid · {{ errors|length }} with errors{% if preview.mode == "replace" %} · {{ to_archive }} record(s) would be archived as missing{% endif %}.</p>
+{% if errors %}
+<h2>Rows needing fixes ({{ errors|length }})</h2>
+<table>
+<thead><tr><th>Row</th><th>Problems</th><th>Details</th></tr></thead>
+<tbody>
+{% for r in errors %}<tr><td>{{ r.row }}</td><td>{% for p in r.problems %}{{ p }}{% if not forloop.last %}; {% endif %}{% endfor %}</td><td>{{ r.category }} {{ r.name }} {{ r.external_id }}</td></tr>{% endfor %}
+</tbody>
+</table>
+{% endif %}
+<h2>Valid rows ({{ valid|length }})</h2>
+<form method="post" action="/transfers/preview/{{ preview.token }}/confirm/">
+{% csrf_token %}
+<table>
+<thead><tr>{% if preview.mode == "add_update" %}<th>Apply?</th>{% endif %}<th>Row</th><th>Action</th><th>Summary</th></tr></thead>
+<tbody>
+{% for r in valid %}
+<tr>
+{% if preview.mode == "add_update" %}<td><input type="checkbox" name="row-{{ r.row }}" checked aria-label="Apply row {{ r.row }}"></td>{% endif %}
+<td>{{ r.row }}</td><td>{{ r.action }}</td>
+<td>{% if preview.kind == "roster" %}{{ r.external_id }} — {{ r.name }}{% else %}{{ r.category }} / {{ r.name }}{% if r.size %} ({{ r.size }}){% endif %}{% if r.counted is not None %} → count {{ r.counted }}{% endif %}{% endif %}</td>
+</tr>
+{% empty %}<tr><td colspan="4">No valid rows.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% if not stale and valid %}
+{% if preview.mode == "replace" %}<p class="help">Replacement needs every row valid and archives {{ to_archive }} missing record(s). This cannot be partially approved.</p>{% endif %}
+<button type="submit" {% if stale %}disabled{% endif %}>Apply approved rows</button>
+{% endif %}
+</form>
+{% endblock %}

@@ -2,7 +2,12 @@
 {% block title %}Reports — Supplies Tracker{% endblock %}
 {% block content %}
 <h1>Reports</h1>
-<p class="help">On-screen summaries. “Given out” counts only current issues — undone issues are excluded but remain visible in history. Low-stock lines use each item’s alert level.</p>
+<p class="help">On-screen summaries. “Given out” counts only current issues — undone issues are excluded but remain visible in history. Low-stock lines use each item’s alert level. <a href="/guide/">Quick-start guide</a>.</p>
+<form method="get" class="toolbar">
+<label><input type="checkbox" name="archived" value="1" {% if include_archived %}checked{% endif %}> Include archived records</label>
+<button type="submit">Apply</button>
+</form>
+<p class="help">Downloads: <a href="/reports/roster.csv">Missionaries CSV</a> · <a href="/reports/inventory.csv">Inventory CSV</a> · per-item <a href="/reports/family/per-item/?format=csv">CSV</a>/<a href="/reports/family/per-item/?format=pdf">PDF</a> · per-person <a href="/reports/family/per-person/?format=csv">CSV</a>/<a href="/reports/family/per-person/?format=pdf">PDF</a> · low-stock <a href="/reports/family/low-stock/?format=csv">CSV</a>/<a href="/reports/family/low-stock/?format=pdf">PDF</a> · history <a href="/reports/family/history/?format=csv">CSV</a>/<a href="/reports/family/history/?format=pdf">PDF</a>{% if user.is_superuser %} · <a href="/reports/bundle/export/">Full bundle ZIP</a>{% endif %}</p>
 <h2>Given out per item (net)</h2>
 <table>
 <thead><tr><th>Item</th><th>Given out (net)</th></tr></thead>
@@ -33,6 +38,7 @@
 {% endfor %}
 </tbody>
 </table>
+<p class="help">Low-stock follow-up: copy the table above or <a href="mailto:?subject=Low%20stock%20order">open your mail app to contact suppliers</a> — the app sends no email itself.</p>
 <h2>Recent issues (original and undone)</h2>
 <table>
 <thead><tr><th>When</th><th>Person</th><th>Status</th><th>Given by / undone by</th></tr></thead>

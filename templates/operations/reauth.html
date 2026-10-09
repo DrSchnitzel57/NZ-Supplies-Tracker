@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Confirm identity — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Confirm your identity</h1>
+<p class="help">Sensitive admin tools need a recent password confirmation (valid 10 minutes). This never extends your idle sign-in.</p>
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="next" value="{{ next }}">
+<label>Your password <input type="password" name="password" required autocomplete="current-password"></label>
+<button type="submit">Confirm identity</button>
+</form>
+{% endblock %}

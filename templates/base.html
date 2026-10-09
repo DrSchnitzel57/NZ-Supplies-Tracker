@@ -18,8 +18,10 @@
     <a href="/issue/" class="primary-action">Issue goods</a>
     <a href="/issue/history/">History</a>
     <a href="/reports/">Reports</a>
+    <a href="/transfers/roster/">Missionary import</a>
+    <a href="/transfers/inventory/">Inventory import</a>
     <a href="/guide/">Quick-start guide</a>
-    {% if user.is_superuser %}<a href="/accounts/users/">Users</a>{% endif %}
+    {% if user.is_superuser %}<a href="/accounts/users/">Users</a><a href="/transfers/bundle/">Full bundle</a><a href="/admin-area/settings/">Settings</a>{% endif %}
     {% endif %}
   </nav>
   <div class="userbar">

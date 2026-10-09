@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}User accounts — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>User accounts</h1>
+<p class="help">Administrator-only. New accounts get a temporary password and must change it on first sign-in. Deactivating signs them out everywhere.</p>
+<h2>Create an account</h2>
+<form method="post" action="/accounts/users/create/">
+{% csrf_token %}
+<label>Username <input name="username" required autocomplete="off"></label>
+<label>Temporary password <input type="password" name="password" required autocomplete="new-password"></label>
+<label><input type="checkbox" name="is_admin" value="1"> Administrator</label>
+<button type="submit">Create account</button>
+</form>
+<h2>Existing accounts</h2>
+<table>
+<thead><tr><th>Username</th><th>Role</th><th>Active</th><th>Actions</th></tr></thead>
+<tbody>
+{% for u in users %}
+<tr>
+<td>{{ u.username }}</td>
+<td>{% if u.is_superuser %}Administrator{% elif u.is_staff %}Staff{% else %}No access{% endif %}</td>
+<td>{% if u.is_active %}Yes{% else %}No{% endif %}</td>
+<td>
+<form method="post" action="/accounts/users/{{ u.pk }}/reset-password/" class="inline">{% csrf_token %}<input type="password" name="password" placeholder="New temporary password" required autocomplete="new-password"><button type="submit">Set temporary password</button></form>
+{% if u.pk != user.pk %}
+{% if u.is_active %}<form method="post" action="/accounts/users/{{ u.pk }}/deactivate/" class="inline">{% csrf_token %}<button type="submit">Deactivate</button></form>
+{% else %}<form method="post" action="/accounts/users/{{ u.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>{% endif %}
+{% endif %}
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}

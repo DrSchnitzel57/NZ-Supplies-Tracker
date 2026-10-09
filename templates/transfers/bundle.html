@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Full bundle — Supplies Tracker{% endblock %}
+{% block content %}
+<h1>Full data bundle</h1>
+<p class="help">Administrator-only migration interchange (versioned ZIP of CSV tables plus a manifest with checksums). Bundles carry archived records, movements, issue snapshots, reversals and operational audits — never accounts or passwords. Import only into empty operational data.</p>
+<p>Operational data now: {% if empty %}<strong>empty — ready for import</strong>{% else %}<strong>not empty</strong> (reset first to import){% endif %}.</p>
+<h2>Export</h2>
+<p><a href="/transfers/bundle/export/">Download full bundle ZIP</a> · <a href="/reports/bundle/export/">Migration export (same file)</a></p>
+<h2>Import</h2>
+<form method="post" action="/transfers/bundle/import/" enctype="multipart/form-data">
+{% csrf_token %}
+<label>Bundle ZIP <input type="file" name="bundle" accept=".zip" required></label>
+<button type="submit">Import bundle</button>
+</form>
+<p class="help">Import is atomic: bad versions, checksums, references or balances reject the whole file before anything is written. Nothing is merged with existing history.</p>
+{% endblock %}

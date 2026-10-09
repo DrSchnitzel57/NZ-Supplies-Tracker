@@ -16,3 +16,17 @@ class MaintenanceState(models.Model):
         constraints = [
             models.CheckConstraint(condition=models.Q(id=1), name="singleton_row"),
         ]
+
+
+class SystemSetting(models.Model):
+    """Administrator-editable site settings. No secrets stored here."""
+
+    key = models.CharField(max_length=64, unique=True)
+    value = models.TextField(blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["key"]
+
+    def __str__(self):
+        return f"{self.key}={self.value}"

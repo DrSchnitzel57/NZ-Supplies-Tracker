@@ -1,17 +1,23 @@
-"""Dashboard, on-screen reports, guide and read-only polling endpoints."""
+"""Dashboard, on-screen reports, guide, settings, reset and polling endpoints."""
 
 from __future__ import annotations
 
-from django.db.models import Sum
+import time
+
+from django.contrib import messages
+from django.contrib.auth import authenticate
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 
-from apps.accounts.decorators import no_activity_update, staff_required
+from apps.accounts.decorators import admin_required, no_activity_update, staff_required
+from apps.common.errors import DomainError
 from apps.inventory.models import Item
 from apps.issuing.models import Issue, IssueLine
+from apps.operations import reset as reset_service
+from apps.operations.models import SystemSetting
 from apps.roster.models import Missionary
 
 
@@ -38,43 +44,6 @@ def dashboard(request):
         request,
         "dashboard.html",
         {"low_items": low_items, "recent": recent, "counts": counts},
-    )
-
-
-@staff_required
-def reports(request):
-    active_lines = IssueLine.objects.filter(issue__status=Issue.ACTIVE)
-    per_item = list(
-        active_lines.values(
-            "item_id", "item_category", "item_name", "item_size"
-        ).annotate(total=Sum("quantity")).order_by("-total")[:200]
-    )
-    per_person = list(
-        active_lines.values(
-            "issue__missionary_id",
-            "issue__missionary_name",
-            "issue__missionary_external_id",
-        ).annotate(total=Sum("quantity")).order_by("-total")[:200]
-    )
-    low_items = list(
-        Item.objects.filter(
-            is_archived=False, on_hand__lte=Coalesce("low_threshold", 0)
-        ).order_by("category", "name")[:200]
-    )
-    recent = list(
-        Issue.objects.select_related("missionary", "issued_by", "reversed_by")
-        .prefetch_related("lines")
-        .order_by("-issued_at")[:50]
-    )
-    return render(
-        request,
-        "reports.html",
-        {
-            "per_item": per_item,
-            "per_person": per_person,
-            "low_items": low_items,
-            "recent": recent,
-        },
     )
 
 
@@ -121,3 +90,71 @@ def dashboard_api(request):
             "now": timezone.now().isoformat(),
         }
     )
+
+
+@admin_required
+def settings_view(request):
+    if request.method == "POST":
+        notice = (request.POST.get("site_notice") or "").strip()[:500]
+        threshold_raw = (request.POST.get("default_low_threshold") or "").strip()
+        try:
+            threshold = max(0, int(threshold_raw)) if threshold_raw else 0
+        except ValueError:
+            messages.error(request, "Default alert level must be a whole number.")
+            return redirect("ops-settings")
+        SystemSetting.objects.update_or_create(key="site_notice", defaults={"value": notice})
+        SystemSetting.objects.update_or_create(
+            key="default_low_threshold", defaults={"value": str(threshold)})
+        messages.success(request, "Saved system settings.")
+        return redirect("ops-settings")
+    current = {s.key: s.value for s in SystemSetting.objects.all()}
+    return render(request, "operations/settings.html", {"settings": current})
+
+
+@admin_required
+def reauth_view(request):
+    if request.method == "POST":
+        user = authenticate(request, username=request.user.username,
+                            password=request.POST.get("password", ""))
+        if user is None:
+            messages.error(request, "Password did not match. Try again.")
+            return render(request, "operations/reauth.html", {"next": request.GET.get("next", "")})
+        request.session["admin_reauth_at"] = time.time()
+        messages.success(request, "Identity confirmed for the next 10 minutes.")
+        nxt = request.GET.get("next") or request.POST.get("next") or "/admin-area/reset/"
+        return redirect(nxt)
+    return render(request, "operations/reauth.html", {"next": request.GET.get("next", "")})
+
+
+def _reauth_fresh(request) -> bool:
+    try:
+        return (time.time() - float(request.session.get("admin_reauth_at", 0))
+                ) < reset_service.REAUTH_WINDOW_SECONDS
+    except (TypeError, ValueError):
+        return False
+
+
+@admin_required
+def reset_view(request):
+    if request.method == "POST":
+        if not _reauth_fresh(request):
+            messages.error(request, "Confirm your password first (recent sign-in required).")
+            return redirect("/admin-area/reauth/?next=/admin-area/reset/")
+        try:
+            info = reset_service.reset_to_empty(
+                actor=request.user,
+                confirmation=request.POST.get("confirmation", ""))
+        except DomainError as exc:
+            messages.error(request, f"Reset refused: {exc}")
+            return redirect("ops-reset")
+        messages.success(
+            request,
+            f"Operational data cleared. Verified backup saved ({info.get('bytes', 0)} bytes).")
+        return redirect("dashboard")
+    fresh = _reauth_fresh(request)
+    counts = {
+        "people": Missionary.objects.count(),
+        "items": Item.objects.count(),
+        "issues": Issue.objects.count(),
+    }
+    return render(request, "operations/reset.html", {"fresh": fresh, "counts": counts})
