@@ -209,6 +209,7 @@ def reverse_issue(*, actor, issue_id, reason: str):
         issue.reversed_at = timezone.now()
         issue.reversal_reason = reason
         issue.reversed_by = actor
+        issue.reversed_by_username = getattr(actor, "username", "") or ""
         issue.version += 1
         issue.save()
         _audit(actor, "issue.reversed", issue, {"reason": reason})

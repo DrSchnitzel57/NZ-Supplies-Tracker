@@ -29,62 +29,98 @@ def export_bundle(*, actor) -> bytes:
     from apps.issuing.models import Issue, IssueLine
     from apps.roster.models import Missionary
 
-    try:
-        from apps.operations.models import SystemSetting
-        settings_rows = [{"key": s.key, "value": s.value} for s in SystemSetting.objects.all()]
-    except Exception:
-        settings_rows = []
-    roster_rows = [{
-        "id": str(m.pk), "external_id": m.external_id, "name": m.name, "email": m.email,
-        "title_prefix": m.title_prefix, "arrival_status": m.arrival_status,
-        "stake": m.stake, "mission": m.mission, "language": m.language,
-        "arrival_date": m.arrival_date.isoformat() if m.arrival_date else "",
-        "release_date": m.release_date.isoformat() if m.release_date else "",
-        "personal_email": m.personal_email,
-        "intake_metadata": json.dumps(m.intake_metadata or {}),
-        "is_archived": "true" if m.is_archived else "false",
-        "archived_at": _iso(m.archived_at), "version": str(m.version),
-    } for m in Missionary.objects.all()]
-    item_rows = [{
-        "id": str(i.pk), "category": i.category, "name": i.name, "size": i.size,
-        "unit": i.unit, "on_hand": str(i.on_hand), "low_threshold": str(i.low_threshold),
-        "is_archived": "true" if i.is_archived else "false",
-        "archived_at": _iso(i.archived_at), "version": str(i.version),
-        "source_remaining": "" if i.source_remaining is None else str(i.source_remaining),
-        "source_corrected": "true" if i.source_corrected else "false",
-    } for i in Item.objects.all()]
-    issue_rows = [{
-        "id": str(s.pk), "missionary_id": str(s.missionary_id),
-        "missionary_name": s.missionary_name, "missionary_external_id": s.missionary_external_id,
-        "issued_by_username": s.issued_by_username, "issued_at": _iso(s.issued_at),
-        "note": s.note, "status": s.status, "reversed_at": _iso(s.reversed_at),
-        "reversal_reason": s.reversal_reason,
-        "reversed_by_username": getattr(s.reversed_by, "username", "") or "",
-    } for s in Issue.objects.all()]
-    line_rows = [{
-        "id": str(line.pk), "issue_id": str(line.issue_id), "item_id": str(line.item_id),
-        "quantity": str(line.quantity), "item_category": line.item_category,
-        "item_name": line.item_name, "item_size": line.item_size,
-    } for line in IssueLine.objects.all()]
-    movement_rows = [{
-        "id": str(mv.pk), "item_id": str(mv.item_id), "kind": mv.kind,
-        "delta": str(mv.delta), "balance_after": str(mv.balance_after),
-        "reason": mv.reason, "issue_id": str(mv.issue_id) if mv.issue_id else "",
-        "created_by_username": mv.created_by_username or getattr(mv.created_by, "username", "") or "",
-        "created_at": _iso(mv.created_at),
-    } for mv in StockMovement.objects.all()]
-    audit_rows = [{
-        "id": str(a.pk),
-        "actor_username": a.actor_username or getattr(a.actor, "username", "") or "",
-        "action": a.action, "target_type": a.target_type, "target_id": a.target_id,
-        "detail_json": json.dumps(a.detail or {}), "created_at": _iso(a.created_at),
-    } for a in AuditEvent.objects.all()]
-    actor_name = getattr(actor, "username", "")
-    return bundle_mod.build_bundle(
-        source=f"export:{actor_name}", settings_rows=settings_rows,
-        roster_rows=roster_rows, item_rows=item_rows, issue_rows=issue_rows,
-        line_rows=line_rows, movement_rows=movement_rows, audit_rows=audit_rows,
-    )
+    # Consistent snapshot: all tables are read inside one database
+    # transaction so a concurrent writer committing between the Item and
+    # StockMovement reads cannot produce a mixed bundle (cached stock from
+    # before the write, ledger from after it). The in-memory ledger check
+    # below detects same-transaction interleavings as well; on mismatch the
+    # read is retried so the export always reflects a single point in time.
+    last_error: Exception | None = None
+    for _attempt in range(5):
+        with transaction.atomic():
+            try:
+                from apps.operations.models import SystemSetting
+                settings_rows = [{"key": s.key, "value": s.value}
+                                 for s in SystemSetting.objects.all().order_by("key")]
+            except Exception:
+                settings_rows = []
+            missionaries = list(Missionary.objects.all().order_by("external_id"))
+            items = list(Item.objects.all().order_by("category", "name", "size"))
+            issues = list(Issue.objects.all().order_by("issued_at", "id"))
+            lines = list(IssueLine.objects.all().order_by("id"))
+            movements = list(StockMovement.objects.all().order_by("created_at", "id"))
+            audits = list(AuditEvent.objects.all().order_by("created_at", "id"))
+            # In-transaction consistency gate: the cached balances must equal
+            # their just-read ledgers. A concurrent write landing between the
+            # Item and StockMovement reads trips this gate and retries.
+            sums: dict[str, int] = {}
+            for mv in movements:
+                sums[str(mv.item_id)] = sums.get(str(mv.item_id), 0) + mv.delta
+            consistent = all(
+                sums.get(str(i.pk), 0) == i.on_hand for i in items)
+            if not consistent:
+                last_error = ValidationError(
+                    "export snapshot raced a concurrent write; retrying")
+                # Mark the transaction for rollback and retry with fresh data.
+                transaction.set_rollback(True)
+                continue
+            roster_rows = [{
+                "id": str(m.pk), "external_id": m.external_id, "name": m.name, "email": m.email,
+                "title_prefix": m.title_prefix, "arrival_status": m.arrival_status,
+                "stake": m.stake, "mission": m.mission, "language": m.language,
+                "arrival_date": m.arrival_date.isoformat() if m.arrival_date else "",
+                "release_date": m.release_date.isoformat() if m.release_date else "",
+                "personal_email": m.personal_email,
+                "intake_metadata": json.dumps(m.intake_metadata or {}),
+                "is_archived": "true" if m.is_archived else "false",
+                "archived_at": _iso(m.archived_at), "version": str(m.version),
+            } for m in missionaries]
+            item_rows = [{
+                "id": str(i.pk), "category": i.category, "name": i.name, "size": i.size,
+                "unit": i.unit, "on_hand": str(i.on_hand), "low_threshold": str(i.low_threshold),
+                "is_archived": "true" if i.is_archived else "false",
+                "archived_at": _iso(i.archived_at), "version": str(i.version),
+                "source_remaining": "" if i.source_remaining is None else str(i.source_remaining),
+                "source_corrected": "true" if i.source_corrected else "false",
+            } for i in items]
+            issue_rows = [{
+                "id": str(s.pk), "missionary_id": str(s.missionary_id),
+                "missionary_name": s.missionary_name, "missionary_external_id": s.missionary_external_id,
+                "issued_by_username": s.issued_by_username, "issued_at": _iso(s.issued_at),
+                "note": s.note, "status": s.status, "reversed_at": _iso(s.reversed_at),
+                "reversal_reason": s.reversal_reason,
+                # Durable snapshot first: the linked account may have been renamed
+                # or deleted since the reversal. The FK lookup is only a fallback
+                # for rows written before the snapshot field existed.
+                "reversed_by_username": (s.reversed_by_username
+                                         or getattr(s.reversed_by, "username", "") or ""),
+            } for s in issues]
+            line_rows = [{
+                "id": str(line.pk), "issue_id": str(line.issue_id), "item_id": str(line.item_id),
+                "quantity": str(line.quantity), "item_category": line.item_category,
+                "item_name": line.item_name, "item_size": line.item_size,
+            } for line in lines]
+            movement_rows = [{
+                "id": str(mv.pk), "item_id": str(mv.item_id), "kind": mv.kind,
+                "delta": str(mv.delta), "balance_after": str(mv.balance_after),
+                "reason": mv.reason, "issue_id": str(mv.issue_id) if mv.issue_id else "",
+                "created_by_username": mv.created_by_username or getattr(mv.created_by, "username", "") or "",
+                "created_at": _iso(mv.created_at),
+            } for mv in movements]
+            audit_rows = [{
+                "id": str(a.pk),
+                "actor_username": a.actor_username or getattr(a.actor, "username", "") or "",
+                "action": a.action, "target_type": a.target_type, "target_id": a.target_id,
+                "detail_json": json.dumps(a.detail or {}), "created_at": _iso(a.created_at),
+            } for a in audits]
+            actor_name = getattr(actor, "username", "")
+            return bundle_mod.build_bundle(
+                source=f"export:{actor_name}", settings_rows=settings_rows,
+                roster_rows=roster_rows, item_rows=item_rows, issue_rows=issue_rows,
+                line_rows=line_rows, movement_rows=movement_rows, audit_rows=audit_rows,
+            )
+    assert last_error is not None
+    raise last_error
 
 
 def operational_empty() -> bool:
@@ -228,6 +264,7 @@ def _load_tables(actor, tables: dict) -> None:
                     reversed_at=_parse_dt(row.get("reversed_at", "")),
                     reversal_reason=row.get("reversal_reason", ""),
                     reversed_by=reversed_by,
+                    reversed_by_username=row.get("reversed_by_username", "") or "",
                     idempotency_key=f"bundle-{row['id']}",
                 )
                 issue.full_clean()

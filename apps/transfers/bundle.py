@@ -496,25 +496,31 @@ def _check_ledger_consistency(tables: dict) -> None:
 
     A bundle whose Available column disagrees with its own ledger (for
     example Available=999 with only 10 units of recorded movement) is
-    corrupt and is rejected before any write.
+    corrupt and is rejected before any write. Ordered per-item chains are
+    also validated: exactly one leading OPENING, directional deltas, running
+    balances that never go negative, and reversal linkage to REVERSED
+    issues. Aggregate sums alone are not sufficient.
     """
     issues = {r.get("id"): r for r in tables["issues.csv"]}
     lines_by_issue: dict[str, list[dict]] = {}
     for row in tables["issue_lines.csv"]:
         lines_by_issue.setdefault(row.get("issue_id"), []).append(row)
     movements_by_issue: dict[str, list[dict]] = {}
+    movements_by_item: dict[str, list[dict]] = {}
     deltas: dict[str, int] = {}
     for row in tables["movements.csv"]:
         deltas[row.get("item_id")] = deltas.get(row.get("item_id"), 0) + int(
             str(row.get("delta")).strip())
         if (row.get("issue_id") or "").strip():
             movements_by_issue.setdefault(row.get("issue_id"), []).append(row)
+        movements_by_item.setdefault(row.get("item_id"), []).append(row)
     for row in tables["items.csv"]:
         on_hand = int(str(row.get("on_hand") or 0).strip())
         if deltas.get(row.get("id"), 0) != on_hand:
             raise BundleError(
                 f"item {row.get('id')} Available={on_hand} disagrees with its "
                 f"movement ledger ({deltas.get(row.get('id'), 0)})")
+    _check_ordered_chains(tables, movements_by_item, issues)
     for issue_id, issue in issues.items():
         lines = lines_by_issue.get(issue_id, [])
         if not lines:
@@ -547,3 +553,98 @@ def _check_ledger_consistency(tables: dict) -> None:
         if stray:
             raise BundleError(
                 f"issue {issue_id} links a non-issue movement")
+    # Every REVERSAL movement must belong to a REVERSED issue; an ACTIVE
+    # issue carrying reversals is rejected above, but a reversal pointing at
+    # a missing or ACTIVE issue is also corrupt.
+    for issue_id, movements in movements_by_issue.items():
+        for mv in movements:
+            if (mv.get("kind") or "").strip() == "REVERSAL":
+                issue = issues.get(issue_id)
+                if issue is None or issue.get("status") != "REVERSED":
+                    raise BundleError(
+                        f"reversal movement {mv.get('id')} links non-reversed issue {issue_id}")
+
+
+def _check_ordered_chains(tables: dict, movements_by_item: dict, issues: dict) -> None:
+    """Validate per-item movement chains in deterministic timestamp order.
+
+    Order is (created_at, id): rows sharing a timestamp sort by ID so
+    validation is deterministic. Rules, matching the live services:
+
+    - exactly one OPENING per item, first in order, with delta == balance
+      (opening from zero; never negative);
+    - RECEIPT deltas are positive; ISSUE deltas negative; REVERSAL positive;
+    - every row satisfies balance_after == previous + delta with
+      balance_after >= 0, so historical negative balances are rejected even
+      when the aggregate sum matches the cached stock.
+    """
+    item_ids = {r.get("id") for r in tables["items.csv"]}
+    for item_id, movements in movements_by_item.items():
+        if item_id not in item_ids:
+            continue  # unknown-item error is raised in reference checks
+        ordered = sorted(
+            movements,
+            key=lambda r: ((r.get("created_at") or "").strip(), (r.get("id") or "")),
+        )
+        kinds = [(m.get("kind") or "").strip() for m in ordered]
+        if kinds.count("OPENING") != 1 or kinds[0] != "OPENING":
+            raise BundleError(
+                f"item {item_id} must start with exactly one OPENING movement")
+        running = 0
+        for index, mv in enumerate(ordered):
+            kind = (mv.get("kind") or "").strip()
+            try:
+                delta = int(str(mv.get("delta")).strip())
+                balance = int(str(mv.get("balance_after")).strip())
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise BundleError(
+                    f"invalid integers in movement {mv.get('id')}") from exc
+            if balance < 0:
+                raise BundleError(
+                    f"movement {mv.get('id')} has a negative balance")
+            if kind == "OPENING":
+                if index != 0:
+                    raise BundleError(
+                        f"movement {mv.get('id')} OPENING must be first")
+                if delta < 0 or balance != delta or running + delta != balance:
+                    raise BundleError(
+                        f"movement {mv.get('id')} has an inconsistent OPENING chain")
+            elif kind == "RECEIPT":
+                if delta <= 0:
+                    raise BundleError(
+                        f"movement {mv.get('id')} RECEIPT must add stock")
+                if running + delta != balance:
+                    raise BundleError(
+                        f"movement {mv.get('id')} breaks the ledger chain")
+            elif kind == "COUNT_ADJUST":
+                if running + delta != balance:
+                    raise BundleError(
+                        f"movement {mv.get('id')} breaks the ledger chain")
+            elif kind == "ISSUE":
+                if delta >= 0:
+                    raise BundleError(
+                        f"movement {mv.get('id')} ISSUE must remove stock")
+                if running + delta != balance:
+                    raise BundleError(
+                        f"movement {mv.get('id')} breaks the ledger chain")
+            elif kind == "REVERSAL":
+                if delta <= 0:
+                    raise BundleError(
+                        f"movement {mv.get('id')} REVERSAL must restore stock")
+                if running + delta != balance:
+                    raise BundleError(
+                        f"movement {mv.get('id')} breaks the ledger chain")
+            else:  # unknown kinds are rejected in reference checks
+                continue
+            if balance < 0 or running + delta < 0:
+                raise BundleError(
+                    f"movement {mv.get('id')} goes negative in history")
+            running = balance
+    # Items with no movements must be zero-stock; otherwise the aggregate
+    # check above already failed, but state the invariant explicitly.
+    for row in tables["items.csv"]:
+        if row.get("id") not in movements_by_item:
+            on_hand = int(str(row.get("on_hand") or 0).strip())
+            if on_hand != 0:
+                raise BundleError(
+                    f"item {row.get('id')} has no ledger but Available={on_hand}")

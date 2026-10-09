@@ -37,6 +37,9 @@ class Command(BaseCommand):
                             help="Window owner (must match the outer holder to nest)")
         parser.add_argument("--token", default=None,
                             help="Outer window token for nesting under a script-held window")
+        parser.add_argument("--force-takeover", action="store_true",
+                            help="Explicit audited takeover of a window held by a "
+                                 "failed update (writes stay closed throughout)")
 
     def handle(self, *args, **options):
         from django.conf import settings
@@ -57,9 +60,13 @@ class Command(BaseCommand):
         # post-restore re-acquire.
         try:
             token = guards.enter_maintenance(owner=owner, reason=reason,
-                                             token=options["token"])
+                                             token=options["token"],
+                                             force=bool(options["force_takeover"]))
         except MaintenanceActiveError as exc:
-            raise CommandError(f"restore refused: {exc}")
+            raise CommandError(
+                f"restore refused: {exc}; "
+                "re-run with --force-takeover for an explicit audited takeover "
+                "(writes stay closed) after stopping writers")
         try:
             try:
                 backup_mod.verify_sqlite_backup(options["backup"])

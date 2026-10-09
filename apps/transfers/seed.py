@@ -194,13 +194,18 @@ def _norm_person(p: dict, n: int) -> dict:
     name = str(_first(p, "name", "fullName", "full_name", default=f"Seed Person {n + 1}")).strip()
     email = str(_first(p, "email", "emailAddress", default="")).strip()
     # Preserve source roster context; anything unrecognized is kept verbatim
-    # in intake_metadata so a later migration can interpret it.
+    # in intake_metadata so a later migration can interpret it. The approved
+    # source uses the exact original keys arrived, homeStake, missionArrival,
+    # missionRelease, tLanguage and type: all are mapped to agreed fields
+    # below and listed here so they are never silently dropped.
     known = {"external_id", "externalid", "extid", "id", "name", "fullname",
              "full_name", "email", "emailaddress", "titleprefix", "title_prefix",
-             "title", "prefix", "arrivalstatus", "arrival_status", "status",
-             "stake", "mission", "language", "arrivaldate", "arrival_date",
-             "releasedate", "release_date", "personalemail", "personal_email"}
-    title = str(_first(p, "title_prefix", "titlePrefix", "title", "prefix",
+             "title", "prefix", "type", "arrivalstatus", "arrival_status", "status",
+             "arrived", "stake", "homestake", "home_stake", "mission", "language",
+             "tlanguage", "t_language", "arrivaldate", "arrival_date",
+             "missionarrival", "mission_arrival", "releasedate", "release_date",
+             "missionrelease", "mission_release", "personalemail", "personal_email"}
+    title = str(_first(p, "title_prefix", "titlePrefix", "title", "prefix", "type",
                        default="")).strip()
     # Split an "Elder Jane Doe" style name into prefix + remainder.
     if not title:
@@ -210,15 +215,26 @@ def _norm_person(p: dict, n: int) -> dict:
                 name = name[len(candidate) + 1:].strip()
                 break
     arrival_status = str(_first(p, "arrival_status", "arrivalStatus", "status",
-                                default="")).strip()
-    stake = str(_first(p, "stake", default="")).strip()
+                                "arrived", default="")).strip()
+    stake = str(_first(p, "stake", "homeStake", "home_stake", default="")).strip()
     mission = str(_first(p, "mission", default="")).strip()
-    language = str(_first(p, "language", default="")).strip()
-    arrival_date = _clean_date(_first(p, "arrival_date", "arrivalDate", default=""))
-    release_date = _clean_date(_first(p, "release_date", "releaseDate", default=""))
+    language = str(_first(p, "language", "tLanguage", "t_language", default="")).strip()
+    arrival_raw = _first(p, "arrival_date", "arrivalDate", "missionArrival",
+                         "mission_arrival", default="")
+    release_raw = _first(p, "release_date", "releaseDate", "missionRelease",
+                         "mission_release", default="")
+    arrival_date = _clean_date(arrival_raw)
+    release_date = _clean_date(release_raw)
     personal_email = str(_first(p, "personal_email", "personalEmail", default="")).strip()
     metadata = {k: v for k, v in p.items()
                 if k.lower() not in known and v not in (None, "")}
+    # Never silently lose an unparseable date: keep the raw source text in
+    # metadata so the value survives conversion even when it is not a valid
+    # ISO date for the typed field.
+    if str(arrival_raw or "").strip() and not arrival_date:
+        metadata.setdefault("arrival_date_raw", str(arrival_raw).strip())
+    if str(release_raw or "").strip() and not release_date:
+        metadata.setdefault("release_date_raw", str(release_raw).strip())
     return {"external_id": ext or f"SEED-{n + 1}", "name": name, "email": email,
             "title_prefix": title, "arrival_status": arrival_status,
             "stake": stake, "mission": mission, "language": language,
@@ -230,12 +246,30 @@ def _clean_date(value) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
-    from django.utils.dateparse import parse_date
+    from django.utils.dateparse import parse_date, parse_datetime
     try:
         parsed = parse_date(text)
     except ValueError:
         parsed = None
-    return parsed.isoformat() if parsed else ""
+    if parsed is not None:
+        return parsed.isoformat()
+    # Tolerate datetime strings and common slash forms without silently
+    # dropping the value: fall back to datetime parsing, then explicit
+    # MM/DD/YYYY and YYYY/MM/DD shapes.
+    try:
+        dt = parse_datetime(text)
+    except ValueError:
+        dt = None
+    if dt is not None:
+        return dt.date().isoformat()
+    import datetime as _dt
+    for fmt in ("%m/%d/%Y", "%Y/%m/%d", "%Y-%m-%dT%H:%M:%S%z",
+                "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return _dt.datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return ""
 
 
 def _to_int(value, default=0) -> int:
@@ -270,19 +304,30 @@ def _norm_item(i: dict, n: int) -> dict:
     category = str(_first(i, "category", "cat", "group", default="General")).strip() or "General"
     name = str(_first(i, "name", "item", "itemName", "product", "title", default=f"Seed Item {n + 1}")).strip()
     size = str(_first(i, "size", "variant", default="")).strip()
-    remaining = _first(i, "remaining", "stock", "onHand", "on_hand", "qty", "quantity", default=0)
+    # Opening-stock selection: `remain` is the approved source's quantity
+    # key and must win like `remaining`. Case-insensitive fallback in
+    # _first covers Remaining/Stock/OnHand capitalizations.
+    remaining = _first(i, "remaining", "remain", "stock", "onHand", "on_hand",
+                       "qty", "quantity", default=0)
     remaining_qty = _to_int(remaining, 0)
     out = _to_int(_first(i, "out", "givenOut", "issued", default=""), 0) if _first(i, "out", "givenOut", "issued", default="") != "" else 0
-    # Stock-minus-Out form: when explicit stock+out given without remaining.
-    has_stock = any(k in i and str(i[k]).strip() != "" for k in ("stock", "Stock"))
-    has_remaining = any(k in i for k in ("remaining", "Remaining", "onHand", "on_hand", "qty", "quantity"))
-    if has_stock and not has_remaining and any(k in i for k in ("out", "Out", "givenOut")):
-        remaining_qty = _to_int(i.get("stock", i.get("Stock", 0)), 0) - out
+    # Stock-minus-Out form: when explicit stock+out given without any
+    # remaining-style key (remaining/remain/onHand/qty/quantity, any case).
+    lowered = {str(k).lower(): k for k in i}
+    has_stock = any(k in lowered for k in ("stock",)) and str(i[lowered["stock"]]).strip() != ""
+    has_remaining = any(k in lowered for k in (
+        "remaining", "remain", "onhand", "on_hand", "qty", "quantity"))
+    if has_stock and not has_remaining and any(k in lowered for k in ("out", "givenout", "issued")):
+        stock_key = lowered.get("stock", "stock")
+        stock_val = i.get(stock_key, i.get("stock", i.get("Stock", 0)))
+        remaining_qty = _to_int(stock_val, 0) - out
     low = _to_int(_first(i, "low_threshold", "lowThreshold", "low", "threshold",
-                            "reorder", "reorderLevel", default=0), 0)
+                            "reorder", "reorderLevel", "reorder_level",
+                            "reorderlevel", "minimum", "alert_level", default=0), 0)
     remain_raw = _raw_text(i, "remain", "remaining", "stock", "onHand", "on_hand",
                            "qty", "quantity")
-    low_raw = _raw_text(i, "lowThreshold", "low_threshold", "low", "threshold")
+    low_raw = _raw_text(i, "lowThreshold", "low_threshold", "low", "threshold",
+                        "reorder", "reorderLevel")
     return {
         "category": category, "name": name or f"Seed Item {n + 1}", "size": size,
         "remaining": remaining_qty, "out": out, "low_threshold": max(0, low),
@@ -303,6 +348,7 @@ def seed_to_bundle_rows(seed) -> dict:
          "arrival_date": p.get("arrival_date", ""),
          "release_date": p.get("release_date", ""),
          "personal_email": p.get("personal_email", ""),
+         "intake_metadata": json.dumps(p.get("intake_metadata") or {}, sort_keys=True),
          "is_archived": "false", "archived_at": "",
          "version": "0"}
         for p in roster

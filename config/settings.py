@@ -35,6 +35,16 @@ _allowed = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 if not DEBUG and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must not be empty in production.")
+# Internal container probes (Compose healthcheck, update/restore readiness
+# gates) reach Gunicorn over plain HTTP at 127.0.0.1:8000 inside the Compose
+# network. Operators configure only the LAN address in DJANGO_ALLOWED_HOSTS;
+# loopback and the Compose service name are always allowed alongside it so
+# probes see the real application state instead of a 400 DisallowedHost.
+# This is not a wildcard: only loopback, localhost and the internal service
+# name are added, never "*".
+for _internal in ("127.0.0.1", "localhost", "app"):
+    if _internal not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_internal)
 
 _csrf_origins = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(",") if o.strip()]

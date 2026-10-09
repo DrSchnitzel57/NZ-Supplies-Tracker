@@ -2,14 +2,16 @@
 # The operator sets APP_HOST (LAN IP or hostname), APP_PORT and secrets in
 # .env (see .env.example). No public proxy admin port is exposed.
 #
-# Versioning is canonical: ${VERSION} is the single release pin. APP_VERSION
-# inside the container always equals VERSION so /readyz reports the exact
-# running release.
+# Versioning is canonical: IMAGE_BASE (or legacy IMAGE) names the repository
+# WITHOUT a tag; ${VERSION} is the single release pin. The running image is
+# always IMAGE_BASE:VERSION and APP_VERSION inside the container always
+# equals VERSION so /readyz reports the exact running release. Never put a
+# tag in IMAGE_BASE/IMAGE; the tag always comes from VERSION.
 name: supplies-tracker
 
 services:
   app:
-    image: ${IMAGE:-ghcr.io/example/supplies-tracker:${VERSION:-0.4.0}}
+    image: ${IMAGE_BASE:-${IMAGE:-ghcr.io/example/supplies-tracker}}:${VERSION:-0.4.0}
     restart: unless-stopped
     env_file:
       - .env

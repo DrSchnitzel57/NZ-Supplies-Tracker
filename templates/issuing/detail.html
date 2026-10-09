@@ -4,7 +4,7 @@
 <h1>Issue to {{ issue.missionary_name }}</h1>
 <p>Person: {{ issue.missionary_name }} ({{ issue.missionary_external_id }}) · Given by <strong>{{ issue.issued_by_username }}</strong> at {{ issue.issued_at }} · Status: <strong>{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</strong></p>
 {% if issue.status == "REVERSED" %}
-<p>Undone by <strong>{{ issue.reversed_by.username }}</strong> at {{ issue.reversed_at }}. Reason: {{ issue.reversal_reason }}</p>
+<p>Undone by <strong>{{ issue.reversed_by_username|default:issue.reversed_by.username }}</strong> at {{ issue.reversed_at }}. Reason: {{ issue.reversal_reason }}</p>
 {% endif %}
 {% if issue.note %}<p>Note: {{ issue.note }}</p>{% endif %}
 <h2>Items in this issue (original record — never changed)</h2>

@@ -36,11 +36,28 @@ class Issue(models.Model):
         on_delete=models.SET_NULL,
         related_name="reversals",
     )
+    # Actor snapshot: retained when the linked account is later renamed or
+    # removed, and preserved across bundle export/import without accounts.
+    reversed_by_username = models.CharField(max_length=150, blank=True, default="")
     idempotency_key = models.CharField(max_length=128, unique=True)
     version = models.IntegerField(default=0)
 
     class Meta:
         ordering = ["-issued_at"]
+
+    def save(self, *args, **kwargs):
+        # Keep durable actor snapshots when the linked accounts are later
+        # renamed or removed; never overwrite an explicit snapshot with "".
+        for fk, snapshot in (("issued_by", "issued_by_username"),
+                             ("reversed_by", "reversed_by_username")):
+            try:
+                if not getattr(self, snapshot) and getattr(self, f"{fk}_id"):
+                    user = getattr(self, fk)
+                    if user is not None and getattr(user, "username", ""):
+                        setattr(self, snapshot, user.username)
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Issue {self.pk} to {self.missionary_name}"

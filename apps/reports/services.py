@@ -224,7 +224,8 @@ def report_csv(family: str, include_archived: bool = False):
                  "person": f"{i.missionary_name} ({i.missionary_external_id})",
                  "status": "Undone" if i.status == Issue.REVERSED else "Current",
                  "given_by": i.issued_by_username,
-                 "undone_by": getattr(i.reversed_by, "username", "") or "",
+                 "undone_by": (i.reversed_by_username
+                               or getattr(i.reversed_by, "username", "") or ""),
                  "reason": i.reversal_reason or "",
                  "note": i.note or ""} for i in _full_history(flag)]
         return _csv_response(rows, ["when", "person", "status", "given_by",
@@ -286,7 +287,7 @@ def report_pdf(family: str, include_archived: bool = False):
         data = [["When", "Person", "Status", "Given by / undone by"]] + [
             [i.issued_at.strftime("%Y-%m-%d %H:%M") if i.issued_at else "", i.missionary_name,
              "Undone" if i.status == Issue.REVERSED else "Current",
-             i.issued_by_username + (f" / {(i.reversed_by.username if i.reversed_by else '')} ({i.reversal_reason})" if i.status == Issue.REVERSED else "")]
+             i.issued_by_username + (f" / {(i.reversed_by_username or (i.reversed_by.username if i.reversed_by else ''))} ({i.reversal_reason})" if i.status == Issue.REVERSED else "")]
             for i in _full_history(flag)]
     if len(data) == 1:
         data.append(["No rows yet.", "", "", ""][:len(data[0])])

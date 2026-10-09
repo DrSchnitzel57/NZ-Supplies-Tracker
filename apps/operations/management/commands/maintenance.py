@@ -39,7 +39,8 @@ class Command(BaseCommand):
             try:
                 token = guards.enter_maintenance(
                     owner=options["owner"], reason=options["reason"],
-                    force=options["force"])
+                    force=options["force"],
+                    token=options["token"] or None)
             except MaintenanceActiveError as exc:
                 raise CommandError(f"maintenance entry refused: {exc}")
             self.stdout.write(f"maintenance on owner={options['owner']} token={token}")

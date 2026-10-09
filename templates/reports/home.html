@@ -81,7 +81,7 @@
 <thead><tr><th>When</th><th>Person</th><th>Status</th><th>Given by / undone by</th></tr></thead>
 <tbody>
 {% for issue in recent %}
-<tr><td data-label="When">{{ issue.issued_at }}</td><td data-label="Person">{{ issue.missionary_name }}</td><td data-label="Status">{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</td><td data-label="Given by / undone by">{{ issue.issued_by_username }}{% if issue.status == "REVERSED" %} / {{ issue.reversed_by.username }} ({{ issue.reversal_reason }}){% endif %}</td></tr>
+<tr><td data-label="When">{{ issue.issued_at }}</td><td data-label="Person">{{ issue.missionary_name }}</td><td data-label="Status">{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</td><td data-label="Given by / undone by">{{ issue.issued_by_username }}{% if issue.status == "REVERSED" %} / {{ issue.reversed_by_username|default:issue.reversed_by.username }} ({{ issue.reversal_reason }}){% endif %}</td></tr>
 {% empty %}<tr><td colspan="4">No issues yet.</td></tr>
 {% endfor %}
 </tbody>
