@@ -4,10 +4,9 @@
 <div class="page-head"><h1>System settings</h1><div class="sub">Administrator-only · no secrets stored here</div></div>
 <p class="help">Administrator-only. No secrets are stored here.</p>
 <div class="card"><div class="bd">
-<form method="post" class="stack">
+<form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
-<label>Site notice (shown to staff) <input name="site_notice" value="{{ settings.site_notice|default:'' }}" maxlength="500"></label>
-<label>Default low-stock alert level for new items <input name="default_low_threshold" value="{{ settings.default_low_threshold|default:'0' }}" inputmode="numeric"></label>
+{% include "components/form_fields.html" %}
 <p><button type="submit" class="primary">Save settings</button></p>
 </form>
 </div></div>

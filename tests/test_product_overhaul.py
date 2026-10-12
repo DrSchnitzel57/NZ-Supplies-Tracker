@@ -229,3 +229,86 @@ class ProductSafetyTests(TestCase):
         before = self.client.session.get('last_activity')
         self.client.get('/api/session/')
         self.assertEqual(self.client.session.get('last_activity'), before)
+
+    def test_account_error_keeps_username_but_never_password(self):
+        self.fresh()
+        response = self.client.post('/accounts/users/create/', {
+            'username': 'Synthetic-account', 'password': '123', 'is_admin': '1'})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'value="Synthetic-account"', status_code=400)
+        self.assertNotContains(response, 'value="123"', status_code=400)
+
+    def test_excel_date_cells_and_overlong_profile_are_previewed_correctly(self):
+        import io
+        import openpyxl
+        from apps.transfers.row_imports import read_table
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.append(['id', 'name', 'arrival_date', 'mission'])
+        sheet.append(['SYN-XLSX', 'Synthetic Excel', datetime(2026, 10, 12), 'Mission'])
+        buf = io.BytesIO()
+        book.save(buf)
+        rows = read_table(filename='synthetic.xlsx', content=buf.getvalue())
+        preview = self.preview(rows)
+        confirm_row_import(actor=self.admin, preview=preview, selected=None)
+        self.assertEqual(Missionary.objects.get(external_id='SYN-XLSX').arrival_date, date(2026, 10, 12))
+        result = build_preview(kind='roster', mode='add_update', rows=[
+            ['id', 'name', 'mission'], ['SYN-LONG', 'Synthetic', 'x' * 129]])
+        self.assertEqual(len(result['errors']), 1)
+
+    def test_repeated_shortage_shows_original_and_actual_revised_quantities(self):
+        person = make_missionary(self.admin)
+        available = make_item(self.admin, opening_qty=2)
+        empty = make_item(self.admin, opening_qty=0)
+        response = self.client.post('/issue/confirm/', {
+            'missionary_id': str(person.pk), 'idempotency_key': 'second-shortage',
+            'p-item': str(available.pk), 'p-qty': '4',
+            'item-0': str(available.pk), 'qty-0': '8',
+            'item-1': str(empty.pk), 'qty-1': '3', 'note': 'Original retained'})
+        self.assertEqual(response.status_code, 409)
+        rows = {row['item_id']: row for row in response.context['shortage_rows'] + response.context['ok_rows']}
+        self.assertEqual(rows[str(available.pk)]['requested'], 8)
+        self.assertEqual(rows[str(available.pk)]['revised'], 2)
+        self.assertEqual(rows[str(empty.pk)]['requested'], 3)
+        self.assertEqual(rows[str(empty.pk)]['revised'], 0)
+        self.assertFalse(Issue.objects.exists())
+
+    def test_history_pagination_keeps_archived_default_and_explicit_exclusion(self):
+        person = make_missionary(self.admin)
+        Missionary.objects.filter(pk=person.pk).update(is_archived=True)
+        Issue.objects.bulk_create([Issue(missionary=person, missionary_name='Archived synthetic',
+            missionary_external_id=person.external_id, issued_by=self.admin,
+            issued_by_username=self.admin.username, idempotency_key=f'arch-page-{i}') for i in range(51)])
+        self.assertEqual(len(self.client.get('/issue/history/').context['issues']), 50)
+        self.assertEqual(len(self.client.get('/issue/history/', {'page': 2}).context['issues']), 1)
+        self.assertEqual(len(self.client.get('/issue/history/', {'filtered': '1'}).context['issues']), 0)
+
+    def test_undo_maintenance_refusal_keeps_reason_and_history(self):
+        from apps.operations.guards import maintenance_mode
+        person = make_missionary(self.admin)
+        item = make_item(self.admin)
+        issue = issuing.create_issue(actor=self.admin, missionary_id=person.pk,
+            lines=[{'item_id': str(item.pk), 'quantity': 2}], idempotency_key='undo-keep')
+        with maintenance_mode(owner='synthetic-test', reason='Synthetic maintenance'):
+            response = self.client.post(f'/issue/{issue.pk}/undo/', {'reason': 'Keep correction reason'})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'value="Keep correction reason"', status_code=400)
+        issue.refresh_from_db()
+        self.assertEqual(issue.status, Issue.ACTIVE)
+
+    def test_malformed_original_on_confirmation_is_a_bound_error_not_500(self):
+        person = make_missionary(self.admin)
+        item = make_item(self.admin, opening_qty=0)
+        response = self.client.post('/issue/confirm/', {
+            'missionary_id': str(person.pk), 'idempotency_key': 'malformed-original',
+            'item_id': 'invalid-uuid', 'quantity': '2',
+            'p-item': str(item.pk), 'p-qty': '1', 'note': 'Retain this note'})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Retain this note', status_code=400)
+        self.assertFalse(Issue.objects.exists())
+
+    def test_invalid_email_is_a_preview_row_error_not_a_confirm_failure(self):
+        result = build_preview(kind='roster', mode='add_update', rows=[
+            ['id', 'name', 'email'], ['SYN-EMAIL', 'Synthetic email', 'invalid@']])
+        self.assertEqual(len(result['errors']), 1)
+        self.assertEqual(result['valid'], [])

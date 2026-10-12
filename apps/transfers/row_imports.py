@@ -130,6 +130,10 @@ def read_table(*, filename: str, content: bytes) -> list[list[str]]:
             for cell in row:
                 if cell is None:
                     cells.append("")
+                elif hasattr(cell, "isoformat"):
+                    # Excel date cells are datetime objects, not display strings.
+                    from datetime import datetime
+                    cells.append(cell.date().isoformat() if isinstance(cell, datetime) else cell.isoformat())
                 elif isinstance(cell, bool):
                     cells.append("TRUE" if cell else "FALSE")
                 elif isinstance(cell, (int, float)):
@@ -244,6 +248,12 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
         if not name:
             problems.append("name is required")
         personal = cell("personal_email")
+        for field in ROSTER_ALIASES:
+            if field in ("arrival_date", "release_date", "reason"):
+                continue
+            limit = Missionary._meta.get_field(field).max_length
+            if limit and len(cell(field)) > limit:
+                problems.append(f"{field.replace('_', ' ')} is too long (limit {limit})")
         if len(ext) > 64:
             problems.append("external ID is too long (limit 64)")
         if len(name) > 255:
@@ -258,10 +268,14 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
             action = "update"
         elif mode == "replace":
             action = "create"
-        if email and "@" not in email:
-            problems.append("email looks invalid")
-        if personal and "@" not in personal:
-            problems.append("personal email looks invalid")
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from django.core.validators import validate_email
+        for field, value in (("email", email), ("personal email", personal)):
+            if value:
+                try:
+                    validate_email(value)
+                except DjangoValidationError:
+                    problems.append(f"{field} looks invalid")
         for label in ("arrival_date", "release_date"):
             raw = cell(label)
             if raw:

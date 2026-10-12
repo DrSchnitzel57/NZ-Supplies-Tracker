@@ -48,27 +48,28 @@ def _parse_lines(post) -> list[dict]:
         except ValueError:
             raise ValueError("Choose a valid item.")
         lines.append({"item_id": item_id, "quantity": qty})
-    # Single-line quick form fallback.
-    if not lines:
-        single_item = (post.get("item_id") or "").strip()
-        single_qty = (post.get("quantity") or "").strip()
-        if single_item or single_qty:
-            try:
-                qty = int(single_qty)
-            except (TypeError, ValueError):
-                raise ValueError("Quantities must be whole numbers.")
-            lines.append({"item_id": single_item, "quantity": qty})
+    # Non-JS catalogue additions and the legacy single-line endpoint.
+    single_item = (post.get("item_id") or "").strip()
+    single_qty = (post.get("quantity") or "").strip()
+    if single_item or (single_qty and not lines):
+        try:
+            qty = int(single_qty)
+        except (TypeError, ValueError):
+            raise ValueError("Quantities must be whole numbers.")
+        try:
+            uuid.UUID(single_item)
+        except ValueError:
+            raise ValueError("Choose a valid item.")
+        lines.append({"item_id": single_item, "quantity": qty})
     return lines
 
 
 def _form_context(draft_key=None, draft_lines=None, missionary_id="", note=""):
     missionaries = list(
-        Missionary.objects.filter(is_archived=False).order_by("name")[:2000]
+        Missionary.objects.filter(is_archived=False).order_by("name")
     )
     items = list(
-        Item.objects.filter(is_archived=False).order_by("category", "name", "size")[
-            :2000
-        ]
+        Item.objects.filter(is_archived=False).order_by("category", "name", "size")
     )
     if draft_lines is None:
         draft_lines = []
@@ -86,55 +87,19 @@ def _form_context(draft_key=None, draft_lines=None, missionary_id="", note=""):
 
 
 def _shortage_context(*, missionary, requested_lines, err, draft_key, return_to="/issue/"):
-    item_map = {
-        str(i.pk): i for i in Item.objects.filter(pk__in=[s["item_id"] for s in err.shortages])
-    }
-    # Also include proposal items for labels.
-    for entry in err.proposal:
-        if entry["item_id"] not in item_map:
-            try:
-                item_map[entry["item_id"]] = Item.objects.get(pk=entry["item_id"])
-            except Item.DoesNotExist:
-                continue
     requested_map = {}
     for entry in requested_lines:
         requested_map[str(entry["item_id"])] = requested_map.get(str(entry["item_id"]), 0) + int(entry["quantity"])
-    rows = []
-    for short in err.shortages:
-        item = item_map.get(short["item_id"])
-        revised = next(
-            (p["quantity"] for p in err.proposal if p["item_id"] == short["item_id"]),
-            0,
-        )
-        rows.append(
-            {
-                "item": item,
-                "item_id": short["item_id"],
-                "requested": short["requested"],
-                "available": short["available"],
-                "revised": revised,
-            }
-        )
-    # Lines that are fully available (not in shortages) still show as-is.
-    shortage_ids = {s["item_id"] for s in err.shortages}
-    ok_rows = []
-    for entry in requested_lines:
-        if str(entry["item_id"]) not in shortage_ids and str(entry["item_id"]) not in [r["item_id"] for r in ok_rows]:
-            item = item_map.get(str(entry["item_id"]))
-            if item is None:
-                try:
-                    item = Item.objects.get(pk=entry["item_id"])
-                except Item.DoesNotExist:
-                    continue
-            ok_rows.append(
-                {
-                    "item": item,
-                    "item_id": str(entry["item_id"]),
-                    "requested": requested_map[str(entry["item_id"])],
-                    "available": item.on_hand,
-                    "revised": requested_map[str(entry["item_id"])],
-                }
-            )
+    item_map = {str(item.pk): item for item in Item.objects.filter(pk__in=requested_map)}
+    revised = {str(entry['item_id']): entry['quantity'] for entry in err.proposal}
+    rows, ok_rows = [], []
+    # Always compare the original request against the actual proposal, including
+    # items dropped at the first review. Never suggest an excluded line is issued.
+    for item_id, requested in requested_map.items():
+        item = item_map.get(item_id)
+        row = {'item': item, 'item_id': item_id, 'requested': requested,
+               'available': item.on_hand if item else 0, 'revised': revised.get(item_id, 0)}
+        (rows if row['revised'] < requested else ok_rows).append(row)
     return {
         "missionary": missionary,
         "shortage_rows": rows,
@@ -209,7 +174,6 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
         missionary = None
     if missionary is None:
         messages.error(request, "Choose a person to issue goods to.")
-        ctx = _form_context(draft_key=idem, missionary_id="", note=note)
         # Keep the typed lines so nothing is lost.
         kept = []
         for entry in lines:
@@ -244,7 +208,6 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
     except DomainError as exc:
         messages.error(request, f"Could not issue goods: {exc}")
         ctx = _form_context(draft_key=idem, missionary_id=missionary_id, note=note, draft_lines=lines)
-        kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in lines]
         return render(request, template, ctx, status=400)
     messages.success(request, f"Issued goods to {issue.missionary_name}.")
     if request.headers.get("X-Requested-With") == "fetch":
@@ -268,6 +231,14 @@ def issue_confirm(request):
         messages.error(request, "Sign in as the original staff member. Nothing was issued.")
         return render(request, "issuing/issue.html", _form_context(), status=409)
     proposal = []
+    try:
+        original = _parse_lines(request.POST)
+    except ValueError as exc:
+        original = [{"item_id": request.POST.get(f"item-{i}", ""),
+                     "quantity": request.POST.get(f"qty-{i}", "")} for i in _line_indices(request.POST)]
+        messages.error(request, f"The original request was unclear: {exc}")
+        return render(request, 'issuing/issue.html', _form_context(
+            draft_key=idem, missionary_id=missionary_id, note=note, draft_lines=original), status=400)
     p_items = request.POST.getlist("p-item")
     p_qtys = request.POST.getlist("p-qty")
     if p_items:
@@ -291,14 +262,13 @@ def issue_confirm(request):
             proposal = []
     if not proposal:
         messages.error(request, "The revised list was unclear. Please try again.")
-        ctx = _form_context(draft_key=idem, missionary_id=missionary_id, note=note)
+        ctx = _form_context(draft_key=idem, missionary_id=missionary_id, note=note, draft_lines=original)
         return render(request, "issuing/issue.html", ctx, status=400)
     try:
         missionary = Missionary.objects.get(pk=missionary_id)
     except (Missionary.DoesNotExist, ValueError, TypeError, DjangoValidationError):
         messages.error(request, "Choose a person to issue goods to.")
-        kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in proposal]
-        ctx = _form_context(draft_key=idem, missionary_id="", note=note)
+        kept = original or proposal
         ctx = _form_context(draft_key=idem, missionary_id="", note=note, draft_lines=kept)
         return render(request, "issuing/issue.html", ctx, status=400)
     try:
@@ -310,9 +280,8 @@ def issue_confirm(request):
             idempotency_key=idem,
         )
     except InsufficientStockError as exc:
-        original = _parse_lines(request.POST) or proposal
         ctx = _shortage_context(
-            missionary=missionary, requested_lines=original, err=exc, draft_key=idem
+            missionary=missionary, requested_lines=original or proposal, err=exc, draft_key=idem
         )
         ctx["note"] = note
         messages.warning(
@@ -322,8 +291,7 @@ def issue_confirm(request):
         return render(request, "issuing/shortage.html", ctx, status=409)
     except DomainError as exc:
         messages.error(request, f"Could not issue goods: {exc}")
-        kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in proposal]
-        ctx = _form_context(draft_key=idem, missionary_id=str(missionary.pk), note=note)
+        kept = original or proposal
         ctx = _form_context(draft_key=idem, missionary_id=str(missionary.pk), note=note, draft_lines=kept)
         return render(request, "issuing/issue.html", ctx, status=400)
     messages.success(request, f"Issued revised quantities to {issue.missionary_name}.")
@@ -337,7 +305,7 @@ def issue_list(request):
     data = request.GET.copy()
     # History is an immutable operational record: include archives by default.
     # The visible checkbox makes a deliberate active-only view available.
-    if not data and 'archived' not in data:
+    if data.get('filtered') != '1' and 'archived' not in data:
         data['archived'] = '1'
     form = ReportFilters(data, family='history')
     valid = form.is_valid()
@@ -364,8 +332,9 @@ def issue_reverse(request, pk):
         issuing.reverse_issue(actor=request.user, issue_id=issue.pk, reason=reason)
     except AlreadyReversedError:
         messages.error(request, "This issue was already undone. Nothing changed.")
+        return redirect("issue-detail", pk=issue.pk)
     except DomainError as exc:
         messages.error(request, f"Could not undo this issue: {exc}")
-        return redirect("issue-detail", pk=issue.pk)
+        return render(request, 'issuing/detail.html', {'issue': issue, 'undo_reason': reason}, status=400)
     messages.success(request, "Undone: the goods were added back to Available.")
     return redirect("issue-detail", pk=issue.pk)

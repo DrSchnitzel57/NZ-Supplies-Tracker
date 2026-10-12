@@ -29,3 +29,10 @@ class ThrottledLoginForm(AuthenticationForm):
 
 class ForcedPasswordChangeForm(PasswordChangeForm):
     pass
+
+
+class AdminUserForm(forms.Form):
+    username = forms.CharField(max_length=150, validators=User._meta.get_field('username').validators,
+                               widget=forms.TextInput(attrs={'autocomplete': 'off'}))
+    password = forms.CharField(label='Temporary password', widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
+    is_admin = forms.BooleanField(required=False, label='Administrator')

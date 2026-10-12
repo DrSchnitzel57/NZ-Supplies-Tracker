@@ -121,27 +121,25 @@ def dashboard_api(request):
 def settings_view(request):
     from apps.accounts import reauth as reauth_mod
     from apps.operations.settings_service import update_settings
+    from apps.operations.forms import SettingsForm
 
+    current = {s.key: s.value for s in SystemSetting.objects.all()}
+    form = SettingsForm(request.POST if request.method == "POST" else None,
+                        initial={"default_low_threshold": 0, **current})
     if request.method == "POST":
         if not reauth_mod.reauth_fresh(request):
             messages.error(request, "Confirm your password first (recent sign-in required).")
             return redirect("/admin-area/reauth/?next=/admin-area/settings/")
-        notice = (request.POST.get("site_notice") or "").strip()[:500]
-        threshold_raw = (request.POST.get("default_low_threshold") or "").strip()
-        try:
-            threshold = int(threshold_raw) if threshold_raw else 0
-        except ValueError:
-            messages.error(request, "Default alert level must be a whole number.")
-            return redirect("ops-settings")
-        try:
-            update_settings(actor=request.user, notice=notice, threshold=threshold)
-        except DomainError as exc:
-            messages.error(request, f"Settings refused: {exc}")
-            return redirect("ops-settings")
-        messages.success(request, "Saved system settings.")
-        return redirect("ops-settings")
-    current = {s.key: s.value for s in SystemSetting.objects.all()}
-    return render(request, "operations/settings.html", {"settings": current})
+        if form.is_valid():
+            try:
+                update_settings(actor=request.user, notice=form.cleaned_data['site_notice'],
+                                threshold=form.cleaned_data['default_low_threshold'])
+            except DomainError as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(request, "Saved system settings.")
+                return redirect("ops-settings")
+    return render(request, "operations/settings.html", {"form": form}, status=400 if form.is_bound else 200)
 
 
 @admin_required

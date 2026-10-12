@@ -1,99 +1,60 @@
 # Quick-start guide (one page)
 
-You need only a **browser link and an account** — no Docker, no terminal, no
-technical setup. Every name, ID and number below is a synthetic example.
+You need only a **browser link and a staff account**. All examples are synthetic.
+Home shows low stock and recent work. On a narrow screen, **Menu** reaches every
+section, help and the light/dark theme.
 
 ## 1. Sign in
 
-```
-[ Sign in ]
-Username: [ staff-ava        ]
-Password: [ ••••••••         ]
-[ Sign in ]
-```
+Ask an administrator for your account. Change a temporary password on first
+sign-in. Check your username at the top; sign out when leaving a shared computer.
 
-Open the link your administrator gave you and sign in. Your username appears
-at the top of every page; choose **Sign out** when you leave a shared
-computer. After 30 minutes without clicking, your sign-in expires: a warning
-appears at the top (“Your sign-in is about to expire”). Save your work and
-sign in again in a new tab — background refresh never keeps you signed in.
+![Synthetic sign-in screen.](../static/img/01-sign-in.png)
 
-![Synthetic sign-in screen: username and password fields with a Sign in
-button.](../static/img/01-sign-in.png)
+## 2. Issue goods
 
-## 2. Issue goods (the main daily task)
+Open **Issue goods** (or **Missionaries → a name → Issue goods to …**).
+Search then **explicitly choose** the missionary. Choose a catalogue item and
+quantity, then **Add to issue**. Repeat: the same item combines into one line;
+up to **50 distinct items** are allowed. Review the named summary and quantities,
+then choose **Issue goods**. Changing the recipient clears items/note after confirmation.
 
-```
-[ Issue goods ]   ← the highlighted button at the top
-Person: [ Synthetic Person A (EXT-0001) ▾ ]
-Item 1: [ Hygiene / Soap Bar — Available: 12 ▾ ]  Qty [ 2 ]
-Item 2: [ — Choose —                          ▾ ]  Qty [   ]
-[ Issue goods ]
-```
+![Synthetic recipient, catalogue and named issue summary.](../static/img/03-issue-goods.png)
 
-1. Open **Issue goods**.
-2. Choose the person (active records only).
-3. Add one or more items with quantities and choose **Issue goods**.
-4. Repeating the same item just adds the quantities together.
+If stock is short, **nothing is issued yet**. Review “You asked for / Available
+now / Revised quantity” and **Confirm revised quantities**, or choose **Back
+without issuing** to retain the original draft. Confirmation rechecks stock.
 
-If anything is short, **nothing is issued yet**. You will see a review page:
+## 3. Add stock or correct a count
 
-```
-Not enough stock — review before confirming
-Item               You asked for   Available now   Revised quantity
-Hygiene / Soap Bar       5               3               3
-```
+Open **Inventory → the item**. Use **Add stock** for a delivery, with quantity
+and reason. Use **Correct stock count** for the actual shelf count, with a reason;
+it records a correction, never an issue. A stale count keeps your input but needs
+review: check current stock in another tab, reopen the item and count again.
 
-Choose **Confirm revised quantities** to issue what is available, or go back
-— your original request is kept. Stock is checked again when you confirm, so
-a second review can appear if someone else just issued. Your draft stays on
-the page after any error; nothing is lost and double-clicking cannot issue
-twice.
-
-![Synthetic dashboard with low-stock and recent issues.](../static/img/02-dashboard.png)
-
-![Synthetic issuing screen: choose a person, add item rows, confirm shortages explicitly.](../static/img/03-issue-goods.png)
-
-You can also issue from a person’s profile page (**Missionaries → a name →
-Issue goods to …**). It uses the same check.
-
-## 3. Add stock
-
-```
-Inventory → “Hygiene / Soap Bar” → [ Add stock ]
-Quantity to add: [ 10 ]   Reason: [ delivery from supplier ]
-```
-
-Open **Inventory**, open the item, fill in **Add stock** with a quantity and a
-reason, and choose **Add stock**. “Available” is what is on the shelf;
-“Given out (net)” counts only current issues.
-
-If the shelf count itself is wrong, use **Correct stock count**: enter what
-you actually counted plus a reason (for example, “recount found a damaged
-box”). The difference is recorded as a correction — it never invents issues.
-
-![Synthetic item page: Available, net given out, Add stock and Correct stock count.](../static/img/04-stock-detail.png)
+![Synthetic separate Add stock and Correct stock count forms.](../static/img/04-stock-detail.png)
 
 ## 4. Undo a mistake
 
-```
-History → Issue to Synthetic Person A → [ Undo this issue ]
-Reason: [ wrong person selected ]   [ Undo this issue ]
-```
+Open **Issue goods → History**, filter/page to the issue and open it. Give a reason
+and choose **Undo this issue**. All goods in that issue return to Available, once
+only; the original record and staff attribution stay in history.
 
-Open **History**, open the issue, give a reason and choose **Undo this
-issue**. Everything in that issue goes back to Available. An issue can only
-be undone once; the original record (who gave it and when, who undid it and
-when) is kept.
+**Reports** selects one report with shared screen/CSV/A4 PDF filters. Downloads
+include all matching rows. Current net excludes all undone issues (even those
+undone later); Available stock is stock **now**, not as-of a date.
 
-![Synthetic reports: per-item, per-person, low-stock, stock, category, arrivals and history.](../static/img/05-reports.png)
+![Synthetic report filters and CSV/PDF downloads.](../static/img/05-reports.png)
 
-## Tips
+## Keep an unfinished draft safe
 
-- Numbers refresh about every 15 seconds without touching your form. If
-  “Connection: offline” appears, keep your draft and retry — nothing is sent
-  in the background and no personal data is stored in the browser.
-- Every field works with keyboard only (Tab to move, Enter to submit), and
-  tables stack into cards on narrow screens.
-- Stuck? Ask an administrator — everyday work never needs the Users or
-  technical tools.
+- Drafts last **only in this open tab**. Reload/close discards them. No autosave,
+  personal browser storage, offline queue or background mutation.
+- Idle sign-in expires after 30 minutes. Keep the draft tab open, sign in in a
+  different tab **as the same staff member**, then retry here. The app refreshes
+  security tokens and checks identity; it never submits automatically.
+- Offline/no reply: success can be uncertain. Retry the **same original request**
+  deliberately, or inspect History in another tab. Do not start a duplicate issue.
+- Numbers refresh about every 15 seconds without changing inputs/focus or renewing
+  idle sign-in. Keyboard: Tab between controls; Enter picks search results or adds
+  an item from the Add to issue button. Ask an administrator if unsure.

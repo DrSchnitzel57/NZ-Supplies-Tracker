@@ -33,8 +33,10 @@ def test_account_lifecycle_with_fresh_identity(page, live_server, externals):
         page.click("text=Create account")
     assert not User.objects.filter(username="blocked-1").exists()
     assert "Confirm your password" in page.content()
-    _reauth(page, live_server, pw, "/accounts/users/")
-    page.goto(f"{live_server.url}/accounts/users/")
+    # Follow the offered return path, not a manually substituted safe URL.
+    page.fill('input[name=password]', pw)
+    page.click('main button[type=submit]')
+    page.wait_for_url(f'{live_server.url}/accounts/users/')
     page.fill("input[name=username]", "ui-staff-1")
     page.fill("input[name=password]", "TempPass123!")
     with page.expect_navigation():
@@ -99,9 +101,9 @@ def test_settings_notice_and_threshold(page, live_server, externals):
     page.goto(f"{live_server.url}/admin-area/settings/")
     page.fill("input[name=site_notice]", "Browser notice 123")
     page.fill("input[name=default_low_threshold]", "6")
-    with page.expect_navigation():
-        page.click("main button[type=submit]")
-    assert "Saved system settings" in page.content()
+    page.click("main button[type=submit]")
+    from playwright.sync_api import expect
+    expect(page.locator('main')).to_contain_text('Saved system settings')
     page.goto(f"{live_server.url}/")
     assert "Browser notice 123" in page.content()
     assert AuditEvent.objects.filter(action="settings.updated").count() == 1

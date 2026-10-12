@@ -18,7 +18,7 @@
 
 <div class="grid two">
 <div class="card"><div class="hd"><h2>Add stock</h2></div><div class="bd">
-<form method="post" action="/inventory/{{ item.pk }}/add-stock/" class="stack" data-once>
+<form method="post" action="/inventory/{{ item.pk }}/add-stock/" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" with form=receive_form %}
 <p><button type="submit" class="primary">Add stock</button></p>
@@ -27,7 +27,7 @@
 
 <div class="card"><div class="hd"><h2>Correct stock count</h2></div><div class="bd">
 <p class="help">Count what is actually on the shelf and enter it here. The difference is recorded as a correction with your reason. If someone else changed stock after you opened this page, you will be asked to refresh first.</p>
-<form method="post" action="/inventory/{{ item.pk }}/correct-count/" class="stack" data-once>
+<form method="post" action="/inventory/{{ item.pk }}/correct-count/" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" with form=correct_form %}
 <p class="help">A stale count is not refreshed automatically. Your count and reason stay here; <a href="/inventory/{{ item.pk }}/" target="_blank" rel="noopener">review current stock in another tab</a>, then reopen this page to count again.</p>

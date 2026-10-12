@@ -91,9 +91,9 @@ def test_undo_issue_restores_stock_once(page, live_server, externals):
         note="", idempotency_key=f"undo-{tag()}")
     page.goto(f"{live_server.url}/issue/{issue.pk}/")
     page.fill("input[name=reason], textarea[name=reason]", "wrong person")
-    with page.expect_navigation():
-        page.click("form[action$='/undo/'] button[type=submit]")
-    assert "Undone" in page.content()
+    page.click("form[action$='/undo/'] button[type=submit]")
+    from playwright.sync_api import expect
+    expect(page.locator('main')).to_contain_text('Undone')
     item.refresh_from_db()
     assert item.on_hand == 10
     # The undone issue offers no second undo: the form is gone, history kept.

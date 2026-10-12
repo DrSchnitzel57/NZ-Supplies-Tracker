@@ -4,7 +4,7 @@
 <div class="page-head"><h1>{% if mode == "create" %}Add a person{% else %}Edit person{% endif %}</h1><div class="sub">Roster record · renames never rewrite past issue history</div></div>
 <p class="help">Names and IDs are used on issue records. Changing them here never rewrites past history — old records keep their original snapshot.</p>
 <div class="card"><div class="bd">
-<form method="post" class="stack" data-once>
+<form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" %}
 <p class="help">Clear an optional field here to remove its value. Imports preserve blank fields. A conflicting edit keeps your input; reopen the current record and review before retrying.</p>

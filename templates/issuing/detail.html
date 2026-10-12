@@ -18,9 +18,9 @@
 {% if issue.status == "ACTIVE" %}
 <div class="card"><div class="hd"><h2>Undo this issue</h2></div><div class="bd">
 <p class="help">Made a mistake? Undoing adds everything in this issue back to Available. You must give a reason. An issue can only be undone once.</p>
-<form method="post" action="/issue/{{ issue.pk }}/undo/" class="stack" data-once>
+<form method="post" action="/issue/{{ issue.pk }}/undo/" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
-<label>Reason for undoing (required) <input name="reason" required placeholder="For example: wrong person selected"></label>
+<label>Reason for undoing (required) <input name="reason" value="{{ undo_reason }}" required maxlength="4000" placeholder="For example: wrong person selected"></label>
 <p><button type="submit" class="danger">Undo this issue</button></p>
 </form>
 </div></div>

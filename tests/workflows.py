@@ -261,7 +261,8 @@ class ReversalFlowTests(TestCase):
         issue = Issue.objects.get()
         # Empty reason keeps the issue active.
         response = self.client.post(f"/issue/{issue.pk}/undo/", {"reason": " "})
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'reason is required', status_code=400)
         issue.refresh_from_db()
         self.assertEqual(issue.status, "ACTIVE")
         response = self.client.post(

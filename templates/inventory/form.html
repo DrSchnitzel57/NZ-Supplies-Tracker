@@ -4,7 +4,7 @@
 <div class="page-head"><h1>{% if mode == "create" %}Add an item{% else %}Edit item{% endif %}</h1><div class="sub">Matched by category, name and size · alert level drives low-stock warnings</div></div>
 <p class="help">Items are matched by category, name and size (ignoring extra spaces and letter case). Set the low-stock alert level so the dashboard can warn you.</p>
 <div class="card"><div class="bd">
-<form method="post" class="stack" data-once>
+<form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" %}
 <p class="help">Stock is changed separately through Add stock or Correct stock count. Conflicting edits keep your input; review the current record before retrying.</p>

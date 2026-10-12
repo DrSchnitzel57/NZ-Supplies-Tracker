@@ -133,6 +133,58 @@
 
   var EXPIRY_WARN_SECONDS = 5 * 60;
 
+  function safeForms() {
+    document.querySelectorAll("form[data-safe-form]").forEach(function (form) {
+      if (form.dataset.recoveryReady) return;
+      form.dataset.recoveryReady = "1";
+      var pending = null;
+      var busy = false;
+      var status = document.createElement("p"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite"); form.prepend(status);
+      function freeze(value) {
+        form.querySelectorAll("input:not([type=hidden]), select, textarea").forEach(function (field) { field.disabled = value; });
+      }
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        if (busy) return;
+        busy = true;
+        var button = form.querySelector("button[type=submit]"); button.disabled = true;
+        var data = pending || new FormData(form);
+        try {
+          var identity = await fetch("/api/session/", {cache: "no-store", credentials: "same-origin"});
+          if (!identity.ok) { status.textContent = "Sign in as the same staff member in another tab, then retry here. Your input is retained; nothing was sent."; return; }
+          var security = await identity.json();
+          if (security.user_id !== form.dataset.draftUser) { status.textContent = "This form belongs to a different account. Sign in as the original staff member; nothing was sent."; return; }
+          data.set("csrfmiddlewaretoken", security.csrf_token);
+          var reply, text;
+          try {
+            reply = await fetch(form.action, {method: "POST", body: data, credentials: "same-origin"});
+            text = await reply.text();
+          } catch (error) {
+            pending = data; freeze(true); status.textContent = "No reply — success is not confirmed. Retry this same request deliberately, or review the current record in another tab. Nothing is queued."; return;
+          }
+          if (reply.status >= 500) { pending = data; freeze(true); status.textContent = "Server error — success is not confirmed. Retry deliberately or review the current record in another tab."; return; }
+          if (reply.status === 403) { status.textContent = "Security token changed. Your input is retained; retry here to refresh it safely."; return; }
+          if (reply.redirected && new URL(reply.url).pathname.startsWith("/accounts/login/")) { status.textContent = "Sign in in another tab as the original staff member, then retry here."; return; }
+          if (reply.redirected && new URL(reply.url).pathname === "/admin-area/reauth/") {
+            status.textContent = "Confirm your password in another tab, then retry this retained form. ";
+            var link = document.createElement("a"); link.href = reply.url; link.target = "_blank"; link.rel = "noopener"; link.textContent = "Confirm identity"; status.append(link); return;
+          }
+          var result = new DOMParser().parseFromString(text, "text/html");
+          var main = result.getElementById("main");
+          if (!main) { status.textContent = "Unexpected reply. Your input is retained; review the record before retrying."; return; }
+          pending = null;
+          document.getElementById("main").replaceChildren.apply(document.getElementById("main"), Array.from(main.childNodes).map(function (node) { return document.importNode(node, true); }));
+          history.replaceState(null, "", reply.url);
+          document.title = result.title;
+          safeForms(); preventDoubleSubmit();
+          var errors = document.querySelector(".form-errors, .messages");
+          if (errors) { errors.tabIndex = -1; errors.focus(); }
+        } catch (error) { status.textContent = "Cannot check sign-in while disconnected. Nothing was sent; your input is retained."; }
+        finally { busy = false; button.disabled = false; }
+      });
+    });
+  }
+
   function warnBeforeExpiry(expiresIn) {
     if (typeof expiresIn === "number" && expiresIn <= EXPIRY_WARN_SECONDS) {
       showSessionWarning(true);
@@ -171,6 +223,7 @@
     });
     initTheme();
     preventDoubleSubmit();
+    safeForms();
     pollOnce();
     setInterval(pollOnce, POLL_MS);
   });

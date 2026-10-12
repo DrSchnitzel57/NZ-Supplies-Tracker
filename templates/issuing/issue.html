@@ -6,7 +6,7 @@
 <p class="help">Up to 50 distinct items per issue. Repeated items combine. Drafts last only in this open tab; reload or close discards them. Nothing is queued or sent automatically.</p>
 <div id="issue-feedback" role="status" aria-live="polite"></div>
 <div id="shortage-review" hidden></div>
-<form method="post" class="stack" id="issue-form" data-draft-user="{{ user.pk }}">
+<form method="post" class="stack" id="issue-form" autocomplete="off" data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 <input type="hidden" name="draft_user_id" value="{{ user.pk }}">
 <input type="hidden" name="idempotency_key" value="{{ draft_key }}">

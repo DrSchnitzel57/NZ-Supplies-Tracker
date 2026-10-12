@@ -84,6 +84,43 @@ def test_inventory_stock_minus_out_and_exports(page, live_server, externals):
     assert_no_internet(externals)
 
 
+def test_filtered_archived_screen_csv_and_pdf_share_one_request(page, live_server, externals):
+    from pathlib import Path
+    import json
+    import subprocess
+    import sys
+    from playwright.sync_api import expect
+    from apps.issuing import services as issuing
+
+    staff, _ = staff_login(page, live_server, 'filtered-export')
+    person = make_missionary(staff, name='Synthetic archived export')
+    item = make_item(staff, opening_qty=10)
+    issuing.create_issue(actor=staff, missionary_id=person.pk,
+        lines=[{'item_id': str(item.pk), 'quantity': 3}], idempotency_key='browser-filtered-export')
+    Missionary.objects.filter(pk=person.pk).update(is_archived=True)
+    page.goto(f'{live_server.url}/reports/?family=per-person')
+    page.check('#id_archived')
+    page.select_option('#id_missionary', str(person.pk))
+    page.click('main button[type=submit]')
+    expect(page.locator('main table')).to_contain_text(person.name)
+    with page.expect_download() as downloaded:
+        page.click('[data-report-csv]')
+    rows = list(csv.DictReader(io.StringIO(Path(downloaded.value.path()).read_text())))
+    assert len(rows) == 1
+    assert rows[0]['given_out_net'] == '3'
+    assert person.name in rows[0]['person']
+    with page.expect_download() as downloaded:
+        page.click('[data-report-pdf]')
+    evidence = Path('.local/review')
+    evidence.mkdir(parents=True, exist_ok=True)
+    path = evidence / 'filtered-per-person.pdf'
+    downloaded.value.save_as(str(path))
+    pages = json.loads(subprocess.check_output([sys.executable, 'tests/pdf_probe.py', str(path)]))
+    assert person.name in ''.join(p['text'] for p in pages)
+    assert all(p['noto_embedded'] for p in pages)
+    assert_no_internet(externals)
+
+
 def test_report_families_serve_csv_and_pdf(page, live_server, externals):
     staff_login(page, live_server, "rep")
     for family in ("per-item", "per-person", "low-stock", "stock",

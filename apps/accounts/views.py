@@ -7,8 +7,8 @@ from django.views.decorators.http import require_http_methods
 
 from apps.accounts import lifecycle
 from apps.accounts.decorators import admin_required, staff_required_api, no_activity_update
-from apps.accounts.forms import ForcedPasswordChangeForm, ThrottledLoginForm
-from apps.accounts.reauth import reauth_required
+from apps.accounts.forms import ForcedPasswordChangeForm, ThrottledLoginForm, AdminUserForm
+from apps.accounts.reauth import reauth_required, reauth_fresh
 from apps.common.errors import DomainError
 
 
@@ -50,27 +50,31 @@ class PasswordChangeDoneView(LoginRequiredMixin, auth_views.PasswordChangeDoneVi
 
 @admin_required
 def user_list(request):
+    return _user_screen(request)
+
+
+def _user_screen(request, form=None, status=200):
     User = get_user_model()
     users = list(User.objects.order_by("username"))
-    return render(request, "accounts/users.html", {"users": users})
+    return render(request, "accounts/users.html", {"users": users,
+        "form": form or AdminUserForm(), "fresh": reauth_fresh(request)}, status=status)
 
 
 @admin_required
 @reauth_required
 @require_http_methods(["POST"])
 def user_create(request):
-    username = (request.POST.get("username") or "").strip()
-    password = request.POST.get("password") or ""
-    is_admin = request.POST.get("is_admin") == "1"
+    form = AdminUserForm(request.POST)
+    if not form.is_valid():
+        return _user_screen(request, form=form, status=400)
     try:
-        user = lifecycle.create_user(actor=request.user, username=username,
-                                     password=password, is_admin=is_admin)
+        user = lifecycle.create_user(actor=request.user, **form.cleaned_data)
     except DomainError as exc:
-        messages.error(request, f"Could not create account: {exc}")
-        return redirect("accounts-users")
+        form.add_error(None, str(exc))
+        return _user_screen(request, form=form, status=400)
     messages.success(
         request,
-        f"Created {'administrator' if is_admin else 'staff'} account {user.username}. "
+        f"Created {'administrator' if user.is_superuser else 'staff'} account {user.username}. "
         "They must change the temporary password on first sign-in.")
     return redirect("accounts-users")
 

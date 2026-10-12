@@ -1,9 +1,12 @@
 """Shared-filter, stable-identity and actual A4/Unicode PDF probes."""
 import csv
 import io
+from pathlib import Path
 from datetime import datetime, timezone
 
-import pymupdf
+import json
+import subprocess
+import sys
 from django.test import TestCase
 
 from apps.inventory.models import Item
@@ -80,19 +83,46 @@ class FinishedReportTests(TestCase):
         self.item.refresh_from_db()
         self.issue(3, 'unicode')
         data = reports.report_pdf('stock').content
-        document = pymupdf.open(stream=data, filetype='pdf')
-        text = ''.join(page.get_text() for page in document)
+        evidence = Path('.local/review')
+        evidence.mkdir(parents=True, exist_ok=True)
+        (evidence / 'stock-unicode.pdf').write_bytes(data)
+        document = json.loads(subprocess.check_output([sys.executable, 'tests/pdf_probe.py',
+            str(evidence / 'stock-unicode.pdf'), str(evidence / 'stock-unicode.png')]))
+        text = ''.join(page['text'] for page in document)
         self.assertIn('āēīōū', text)
         self.assertIn('ĀĒĪŌŪ', text)
         self.assertIn('café', text)
         for page in document:
-            self.assertAlmostEqual(page.rect.width, 595.28, places=1)
-            self.assertAlmostEqual(page.rect.height, 841.89, places=1)
-            for word in page.get_text('words'):
+            self.assertAlmostEqual(page['width'], 595.28, places=1)
+            self.assertAlmostEqual(page['height'], 841.89, places=1)
+            for word in page['words']:
                 self.assertGreaterEqual(word[0], 20)
-                self.assertLessEqual(word[2], page.rect.width - 20)
-                self.assertLessEqual(word[3], page.rect.height - 20)
-            self.assertTrue(any('NotoSans' in font[3] for font in page.get_fonts()))
+                self.assertLessEqual(word[2], page['width'] - 20)
+                self.assertLessEqual(word[3], page['height'] - 20)
+            self.assertTrue(any('NotoSans' in font[3] for font in page['fonts']))
+            self.assertTrue(page['noto_embedded'])
             # Actually rasterize, rather than treating a %PDF header as evidence.
-            image = page.get_pixmap()
-            self.assertGreater(image.width * image.height, 400_000)
+            self.assertGreater(page['pixels'], 400_000)
+
+    def test_long_history_and_complete_roster_pdfs_wrap_and_repeat_headers(self):
+        issue = self.issue(2, 'long-pdf')
+        self.issue(2, 'long-pdf-second')
+        Issue.objects.filter(pk=issue.pk).update(note='Māori long note ' * 260)
+        Missionary.objects.filter(pk=self.person.pk).update(personal_email='synthetic-personal@example.test',
+            intake_metadata={'source_note': 'Synthetic provenance ' * 200})
+        make_missionary(self.staff, name='Synthetic second record')
+        for family, fragment in [('history', 'Māori long note'), ('roster', 'synthetic-personal@example.test')]:
+            evidence = Path('.local/review')
+            evidence.mkdir(parents=True, exist_ok=True)
+            path = evidence / f'long-{family}.pdf'
+            path.write_bytes(reports.report_pdf(family).content)
+            document = json.loads(subprocess.check_output([sys.executable, 'tests/pdf_probe.py', str(path)]))
+            text = ''.join(page['text'] for page in document)
+            self.assertIn(fragment, text)
+            self.assertGreaterEqual(len(document), 2)
+            for page in document:
+                self.assertIn('Field', page['text'])
+                for word in page['words']:
+                    self.assertGreaterEqual(word[0], 20)
+                    self.assertLessEqual(word[2], page['width'] - 20)
+                    self.assertLessEqual(word[3], page['height'] - 20)

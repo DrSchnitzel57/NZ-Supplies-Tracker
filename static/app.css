@@ -282,6 +282,9 @@ summary{cursor:pointer;font-weight:700;padding:.5rem 0}
 #shortage-review{padding:1rem;border:1px solid var(--warn);background:var(--card);border-radius:14px}
 #shortage-review h2{margin-bottom:1rem}
 #menu-toggle{display:none}
+.guide-grid .guide-img{max-height:180px;object-fit:contain;width:100%}
+.field input[type=checkbox]{width:1.2rem;height:1.2rem;min-height:0;flex:none}
+.check-field label{flex-direction:row;align-items:center;min-height:44px;text-transform:none;letter-spacing:0}
 @media(max-width:900px){
   #menu-toggle{display:inline-flex}
   .side{display:flex;position:static;height:auto;border-bottom:1px solid var(--border)}

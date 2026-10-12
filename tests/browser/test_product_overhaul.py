@@ -131,3 +131,128 @@ def test_complete_narrow_menu_and_dark_button_contrast(mobile_page, live_server,
     mobile_page.press('#themeBtn', 'Escape')
     expect(mobile_page.locator('#menu-toggle')).to_be_focused()
     assert_no_internet(externals)
+
+
+def test_offline_submission_keeps_original_draft_without_replay(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, 'offline-draft')
+    person = make_missionary(staff)
+    item = make_item(staff)
+    page.goto(f'{live_server.url}/issue/')
+    page.select_option('#person-select', str(person.pk))
+    add_item(page, item, '2')
+    page.fill('#issue-note', 'No offline queue')
+    page.context.set_offline(True)
+    page.click('#issue-form button[type=submit]')
+    expect(page.locator('#issue-feedback')).to_contain_text('Nothing was sent')
+    assert not Issue.objects.exists()
+    assert page.input_value('input[name=qty-0]') == '2'
+    page.context.set_offline(False)
+    # Reconnection itself never replays a mutation.
+    page.evaluate("fetch('/api/dashboard/').then(r => r.json())")
+    assert not Issue.objects.exists()
+    page.click('#issue-form button[type=submit]')
+    page.wait_for_url('**/issue/*/')
+    assert Issue.objects.get().note == 'No offline queue'
+    assert_no_internet(externals)
+
+
+def test_uncertain_success_deliberate_retry_uses_original_key_once(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, 'uncertain')
+    person = make_missionary(staff)
+    item = make_item(staff)
+    page.goto(f'{live_server.url}/issue/')
+    page.select_option('#person-select', str(person.pk))
+    add_item(page, item, '2')
+
+    def lose_reply(route):
+        if route.request.method == 'POST':
+            route.fetch()  # The real server commits, but the browser loses the reply.
+            route.abort()
+        else:
+            route.continue_()
+
+    page.route('**/issue/', lose_reply)
+    page.click('#issue-form button[type=submit]')
+    expect(page.locator('#issue-feedback')).to_contain_text('success is not confirmed')
+    assert Issue.objects.count() == 1
+    expect(page.locator('input[name=qty-0]')).to_be_disabled()
+    page.unroute('**/issue/', lose_reply)
+    page.click('#issue-form button[type=submit]')
+    page.wait_for_url('**/issue/*/')
+    assert Issue.objects.count() == 1
+    item.refresh_from_db()
+    assert item.on_hand == 8
+    assert_no_internet(externals)
+
+
+def test_leave_warning_reload_discards_and_no_personal_browser_storage(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, 'lifetime')
+    person = make_missionary(staff)
+    item = make_item(staff)
+    page.goto(f'{live_server.url}/issue/')
+    page.select_option('#person-select', str(person.pk))
+    add_item(page, item)
+    page.fill('#issue-note', 'Temporary tab data')
+    assert page.evaluate('Object.keys(localStorage).filter(k => k !== "mtc-theme")') == []
+    assert page.evaluate('Object.keys(sessionStorage)') == []
+    page.once('dialog', lambda dialog: dialog.dismiss())
+    page.click('.navlink[href="/inventory/"]')
+    assert page.url.endswith('/issue/')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.reload()
+    assert page.locator('.issue-row').count() == 0
+    assert page.input_value('#issue-note') == ''
+    assert not Issue.objects.exists()
+    assert_no_internet(externals)
+
+
+def test_source_scale_keyboard_50_item_workspace_limit(page, live_server, externals):
+    from apps.roster.models import Missionary
+    staff, _ = staff_login(page, live_server, 'scale')
+    Missionary.objects.bulk_create([Missionary(external_id=f'SYN-{i:03}', name=f'Synthetic person {i:03}') for i in range(95)])
+    items = [make_item(staff, opening_qty=3, category='Synthetic supplies', name=f'Item {i:03}') for i in range(224)]
+    person = Missionary.objects.get(external_id='SYN-094')
+    page.goto(f'{live_server.url}/issue/')
+    page.fill('#person-filter', person.name)
+    page.press('#person-filter', 'Enter')
+    assert page.input_value('#person-select') == str(person.pk)
+    page.fill('#item-filter', 'Item 223')
+    page.press('#item-filter', 'Enter')
+    assert page.input_value('#catalogue-select') == str(items[-1].pk)
+    page.press('#catalogue-select', 'Tab')
+    page.press('#catalogue-qty', 'Tab')
+    page.press('#add-item', 'Enter')
+    page.fill('#item-filter', '')
+    for item in items[:49]:
+        add_item(page, item)
+    assert page.locator('.issue-row').count() == 50
+    add_item(page, items[50])
+    expect(page.locator('#issue-feedback')).to_contain_text('at most 50')
+    assert page.locator('.issue-row').count() == 50
+    page.click('#issue-form button[type=submit]')
+    page.wait_for_url('**/issue/*/')
+    assert Issue.objects.get().lines.count() == 50
+    assert_no_internet(externals)
+
+
+def test_live_stock_does_not_rewrite_count_version_or_focused_draft(page, live_server, externals):
+    from apps.inventory import services as inventory
+    staff, _ = staff_login(page, live_server, 'live-count')
+    item = make_item(staff, opening_qty=2)
+    page.goto(f'{live_server.url}/inventory/{item.pk}/')
+    count = page.locator('input[name=counted_qty]')
+    count.fill('4')
+    page.fill('#correct_reason', 'Original recount')
+    count.focus()
+    version = page.input_value('input[name=expected_version]')
+    inventory.receive_stock(actor=staff, item_id=item.pk, quantity=2,
+                            reason='Other staff delivery', idempotency_key='live-count-delivery')
+    page.wait_for_function("document.querySelector('[data-available-for]').textContent === '4'", timeout=25000)
+    expect(count).to_be_focused()
+    assert page.input_value('input[name=counted_qty]') == '4'
+    assert page.input_value('input[name=expected_version]') == version
+    page.click("form[action$='/correct-count/'] button[type=submit]")
+    expect(page.locator('main')).to_contain_text('stale')
+    assert page.input_value('input[name=counted_qty]') == '4'
+    assert page.input_value('#correct_reason') == 'Original recount'
+    assert_no_internet(externals)

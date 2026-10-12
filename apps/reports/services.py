@@ -178,10 +178,12 @@ def report_pdf(family, include_archived=False, *, filters=None):
     # tables are transposed into labeled blocks to avoid illegible tiny columns.
     if family in ('roster', 'inventory', 'history'):
         for row in rows:
-            data = [[Paragraph(escape(field.replace('_', ' ').title()), cell),
+            data = [[Paragraph('Field', header), Paragraph('Value', header)]]
+            data += [[Paragraph(escape(field.replace('_', ' ').title()), cell),
                      Paragraph(escape(str(row.get(field) if row.get(field) is not None else '')).replace('\n', '<br/>'), cell)] for field in fields]
-            table = Table(data, colWidths=[doc.width * .2, doc.width * .8], hAlign='LEFT', splitByRow=1, splitInRow=1)
-            table.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, -1), .3, colors.lightgrey)]))
+            table = Table(data, colWidths=[doc.width * .2, doc.width * .8], repeatRows=1, hAlign='LEFT', splitByRow=1, splitInRow=1)
+            table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0b5850')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, -1), .3, colors.lightgrey)]))
             story += [table, Spacer(1, 12)]
     else:
         visible = [field for field in fields if field not in ('item_id', 'missionary_id')]
