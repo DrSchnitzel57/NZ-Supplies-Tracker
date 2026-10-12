@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 from functools import wraps
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.shortcuts import redirect
@@ -77,14 +78,23 @@ def reauth_required(view_func):
 
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
+        # Account mutations and bundle uploads are POST-only: return to their
+        # GET screen and require a deliberate resubmit, without retaining secrets.
+        destination = request.path
+        if request.method == "POST":
+            if request.path.startswith("/accounts/users/"):
+                destination = "/accounts/users/"
+            elif request.path == "/transfers/bundle/import/":
+                destination = "/transfers/bundle/"
+        confirmation_url = "/admin-area/reauth/?" + urlencode({"next": destination})
         if not reauth_fresh(request):
             messages.error(
                 request, "Confirm your password first (recent sign-in required).")
-            return redirect(f"/admin-area/reauth/?next={request.path}")
+            return redirect(confirmation_url)
         try:
             return view_func(request, *args, **kwargs)
         except ThrottledError as exc:
             messages.error(request, str(exc))
-            return redirect(f"/admin-area/reauth/?next={request.path}")
+            return redirect(confirmation_url)
 
     return _wrapped

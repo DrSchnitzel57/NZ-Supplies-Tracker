@@ -102,16 +102,13 @@ def item_create(request):
         import uuid as _uuid
 
         try:
-            opening = int(request.POST.get("opening_qty") or 0)
-        except (TypeError, ValueError):
-            opening = 0
-        try:
             obj = inv.create_item(
                 actor=request.user,
                 category=request.POST.get("category", ""),
                 name=request.POST.get("name", ""),
                 size=request.POST.get("size", ""),
-                opening_qty=opening,
+                opening_qty=request.POST.get("opening_qty") or 0,
+                low_threshold=request.POST.get("low_threshold") or _default_threshold(),
                 reason=(request.POST.get("reason") or "opening balance").strip()
                 or "opening balance",
                 idempotency_key=(request.POST.get("idempotency_key") or "").strip()
@@ -130,27 +127,8 @@ def item_create(request):
                     "create_key": (request.POST.get("idempotency_key") or "").strip()
                     or f"ui-create-{_uuid.uuid4().hex}",
                     "default_threshold": _default_threshold(),
-                },
+                }, status=400,
             )
-        # Optional low-stock threshold from the same form; blank means the
-        # site default alert level.
-        raw_threshold = (request.POST.get("low_threshold") or "").strip()
-        if raw_threshold == "":
-            raw_threshold = _default_threshold()
-        try:
-            threshold = int(raw_threshold or 0)
-        except (TypeError, ValueError):
-            threshold = 0
-        if threshold != obj.low_threshold:
-            try:
-                inv.update_item(
-                    actor=request.user,
-                    item_id=obj.pk,
-                    expected_version=obj.version,
-                    low_threshold=max(0, threshold),
-                )
-            except DomainError:
-                pass
         messages.success(request, f"Added {obj}.")
         return redirect("inventory-detail", pk=obj.pk)
     return render(request, "inventory/form.html",

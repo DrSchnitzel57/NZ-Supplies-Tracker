@@ -37,10 +37,12 @@ def dashboard(request):
         .order_by("-issued_at")[:10]
     )
     counts = {
+        "low_stock": Item.objects.filter(
+            is_archived=False, on_hand__lte=Coalesce("low_threshold", 0)).count(),
         "people": Missionary.objects.filter(is_archived=False).count(),
         "items": Item.objects.filter(is_archived=False).count(),
         "issues_today": Issue.objects.filter(
-            issued_at__date=timezone.now().date(), status=Issue.ACTIVE
+            issued_at__date=timezone.localdate(), status=Issue.ACTIVE
         ).count(),
     }
     return render(
@@ -100,7 +102,7 @@ def dashboard_api(request):
             "items": Item.objects.filter(is_archived=False).count(),
             "low_stock": low,
             "issues_today": Issue.objects.filter(
-                issued_at__date=timezone.now().date(), status=Issue.ACTIVE
+                issued_at__date=timezone.localdate(), status=Issue.ACTIVE
             ).count(),
             "now": timezone.now().isoformat(),
             "expires_in": expires_in,
@@ -111,7 +113,7 @@ def dashboard_api(request):
 @admin_required
 def settings_view(request):
     from apps.accounts import reauth as reauth_mod
-    from apps.operations.guards import assert_writes_allowed
+    from apps.operations.settings_service import update_settings
 
     if request.method == "POST":
         if not reauth_mod.reauth_fresh(request):
@@ -120,24 +122,15 @@ def settings_view(request):
         notice = (request.POST.get("site_notice") or "").strip()[:500]
         threshold_raw = (request.POST.get("default_low_threshold") or "").strip()
         try:
-            threshold = max(0, int(threshold_raw)) if threshold_raw else 0
+            threshold = int(threshold_raw) if threshold_raw else 0
         except ValueError:
             messages.error(request, "Default alert level must be a whole number.")
             return redirect("ops-settings")
         try:
-            assert_writes_allowed()
+            update_settings(actor=request.user, notice=notice, threshold=threshold)
         except DomainError as exc:
             messages.error(request, f"Settings refused: {exc}")
             return redirect("ops-settings")
-        SystemSetting.objects.update_or_create(key="site_notice", defaults={"value": notice})
-        SystemSetting.objects.update_or_create(
-            key="default_low_threshold", defaults={"value": str(threshold)})
-        from apps.audit.models import AuditEvent
-        AuditEvent.objects.create(
-            actor=request.user, action="settings.updated",
-            target_type="system", target_id="settings",
-            detail={"default_low_threshold": threshold,
-                    "notice_len": len(notice)})
         messages.success(request, "Saved system settings.")
         return redirect("ops-settings")
     current = {s.key: s.value for s in SystemSetting.objects.all()}

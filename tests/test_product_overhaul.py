@@ -1,0 +1,136 @@
+"""Milestone 06 behavioral regressions; synthetic records only."""
+
+from datetime import date, datetime, timezone as dt_timezone
+from unittest.mock import patch
+
+from django.db import connection
+from django.test import TestCase
+from django.utils import timezone
+
+from apps.audit.models import AuditEvent
+from apps.common.errors import DomainError
+from apps.inventory.models import Item
+from apps.issuing import services as issuing
+from apps.issuing.models import Issue
+from apps.operations.models import SystemSetting
+from apps.roster.models import Missionary
+from apps.transfers.models import RowImportPreview
+from apps.transfers.row_imports import build_preview, current_revision, new_preview_token
+from apps.transfers.services import confirm_row_import
+from tests.factories import make_admin, make_item, make_missionary
+
+
+class ProductSafetyTests(TestCase):
+    def setUp(self):
+        self.admin, self.password = make_admin()
+        self.client.force_login(self.admin)
+
+    def fresh(self):
+        self.client.post('/admin-area/reauth/', {'password': self.password})
+
+    def preview(self, rows, mode='add_update', kind='roster'):
+        result = build_preview(kind=kind, rows=rows, mode=mode)
+        return RowImportPreview.objects.create(
+            token=new_preview_token(), kind=kind, mode=mode,
+            rows=[{**r, 'error': False} for r in result['valid']],
+            base_revision=current_revision(kind), created_by=self.admin)
+
+    def test_optional_import_blanks_preserve_in_both_modes(self):
+        person = make_missionary(self.admin, external_id='SYN-1')
+        Missionary.objects.filter(pk=person.pk).update(
+            mission='Synthetic mission', language='Te reo', arrival_date=date(2026, 10, 12))
+        for mode in ('add_update', 'replace'):
+            for rows in ([['id', 'name'], ['SYN-1', 'New name']],
+                         [['id', 'name', 'email', 'mission', 'language', 'arrival_date'],
+                          ['SYN-1', 'New name', '', '', '', '']]):
+                with self.subTest(mode=mode, rows=rows):
+                    preview = self.preview(rows, mode)
+                    confirm_row_import(actor=self.admin, preview=preview, selected=None)
+                    person.refresh_from_db()
+                    self.assertTrue(person.email)
+                    self.assertEqual(person.mission, 'Synthetic mission')
+                    self.assertEqual(person.language, 'Te reo')
+                    self.assertEqual(person.arrival_date, date(2026, 10, 12))
+
+    def test_new_import_saves_both_dates(self):
+        preview = self.preview([['id', 'name', 'arrival_date', 'release_date'],
+                                ['SYN-2', 'New synthetic person', '2026-10-12', '2027-10-12']])
+        confirm_row_import(actor=self.admin, preview=preview, selected=None)
+        person = Missionary.objects.get(external_id='SYN-2')
+        self.assertEqual(person.arrival_date, date(2026, 10, 12))
+        self.assertEqual(person.release_date, date(2027, 10, 12))
+
+    def test_legacy_preview_requires_reupload(self):
+        preview = self.preview([['id', 'name'], ['SYN-3', 'Synthetic legacy']])
+        rows = preview.rows
+        for row in rows:
+            row.pop('present_fields', None)
+        preview.rows = rows
+        preview.save()
+        with self.assertRaisesMessage(DomainError, 're-upload'):
+            confirm_row_import(actor=self.admin, preview=preview, selected=None)
+        self.assertFalse(Missionary.objects.exists())
+
+    def test_report_bundle_alias_requires_recent_password(self):
+        for url in ('/reports/bundle/export/', '/transfers/bundle/export/'):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 302)
+            self.assertIn('/admin-area/reauth/', response.url)
+
+    def test_post_only_account_action_returns_to_gettable_screen(self):
+        response = self.client.post('/accounts/users/create/', {
+            'username': 'synthetic-new-user', 'password': 'NeverKeepThis123!'})
+        response = self.client.post(response.url, {'password': self.password}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request['PATH_INFO'], '/accounts/users/')
+        self.assertNotContains(response, 'NeverKeepThis123!')
+
+    def test_settings_audit_failure_rolls_back_settings(self):
+        self.fresh()
+        SystemSetting.objects.create(key='site_notice', value='Before')
+        with patch('apps.audit.models.AuditEvent.objects.create', side_effect=RuntimeError('audit failure')):
+            with self.assertRaises(RuntimeError):
+                self.client.post('/admin-area/settings/', {
+                    'site_notice': 'After', 'default_low_threshold': '7'})
+        self.assertEqual(SystemSetting.objects.get(key='site_notice').value, 'Before')
+        self.assertFalse(SystemSetting.objects.filter(key='default_low_threshold').exists())
+
+    def test_settings_guard_runs_inside_transaction(self):
+        self.fresh()
+        from apps.operations.guards import assert_writes_allowed
+
+        def check():
+            # TestCase itself is atomic; the guarded service needs its own block.
+            self.assertGreater(len(connection.atomic_blocks), 2)
+            assert_writes_allowed()
+
+        with patch('apps.operations.guards.assert_writes_allowed', side_effect=check):
+            response = self.client.post('/admin-area/settings/', {
+                'site_notice': 'Synthetic', 'default_low_threshold': '7'})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(AuditEvent.objects.filter(action='settings.updated').exists())
+
+    def test_invalid_opening_and_threshold_never_create_item(self):
+        for field in ('opening_qty', 'low_threshold'):
+            with self.subTest(field=field):
+                payload = {'category': 'Synthetic', 'name': field,
+                           'opening_qty': '4', 'low_threshold': '2', field: 'not a number'}
+                response = self.client.post('/inventory/new/', payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(Item.objects.filter(name=field).exists())
+
+    def test_local_day_and_uncapped_low_stock_count(self):
+        person = make_missionary(self.admin)
+        item = make_item(self.admin, opening_qty=1)
+        issue = issuing.create_issue(actor=self.admin, missionary_id=person.pk,
+            lines=[{'item_id': str(item.pk), 'quantity': 1}], idempotency_key='local-day')
+        at = datetime(2026, 10, 11, 12, 30, tzinfo=dt_timezone.utc)
+        Issue.objects.filter(pk=issue.pk).update(issued_at=at)
+        for i in range(21):
+            make_item(self.admin, opening_qty=0, name=f'Low synthetic {i}')
+        with patch('django.utils.timezone.now', return_value=at):
+            payload = self.client.get('/api/dashboard/').json()
+            response = self.client.get('/')
+        self.assertEqual(timezone.get_default_timezone_name(), 'Pacific/Auckland')
+        self.assertEqual(payload['issues_today'], 1)
+        self.assertEqual(response.context['counts']['low_stock'], 22)

@@ -397,6 +397,8 @@ def confirm_row_import(*, actor, preview, selected: list[int] | None) -> dict:
             from apps.common.errors import StaleVersionError
             raise StaleVersionError("source data changed since preview; re-upload and review again")
         rows = locked.rows
+        if any("present_fields" not in row for row in rows):
+            raise ValidationError("legacy preview; re-upload and review again")
         valid = [r for r in rows if not r.get("error")]
         if mode == "replace" and any(r.get("error") for r in rows):
             raise ValidationError("replacement requires every row valid; fix errors or use add/update")
@@ -426,14 +428,12 @@ def _apply_roster(actor, roster_services, valid, wanted, mode, applied, key_pref
             continue
         existing = Missionary.objects.filter(external_id=entry["external_id"]).first()
         note = (entry.get("reason") or "").strip()
-        profile = {
-            "title_prefix": entry.get("title_prefix", ""),
-            "arrival_status": entry.get("arrival_status", ""),
-            "stake": entry.get("stake", ""),
-            "mission": entry.get("mission", ""),
-            "language": entry.get("language", ""),
-            "personal_email": entry.get("personal_email", ""),
-        }
+        # Missing/blank optional cells never mean clearing, in either mode.
+        # Explicit edit forms remain the deliberate field-clearing path.
+        profile = {field: entry[field] for field in (
+            "email", "title_prefix", "arrival_status", "stake", "mission",
+            "language", "personal_email")
+            if field in entry["present_fields"] and entry.get(field)}
         for date_field in ("arrival_date", "release_date"):
             raw = (entry.get(date_field) or "").strip()
             if raw:
@@ -445,7 +445,7 @@ def _apply_roster(actor, roster_services, valid, wanted, mode, applied, key_pref
         if existing is None:
             roster_services.create_missionary(
                 actor=actor, external_id=entry["external_id"],
-                name=entry["name"], email=entry.get("email", ""),
+                name=entry["name"],
                 note=note, **profile)
             applied["created"] += 1
         else:
@@ -454,7 +454,6 @@ def _apply_roster(actor, roster_services, valid, wanted, mode, applied, key_pref
                 existing = Missionary.objects.get(pk=existing.pk)
             changed = (
                 existing.name != entry["name"]
-                or existing.email != entry.get("email", "")
                 or any((getattr(existing, f) or "") != (profile[f] or "")
                        for f in profile if f not in ("arrival_date", "release_date"))
             )
@@ -467,7 +466,7 @@ def _apply_roster(actor, roster_services, valid, wanted, mode, applied, key_pref
                 roster_services.update_missionary(
                     actor=actor, missionary_id=existing.pk,
                     expected_version=existing.version,
-                    name=entry["name"], email=entry.get("email", ""),
+                    name=entry["name"],
                     note=note, **profile)
                 applied["updated"] += 1
     if mode == "replace":

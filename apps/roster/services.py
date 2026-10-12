@@ -27,6 +27,7 @@ def create_missionary(*, actor, external_id: str, name: str, email: str = "",
     fields = {k: _clean(extra.get(k, "")) for k in (
         "title_prefix", "arrival_status", "stake", "mission", "language",
         "personal_email")}
+    fields.update({k: extra.get(k) for k in ("arrival_date", "release_date")})
     note = _clean(extra.get("note", ""))
     from apps.roster.models import Missionary
 
@@ -35,10 +36,15 @@ def create_missionary(*, actor, external_id: str, name: str, email: str = "",
         if Missionary.objects.filter(external_id=external_id).exists():
             raise ValidationError("external ID already exists")
         try:
-            obj = Missionary.objects.create(
+            obj = Missionary(
                 external_id=external_id, name=name, email=_clean(email),
                 **fields,
             )
+            try:
+                obj.full_clean()
+            except Exception as exc:
+                raise ValidationError(str(exc)) from exc
+            obj.save()
         except IntegrityError as exc:
             raise ValidationError("external ID already exists") from exc
         _audit(actor, "roster.created", obj, note=note)

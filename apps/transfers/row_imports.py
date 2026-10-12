@@ -280,7 +280,8 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
                  "arrival_date": cell("arrival_date"),
                  "release_date": cell("release_date"),
                  "personal_email": personal,
-                 "reason": reason, "action": action,
+                  "present_fields": sorted(mapping),
+                  "reason": reason, "action": action,
                  "archived": existing[ext].is_archived if ext in existing else False}
         if problems:
             errors.append({"row": n, "problems": problems, "entry": entry})
@@ -400,7 +401,8 @@ def _preview_inventory(headers, data, mode, first_row: int = 2) -> dict:
         entry = {"row": n, "category": cat, "name": name, "size": size,
                  "counted": counted, "movement": movement_note, "delta": delta,
                  "current": current, "low_threshold": low,
-                 "reason": cell("reason"), "action": action,
+                  "present_fields": sorted(mapping),
+                  "reason": cell("reason"), "action": action,
                  "archived": existing[key].is_archived if key in existing else False}
         if problems:
             errors.append({"row": n, "problems": problems, "entry": entry})

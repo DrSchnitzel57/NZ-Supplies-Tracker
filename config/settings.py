@@ -13,6 +13,9 @@ from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+LANGUAGE_CODE = "en-nz"
+TIME_ZONE = "Pacific/Auckland"
+USE_TZ = True
 
 
 def _env_bool(name: str, default: bool) -> bool:

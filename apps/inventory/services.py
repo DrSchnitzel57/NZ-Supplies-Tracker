@@ -39,6 +39,8 @@ def create_item(
     opening_qty: int = 0,
     reason: str = "opening balance",
     idempotency_key: str | None = None,
+    low_threshold: int = 0,
+    unit: str = "each",
 ):
     permissions.require_staff(actor)
     category = (category or "").strip()
@@ -52,6 +54,12 @@ def create_item(
         raise ValidationError("opening quantity must be a whole number") from exc
     if opening_qty < 0:
         raise NegativeBalanceError("opening quantity cannot be negative")
+    try:
+        low_threshold = int(low_threshold)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("alert level must be a whole number") from exc
+    if low_threshold < 0:
+        raise ValidationError("alert level cannot be negative")
 
     def _work():
         assert_writes_allowed()
@@ -65,7 +73,8 @@ def create_item(
         if Item.objects.filter(key=key).exists():
             raise ValidationError("item already exists (normalized match)")
         item = Item(
-            category=category, name=name, size=size, on_hand=opening_qty
+            category=category, name=name, size=size, on_hand=opening_qty,
+            low_threshold=low_threshold, unit=unit,
         )
         try:
             with transaction.atomic():

@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.shortcuts import render
 
 from apps.accounts.decorators import admin_required, staff_required
+from apps.accounts.reauth import reauth_required
 from apps.reports import services as rep
 from apps.transfers import services as transfer_services
 
@@ -42,6 +43,7 @@ def export_report(request, family: str):
 
 
 @admin_required
+@reauth_required
 def export_bundle(request):
     from django.http import HttpResponse
     data = transfer_services.export_bundle(actor=request.user)
