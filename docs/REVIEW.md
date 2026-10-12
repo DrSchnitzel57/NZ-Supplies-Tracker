@@ -1,4 +1,14 @@
-# Fresh review — milestone 05 (review remediation and validation)
+# Current verdict — milestone 06
+
+**VERDICT: SHIP — automated product acceptance at `138ae8b` (2026-10-12).**
+224 Django, 33 internet-blocked Chromium and 21 real Compose tests pass.
+Fresh implementation-side review found no remaining product blockers after the
+fixes below. This is **not an independent reviewer verdict or rollout approval**.
+User-owned staff/source/target-host gates remain pending; no private data was
+accessed, no real-data initialization occurred, and nothing was pushed/published.
+See the milestone-06 section below for exact acceptance and rendered evidence.
+
+# Historical review — milestone 05 (review remediation and validation)
 
 Date: 2026-10-09. Scope: whole codebase at the milestone-05 worktree.
 Method: four independent read-only audits (operations, transfers, accounts/UI,
@@ -236,7 +246,7 @@ These results establish a regression baseline, not proof of finished usability.
 New failure probes are outside the old suites; new tests must cover the actual
 interaction and content rather than only DOM hooks or file headers.
 
-## Open findings (most severe first)
+## Findings open at the historical assessment (most severe first)
 
 | ID | Finding and evidence | Source |
 |---|---|---|
@@ -267,7 +277,7 @@ interaction and content rather than only DOM hooks or file headers.
   next task. Replace them with consistent controls, concise contextual help,
   real status and clear recovery states; keep operator tools out of daily work.
 
-All findings are **open** here. The agreed design/decisions are recorded in
+All findings were **open at this assessment** (closed by milestone 06 below). The agreed design/decisions are recorded in
 `docs/ARCHITECTURE.md`; `.openchamber/plans/06-product-overhaul.md` covers one
 milestone with ordered internal phases. Reproduce failures with committed
 synthetic behavioral regressions, fix them, then independently rerun the whole
@@ -276,3 +286,128 @@ product acceptance contract. Ignore local audit artifacts as dependencies.
 VERDICT: FIX — keep the tested foundation; complete product correctness and
 usability before presenting it as finished. Manual staff/source/target-host
 gates, certificate trust limitations and host-only backup risk remain explicit.
+
+# Fresh finished-product review — milestone 06
+
+Date: 2026-10-12. Final application/test commit: `138ae8b` on `vivid-walrus`.
+Plan: `.openchamber/plans/06-product-overhaul.md`; four ordered phases, one app.
+Method: implementation-side final code-path sweep against the plan and P01–P13,
+fresh serial reruns of every acceptance command, real internet-blocked Chromium
+interaction, visual inspection of generated desktop/light and narrow/dark pages,
+and actual PDF extraction/font/geometry/rasterization. This is not an independent
+audit or an accessibility certification. All records, images and exports are
+synthetic; the ignored private HTML was not used.
+
+## Assessment closure and additional probes
+
+| Finding | Resolution | Behavioral evidence |
+|---|---|---|
+| P01 recipient ambiguity | Search never chooses silently; hidden mismatched UUID is cleared. Recipient changes confirm before clearing items/note; summary names the recipient. | Chromium `test_typing_never_reuses_a_hidden_recipient`, `test_recipient_change_confirm_clears_items_and_note` |
+| P02 import erasure/dates | Preserve omitted/blank optional values in both modes, save new dates, reject legacy field-presence previews. Excel date cells normalize to ISO. | `ProductSafetyTests`: both-mode blank/missing matrix, new dates, legacy re-upload, real XLSX dates; old transfers/seed round trips retained |
+| P03 settings guard/audit | One immediate guarded transaction for settings and audit. Invalid settings retain safe bound input. | `test_settings_audit_failure_rolls_back_settings`, `test_settings_guard_runs_inside_transaction`; maintenance guards/concurrency suite |
+| P04 export reauth alias | Both full-bundle export routes require recent password confirmation. | `test_report_bundle_alias_requires_recent_password`; updated permission test exercises successful export only after reauth |
+| P05 account reauth 405 | POST-only actions return to Accounts/bundle GET screen; no password retention or automatic replay. | Chromium `test_account_lifecycle_with_fresh_identity` now follows the offered path; bound username/password-non-retention tests |
+| P06 cross-tab recovery | No-activity `/api/session/` refreshes CSRF; original-user identity checked before deliberate issue/record submission. Different-user drafts stay unsent. | Chromium same-user CSRF, different-user, record-form recovery; Django no-activity token probe; real expiry/poll tests |
+| P07 draft loss | Original issue request survives shortage/back, maintenance, offline, uncertain success and error; safe bound record/count/undo input retained with original stale token/key. | Chromium shortage-back/offline/lost-success-reply/maintenance/leave-reload tests; bound-form/stale-count/undo-reason regressions |
+| P08 filter mismatch | One selected report, validated shared row/filter contract, complete CSV/PDF, explicit archive filter; raw web CSV defaults agree. | Django archive/date/current-net tests; Chromium filtered archived screen/CSV/PDF real-download probe |
+| P09 PDF clipping | Embedded licensed Noto Sans; wrapping/repeated headings; portrait A4 summaries and labeled landscape A4 wide records. | `FinishedReportTests` plus checked native subprocess: macron/accent extraction, embedded font stream, A4 page/word bounds, long history/metadata, rasterization |
+| P10 locale/live display | `en-nz`/`Pacific/Auckland`, local-day counts, uncapped low total, refreshed Home rows/status/net/Available; no invented stock percentage meters. | local-day/22-low-item test; Chromium live stock/count-token/focus and idle timer probes |
+| P11 unreachable rows | Paginated lists, profile stock/issue history, full filtered issue history and reports; exports remain complete. | 205-history and 501-roster page probes; old untruncated exports retained |
+| P12 incomplete narrow menu | All five staff sections plus help/theme/permitted admin destinations accessible through Menu; Escape restores focus. | real 390px menu/theme tests; narrow/dark full-page render with no document overflow |
+| P13 contrast/control inconsistencies | Shared bound fields, explicit focus, current-page/status announcements, touch controls, corrected dark primary colour and checkbox sizing. | computed ≥4.5:1 primary text contrast, keyboard focus/reduced-motion, inspected light/dark rendered screens |
+
+Additional sweep findings were reproduced and fixed before the final rerun:
+second-shortage tables now compare the **original** request to the **actual new**
+proposal (including dropped zero-stock items); archived-history defaults survive
+pagination; malformed original confirmation UUIDs yield retained-input 400s,
+not 500s; invalid emails/overlong supported fields are preview row errors, not
+surprise atomic-confirm failures. No open product finding remains from this pass.
+
+## Product contract beyond the initial findings
+
+- Main and profile entrypoints share one recipient/catalogue/consolidated-summary
+  workspace. 50 distinct items commit atomically; 51 fail without partial writes
+  in service and HTTP probes. A real keyboard/source-scale test uses 95 synthetic
+  missionaries/224 items and verifies the UI's 50/51 boundary.
+- Open-tab drafts only: no local/session storage except the theme preference,
+  no server draft, autosave, queue or automatic mutation retry. Leaving warns;
+  reload discards. A lost reply **after server success** retains/freezes the
+  original payload/key; deliberate retry proves exactly one write.
+- Complete roster edits include both dates/contact/context fields and deliberate
+  optional clearing. Source metadata remains expandable; inventory keeps stock
+  actions, reasoned ledger/provenance and archives separate from Edit details.
+- Summary totals use stable IDs/current names; history keeps original snapshots.
+  Dates select issuance in NZ time with current-net semantics, excluding every
+  undone issue even if undone later. Available stock is always stock now.
+- Existing stock contention/negative-balance/idempotency, auth/throttling,
+  preview subset/ownership/TTL/revision/replacement, lossless/formula-safe ZIP/CSV,
+  reset backup and operational recovery coverage remains green. No migrations or
+  bundle-format changes. Operator tools remain isolated from staff navigation.
+
+## Fresh acceptance evidence
+
+Commands run from the checkout with the pinned development dependencies:
+
+| Criterion | Result | Command and key output |
+|---|---|---|
+| 1. Django regressions | PASS | `.venv/bin/python manage.py test --noinput` — 224 tests, OK (153.045s) |
+| 2. Real browser workflows | PASS | `.venv/bin/python -m pytest tests/browser` — 33 passed, no skips, all internet hosts blocked (111.79s) |
+| 3. Real deployment/recovery | PASS | `.venv/bin/python -m pytest tests/deployment` — 21 passed; isolated image/TLS/persistence/backup/restore/update drills |
+| 4. Django configuration | PASS | `.venv/bin/python manage.py check` — no issues |
+| 5. Migration drift | PASS | `.venv/bin/python manage.py makemigrations --check --dry-run` — No changes detected |
+| 6. Compose configuration | PASS | `docker compose -f compose.test.yaml config --quiet` — exit 0 |
+| 7. Production image | PASS | `docker build -t supplies-tracker:test .` — successful image export/tag; production-only dependencies, bundled assets |
+| 8. Operator shell syntax | PASS | `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh` — exit 0 |
+| 9. Whitespace | PASS | `git diff --check` — exit 0 |
+| 10. Fresh product evidence | PASS | This section: fresh SHIP, observed rendered/export evidence, distinct manual gates |
+
+Local test warnings are non-blocking: the checkout has no collected `staticfiles/`
+(the production build collects them); pinned ReportLab emits a Python 3.13
+deprecation warning. An overlapping early test run dropped the shared test DB;
+it was rejected as evidence and the final Django/browser suites ran serially.
+An in-process native PDF teardown crash was fixed by subprocess isolation with
+checked exit status, not by suppressing errors; actual renderer failures still
+fail acceptance. Logs are ignored `.local/{django,browser,deployment,build}-final.log`.
+
+## Observed rendered/export evidence
+
+The final browser run regenerated these synthetic illustrated help images;
+they were visually inspected and refreshed in the tracked `static/img/` files:
+
+- [Sign-in](../static/img/01-sign-in.png) and [Home](../static/img/02-dashboard.png).
+- [Single issuing workspace](../static/img/03-issue-goods.png): full named summary,
+  catalogue, quantities and one explicit submit; no old hidden-recipient combo.
+- [Stock profile](../static/img/04-stock-detail.png): separate Add stock/count forms,
+  reason fields, immutable history and version-conflict guidance.
+- [Selected report](../static/img/05-reports.png): relevant filters and one CSV/PDF
+  pair; corrected checkbox sizing and complete matching-row count.
+
+Reproduce additional ignored artifacts using the two final suites above:
+`tests/browser/test_rendered_product.py` produces
+`.local/review/narrow-dark-issue.png` (390px, keyboard-focus/menu, no page overflow).
+`tests/test_product_reports.py` produces `stock-unicode.pdf`, `stock-unicode.png`,
+`long-history.pdf`, `long-roster.pdf` in `.local/review/`; the rendered stock page
+was inspected for wrapping/readable columns. The downloaded
+`filtered-per-person.pdf` also proves filters and embedded-font content through
+a real Chromium download. PNG signatures and `%PDF` headers alone are not proof.
+Noto font origin/license/SHA-256 are tracked in `static/fonts/README.md`/`OFL.txt`.
+
+## Manual gates — user-owned, not performed
+
+1. First-time staff unaided issue/add-stock/undo trial, using the in-app guide;
+   observe and address hesitation/errors before accepting usability in practice.
+2. Compare the approved private source and migration output for full fidelity,
+   including raw dates/metadata and four audited negative-source corrections.
+   No previously erased data reconstruction is promised; old previews need re-upload.
+3. Target-host LAN/firewall/fixed-port/private-registry access, reboot/persistence
+   and backup/restore drill on the actual deployment host. No real-data import
+   or rollout was performed or authorized by these automated results.
+
+Certificate trust setup remains deferred; LAN HTTPS is tested but clients may
+warn until trust is configured. Host-local backups do **not** protect against
+host/disk loss. No SMTP, signatures, durable drafts/queue, multi-intake, period
+accounting, presentation or new stack/roles were added.
+
+**VERDICT: SHIP for milestone-06 automated product acceptance.** Manual gates
+remain separate and pending; this implementation-side review is not a claim
+of independent approval or production rollout.
