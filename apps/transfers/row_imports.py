@@ -282,7 +282,22 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
                  "personal_email": personal,
                   "present_fields": sorted(mapping),
                   "reason": reason, "action": action,
-                 "archived": existing[ext].is_archived if ext in existing else False}
+                  "archived": existing[ext].is_archived if ext in existing else False}
+        changes = []
+        preserved = []
+        for field in ROSTER_ALIASES:
+            if field in ("external_id", "reason"):
+                continue
+            incoming = entry.get(field, "")
+            previous = getattr(existing.get(ext), field, "")
+            previous = previous.isoformat() if hasattr(previous, "isoformat") else previous or ""
+            if not incoming and field != "name":
+                if previous:
+                    preserved.append(field.replace("_", " "))
+            elif incoming != previous:
+                changes.append({"field": field.replace("_", " "), "before": previous, "after": incoming})
+        entry["changes"] = changes
+        entry["preserved"] = preserved
         if problems:
             errors.append({"row": n, "problems": problems, "entry": entry})
         else:
@@ -403,7 +418,8 @@ def _preview_inventory(headers, data, mode, first_row: int = 2) -> dict:
                  "current": current, "low_threshold": low,
                   "present_fields": sorted(mapping),
                   "reason": cell("reason"), "action": action,
-                 "archived": existing[key].is_archived if key in existing else False}
+                  "archived": existing[key].is_archived if key in existing else False}
+        entry["old_threshold"] = existing[key].low_threshold if key in existing else None
         if problems:
             errors.append({"row": n, "problems": problems, "entry": entry})
         else:

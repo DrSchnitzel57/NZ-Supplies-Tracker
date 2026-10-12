@@ -13,10 +13,11 @@
   --shadow:0 1px 2px rgba(20,40,34,.05),0 6px 20px rgba(20,40,34,.05);
   --shadow-lg:0 12px 40px rgba(15,40,34,.16);
   --r:14px; --r-sm:9px;
-  --sans:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --disp:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --sans:"Supplies Noto",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --disp:"Supplies Noto",system-ui,-apple-system,"Segoe UI",sans-serif;
   --max:76rem; --gap:.75rem;
 }
+@font-face{font-family:"Supplies Noto";src:url("/static/fonts/NotoSans-Regular.ttf") format("truetype");font-display:swap}
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --ground:#0d1512; --card:#15201c; --card-2:#111a17;

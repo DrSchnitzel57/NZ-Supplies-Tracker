@@ -18,6 +18,8 @@ from apps.inventory.models import Item
 from apps.issuing import services as issuing
 from apps.issuing.models import Issue
 from apps.roster.models import Missionary
+from apps.reports.filters import ReportFilters, filter_issues
+from apps.common.pagination import paginate
 
 
 def _line_indices(post):
@@ -332,12 +334,16 @@ def issue_confirm(request):
 
 @staff_required
 def issue_list(request):
-    issues = list(
-        Issue.objects.select_related("missionary")
-        .prefetch_related("lines")
-        .order_by("-issued_at")[:200]
-    )
-    return render(request, "issuing/history.html", {"issues": issues})
+    data = request.GET.copy()
+    # History is an immutable operational record: include archives by default.
+    # The visible checkbox makes a deliberate active-only view available.
+    if not data and 'archived' not in data:
+        data['archived'] = '1'
+    form = ReportFilters(data, family='history')
+    valid = form.is_valid()
+    qs = filter_issues(Issue.objects.all(), form.cleaned_data) if valid else Issue.objects.none()
+    issues, pagination = paginate(request, qs.select_related('missionary').prefetch_related('lines').order_by('-issued_at', 'pk'))
+    return render(request, 'issuing/history.html', {'issues': issues, 'form': form, **pagination}, status=200 if valid else 400)
 
 
 @staff_required

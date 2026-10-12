@@ -154,7 +154,8 @@ def import_preview(request, token: str):
             and not permissions.is_admin(request.user)):
         messages.error(request, "Preview not found or expired; upload again.")
         return redirect("dashboard")
-    stale = preview.base_revision != current_revision(preview.kind)
+    legacy = any("present_fields" not in row for row in preview.rows)
+    stale = preview.base_revision != current_revision(preview.kind) or legacy
     valid = [r for r in preview.rows if not r.get("error")]
     errors = [r for r in preview.rows if r.get("error")]
     to_archive = 0
@@ -170,6 +171,7 @@ def import_preview(request, token: str):
     return render(request, "transfers/preview.html", {
         "preview": preview, "valid": valid, "errors": errors,
         "stale": stale, "to_archive": to_archive,
+        "legacy": legacy,
     })
 
 

@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Import preview — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Import preview ({{ preview.kind }}, {{ preview.mode }})</h1><div class="sub">{{ valid|length }} valid · {{ errors|length }} with errors</div></div>
+<div class="page-head"><h1>Import preview — {% if preview.kind == 'roster' %}Missionaries{% else %}Inventory{% endif %}</h1><div class="sub">{% if preview.mode == 'replace' %}Replace active list{% else %}Add / update{% endif %} · {{ valid|length }} valid · {{ errors|length }} with errors</div></div>
+{% if legacy %}<p class="error" role="alert">This old preview cannot establish which fields were supplied. Re-upload and review again.</p>{% endif %}
 {% if stale %}<p class="error" role="alert">Source data changed since this preview was made. Re-upload and review again — confirmation is blocked.</p>{% endif %}
 <p class="help">{{ valid|length }} valid · {{ errors|length }} with errors{% if preview.mode == "replace" %} · {{ to_archive }} record(s) would be archived as missing{% endif %}.</p>
+<p class="help">Missing columns and blank optional cells preserve existing values in both modes. Clear a field deliberately in Edit details. Nothing has changed yet.</p>
 {% if errors %}
 <div class="section-title">Rows needing fixes ({{ errors|length }})</div>
 <div class="tablewrap"><table>
@@ -33,7 +35,7 @@
 {% if preview.mode == "add_update" %}<td data-label="Apply?"><input type="checkbox" name="row-{{ r.row }}" checked aria-label="Apply row {{ r.row }}"></td>{% endif %}
 <td data-label="Row" class="r tnum">{{ r.row }}</td><td data-label="Action"><span class="tag">{{ r.action }}</span></td>
 <td data-label="Summary">{% if preview.kind == "roster" %}{{ r.external_id }} — {{ r.name }}{% if r.archived %} (archived — will be reactivated){% endif %}{% else %}{{ r.category }} / {{ r.name }}{% if r.size %} ({{ r.size }}){% endif %}{% if r.archived %} (archived — will be reactivated){% endif %}{% endif %}</td>
-<td data-label="Change">{% if preview.kind == "inventory" %}{% if r.current is not None %}now {{ r.current }} → {% endif %}{% if r.counted is not None %}count {{ r.counted }} ({{ r.delta|stringformat:"+d" }}, {{ r.movement }}){% else %}details only{% endif %}{% if r.low_threshold is not None %} · alert {{ r.low_threshold }}{% endif %}{% else %}—{% endif %}</td>
+<td data-label="Change">{% if preview.kind == "inventory" %}{% if r.current is not None %}Available {{ r.current }} → {% endif %}{% if r.counted is not None %}count {{ r.counted }} ({{ r.delta|stringformat:"+d" }}){% else %}count preserved{% endif %}{% if r.low_threshold is not None %}<br>Alert level {{ r.old_threshold|default_if_none:'new' }} → {{ r.low_threshold }}{% else %}<br>Alert level preserved{% endif %}{% else %}{% for change in r.changes %}<div><strong>{{ change.field|capfirst }}:</strong> {{ change.before|default:'empty' }} → {{ change.after }}</div>{% empty %}No field changes{% endfor %}{% if r.preserved %}<p class="mini">Preserved: {{ r.preserved|join:', ' }}</p>{% endif %}{% endif %}</td>
 <td data-label="Note">{{ r.reason|default:"—" }}</td>
 </tr>
 {% empty %}<tr><td colspan="6">No valid rows.</td></tr>

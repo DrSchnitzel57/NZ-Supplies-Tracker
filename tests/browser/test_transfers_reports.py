@@ -72,14 +72,14 @@ def test_inventory_stock_minus_out_and_exports(page, live_server, externals):
     from apps.issuing.models import Issue
     assert Issue.objects.count() == 0  # never fabricates issues
     # CSV + PDF exports download real content.
-    page.goto(f"{live_server.url}/reports/")
+    page.goto(f"{live_server.url}/reports/?family=inventory")
     with page.expect_download() as dl:
-        page.click("a[href='/reports/inventory.csv']")
+        page.click('[data-report-csv]')
     path = dl.value.path()
     rows = list(csv.DictReader(io.StringIO(open(path).read())))
     assert any(r["available"] == "8" for r in rows)
     with page.expect_download() as dl2:
-        page.click("a[href='/reports/family/per-item/?format=pdf']")
+        page.click('[data-report-pdf]')
     assert open(dl2.value.path(), "rb").read(4) == b"%PDF"
     assert_no_internet(externals)
 
@@ -88,15 +88,16 @@ def test_report_families_serve_csv_and_pdf(page, live_server, externals):
     staff_login(page, live_server, "rep")
     for family in ("per-item", "per-person", "low-stock", "stock",
                    "category", "intake", "history"):
-        page.goto(f"{live_server.url}/reports/")
+        page.goto(f"{live_server.url}/reports/?family={family}")
         with page.expect_download() as dl:
-            page.click(f"a[href='/reports/family/{family}/?format=csv']")
+            page.click('[data-report-csv]')
         data = open(dl.value.path(), "rb").read()
         assert len(data) > 0
         with page.expect_download() as dl2:
-            page.click(f"a[href='/reports/family/{family}/?format=pdf']")
+            page.click('[data-report-pdf]')
         assert open(dl2.value.path(), "rb").read(4) == b"%PDF"
     page.goto(f"{live_server.url}/reports/")
     assert "Available stock" in page.content()
+    page.goto(f"{live_server.url}/reports/?family=intake")
     assert "Arrivals overview" in page.content()
     assert_no_internet(externals)

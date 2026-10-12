@@ -152,6 +152,25 @@ Replacement imports require every row valid plus administrator permission
 with fresh password confirmation, and archive records missing from the file
 instead of deleting them.
 
+Missing columns and blank optional cells preserve existing values in **both**
+add/update and replacement modes; new optional values remain empty. Clear a
+field explicitly in its Edit details form. New arrival/release dates are saved.
+Previews now record uploaded field presence. Legacy previews without that
+contract must be re-uploaded; the application cannot reconstruct erased data.
+
+## Staff reports
+
+Screens, CSV and A4 PDF downloads share validated filters and all matching rows
+(screens paginate). Summaries group by stable IDs with current names; history
+keeps original snapshots and includes item/size/quantity, notes and undo reasons.
+Issued dates use Pacific/Auckland. Current-net summaries exclude every undone
+issue, including those undone later; they are not period or as-of accounting.
+Available-stock reports always describe stock now and offer no date filter.
+Archived records are an explicit filter. Raw roster/inventory CSV web endpoints
+default to active records too; full ZIP bundles retain archives unconditionally.
+Roster CSV includes all supported fields and source metadata. PDF text embeds
+licensed Noto Sans, wraps long cells and repeats summary-table headers.
+
 ## Seed conversion
 
 `seed_bundle --source HTML --output ZIP` parses the embedded `SEED` JSON
