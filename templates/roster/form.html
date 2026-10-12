@@ -6,12 +6,8 @@
 <div class="card"><div class="bd">
 <form method="post" class="stack" data-once>
 {% csrf_token %}
-<div class="form-grid">
-<label>External ID <input name="external_id" value="{% if external_id %}{{ external_id }}{% elif person %}{{ person.external_id }}{% endif %}" required></label>
-<label>Full name <input name="name" value="{% if name %}{{ name }}{% elif person %}{{ person.name }}{% endif %}" required></label>
-<label class="full">Email (optional) <input type="email" name="email" value="{% if email %}{{ email }}{% elif person %}{{ person.email }}{% endif %}"></label>
-</div>
-{% if person %}<input type="hidden" name="expected_version" value="{{ person.version }}">{% endif %}
+{% include "components/form_fields.html" %}
+<p class="help">Clear an optional field here to remove its value. Imports preserve blank fields. A conflicting edit keeps your input; reopen the current record and review before retrying.</p>
 <p><button type="submit" class="primary">{% if mode == "create" %}Add person{% else %}Save changes{% endif %}</button> <a class="btn" href="/roster/">Back to list</a></p>
 </form>
 </div></div>

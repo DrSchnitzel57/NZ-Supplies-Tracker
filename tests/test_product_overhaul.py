@@ -134,3 +134,44 @@ class ProductSafetyTests(TestCase):
         self.assertEqual(timezone.get_default_timezone_name(), 'Pacific/Auckland')
         self.assertEqual(payload['issues_today'], 1)
         self.assertEqual(response.context['counts']['low_stock'], 22)
+
+    def test_roster_bound_errors_keep_all_context_and_original_version(self):
+        person = make_missionary(self.admin)
+        payload = {'external_id': person.external_id, 'name': '', 'mission': 'Kept mission',
+                   'arrival_date': '2026-11-01', 'personal_email': 'invalid',
+                   'expected_version': str(person.version)}
+        response = self.client.post(f'/roster/{person.pk}/edit/', payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'value="Kept mission"', status_code=400)
+        self.assertContains(response, 'value="2026-11-01"', status_code=400)
+        self.assertContains(response, 'value="invalid"', status_code=400)
+        self.assertEqual(response.context['form']['name'].value(), '')
+        person.refresh_from_db()
+        self.assertNotEqual(person.name, '')
+
+    def test_roster_complete_edit_can_deliberately_clear_optional_field(self):
+        person = make_missionary(self.admin)
+        payload = {'external_id': person.external_id, 'name': 'Edited synthetic',
+                   'mission': 'Mission', 'language': 'Māori', 'stake': 'Home stake',
+                   'title_prefix': 'Sister', 'arrival_status': 'Arrived',
+                   'arrival_date': '2026-10-12', 'release_date': '2027-10-12',
+                   'email': '', 'personal_email': 'synthetic@example.test',
+                   'expected_version': str(person.version)}
+        response = self.client.post(f'/roster/{person.pk}/edit/', payload)
+        self.assertEqual(response.status_code, 302)
+        person.refresh_from_db()
+        self.assertEqual(person.email, '')
+        self.assertEqual(person.language, 'Māori')
+        self.assertEqual(person.arrival_date, date(2026, 10, 12))
+
+    def test_stock_failure_retains_reason_count_and_key(self):
+        item = make_item(self.admin)
+        response = self.client.post(f'/inventory/{item.pk}/add-stock/', {
+            'quantity': 'bad', 'reason': 'Keep delivery context', 'idempotency_key': 'keep-rx'})
+        self.assertEqual(response.status_code, 400)
+        form = response.context['receive_form']
+        self.assertEqual(form['quantity'].value(), 'bad')
+        self.assertEqual(form['reason'].value(), 'Keep delivery context')
+        self.assertEqual(form['idempotency_key'].value(), 'keep-rx')
+        item.refresh_from_db()
+        self.assertEqual(item.on_hand, 10)

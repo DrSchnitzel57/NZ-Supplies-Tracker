@@ -927,7 +927,7 @@ class ViewBehaviorTests(TestCase):
         html = self.client.get("/inventory/", {"size": "large"}).content.decode()
         self.assertIn(str(item.pk), html)
 
-    def test_lists_state_explicit_limits(self):
+    def test_lists_paginate_without_losing_records(self):
         from apps.roster.models import Missionary
 
         self.client.login(username=self.staff.username, password=self.spw)
@@ -935,7 +935,10 @@ class ViewBehaviorTests(TestCase):
             Missionary(external_id=f"Bulk-{i}", name=f"Bulk Person {i}")
             for i in range(501)])
         html = self.client.get("/roster/").content.decode()
-        self.assertIn("first 500 of 501", html)
+        self.assertIn("Page 1 of 11", html)
+        last = self.client.get('/roster/', {'page': 11})
+        self.assertEqual(len(last.context['missionaries']), 1)
+        self.assertEqual(last.context['total'], 501)
         # Exports never truncate.
         response = self.client.get("/reports/roster.csv")
         rows = list(csv.DictReader(io.StringIO(response.content.decode())))
@@ -1751,4 +1754,3 @@ class RestoreTakeoverTests(TransactionTestCase):
                 Missionary.objects.filter(pk=person.pk).exists())
             # The pre-restore window died with the restored file; the fresh
             # token is the only release path (documented ownership protocol).
-

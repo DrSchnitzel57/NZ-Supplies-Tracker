@@ -10,6 +10,9 @@ from django.views.decorators.http import require_http_methods
 
 from apps.accounts.decorators import staff_required
 from apps.common.errors import DomainError
+from apps.common.forms import AddStockForm, CorrectCountForm
+from apps.common.pagination import paginate
+from apps.inventory.forms import ItemForm, NewItemForm
 from apps.inventory import services as inv
 from apps.inventory.models import Item, StockMovement
 
@@ -63,8 +66,8 @@ def item_list(request):
     if low_only:
         qs = qs.filter(on_hand__lte=Coalesce("low_threshold", 0))
     total = qs.count()
-    qs = list(qs.order_by("category", "name", "size")[:1000])
-    _summaries(qs)
+    page, pagination = paginate(request, qs.order_by("category", "name", "size", "pk"))
+    qs = _summaries(list(page))
     categories = list(
         Item.objects.filter(is_archived=False)
         .order_by("category")
@@ -84,6 +87,7 @@ def item_list(request):
             "categories": categories,
             "total": total,
             "shown": len(qs),
+            **pagination,
         },
     )
 
@@ -92,49 +96,28 @@ def item_list(request):
 def item_create(request):
     from apps.operations.models import SystemSetting
 
-    def _default_threshold() -> str:
+    threshold = SystemSetting.objects.filter(key="default_low_threshold").first()
+    data = request.POST.copy() if request.method == "POST" else None
+    if data is not None and not data.get("low_threshold"):
+        data["low_threshold"] = threshold.value if threshold else "0"
+    form = NewItemForm(data, initial={
+        "idempotency_key": f"ui-create-{_new_uuid()}",
+        "low_threshold": threshold.value if threshold else 0})
+    if request.method == "POST" and form.is_valid():
         try:
-            return SystemSetting.objects.get(key="default_low_threshold").value or "0"
-        except SystemSetting.DoesNotExist:
-            return "0"
-
-    if request.method == "POST":
-        import uuid as _uuid
-
-        try:
+            fields = form.cleaned_data.copy()
+            fields.pop("expected_version", None)
+            fields["unit"] = fields.get("unit") or "each"
+            fields["idempotency_key"] = fields.get("idempotency_key") or f"ui-create-{_new_uuid()}"
             obj = inv.create_item(
-                actor=request.user,
-                category=request.POST.get("category", ""),
-                name=request.POST.get("name", ""),
-                size=request.POST.get("size", ""),
-                opening_qty=request.POST.get("opening_qty") or 0,
-                low_threshold=request.POST.get("low_threshold") or _default_threshold(),
-                reason=(request.POST.get("reason") or "opening balance").strip()
-                or "opening balance",
-                idempotency_key=(request.POST.get("idempotency_key") or "").strip()
-                or f"ui-create-{_uuid.uuid4().hex}",
-            )
+                actor=request.user, **fields)
         except DomainError as exc:
-            messages.error(request, f"Could not add item: {exc}")
-            return render(
-                request,
-                "inventory/form.html",
-                {
-                    "mode": "create",
-                    "category": request.POST.get("category", ""),
-                    "name": request.POST.get("name", ""),
-                    "size": request.POST.get("size", ""),
-                    "create_key": (request.POST.get("idempotency_key") or "").strip()
-                    or f"ui-create-{_uuid.uuid4().hex}",
-                    "default_threshold": _default_threshold(),
-                }, status=400,
-            )
-        messages.success(request, f"Added {obj}.")
-        return redirect("inventory-detail", pk=obj.pk)
+            form.add_error(None, str(exc))
+        else:
+            messages.success(request, f"Added {obj}.")
+            return redirect("inventory-detail", pk=obj.pk)
     return render(request, "inventory/form.html",
-                  {"mode": "create",
-                   "create_key": f"ui-create-{_new_uuid()}",
-                   "default_threshold": _default_threshold()})
+                  {"mode": "create", "form": form}, status=400 if form.is_bound else 200)
 
 
 def _new_uuid() -> str:
@@ -145,13 +128,14 @@ def _new_uuid() -> str:
 
 @staff_required
 def item_detail(request, pk):
-    import uuid as _uuid
-
     item = get_object_or_404(Item, pk=pk)
+    return _render_detail(request, item)
+
+
+def _render_detail(request, item, *, receive_form=None, correct_form=None, status=200):
     _summaries([item])
-    movements = list(
-        StockMovement.objects.filter(item=item).order_by("-created_at")[:100]
-    )
+    page, pagination = paginate(request, StockMovement.objects.filter(item=item).order_by("-created_at", "pk"))
+    movements = list(page)
     plain = {
         StockMovement.OPENING: "Opening amount",
         StockMovement.RECEIPT: "Added stock",
@@ -169,46 +153,30 @@ def item_detail(request, pk):
             "item": item,
             "movements": movements,
             "ledger_total": ledger_total,
-            "receive_key": f"ui-rx-{_uuid.uuid4().hex}",
-            "correct_key": f"ui-ct-{_uuid.uuid4().hex}",
-        },
+            "receive_form": receive_form or AddStockForm(auto_id="receive_%s", initial={"idempotency_key": f"ui-rx-{_new_uuid()}"}),
+            "correct_form": correct_form or CorrectCountForm(initial={
+                "idempotency_key": f"ui-ct-{_new_uuid()}", "expected_version": item.version,
+                "counted_qty": item.on_hand}, auto_id="correct_%s"),
+            **pagination,
+        }, status=status,
     )
 
 
 @staff_required
 def item_edit(request, pk):
     item = get_object_or_404(Item, pk=pk)
-    if request.method == "POST":
-        try:
-            expected = int(request.POST.get("expected_version", item.version))
-        except (TypeError, ValueError):
-            expected = item.version
-        try:
-            threshold = request.POST.get("low_threshold")
-            threshold = int(threshold) if threshold not in (None, "") else None
-        except (TypeError, ValueError):
-            messages.error(request, "Low-stock alert level must be a whole number.")
-            return render(request, "inventory/form.html", {"mode": "edit", "item": item})
+    form = ItemForm(request.POST if request.method == "POST" else None, instance=item)
+    if request.method == "POST" and form.is_valid():
         try:
             inv.update_item(
-                actor=request.user,
-                item_id=item.pk,
-                expected_version=expected,
-                category=request.POST.get("category"),
-                name=request.POST.get("name"),
-                size=request.POST.get("size"),
-                unit=request.POST.get("unit"),
-                low_threshold=threshold,
-            )
+                actor=request.user, item_id=item.pk, **form.cleaned_data)
         except DomainError as exc:
-            messages.error(request, f"Could not save changes: {exc}")
-            item.refresh_from_db()
-            return render(
-                request, "inventory/form.html", {"mode": "edit", "item": item}
-            )
-        messages.success(request, "Saved changes.")
-        return redirect("inventory-detail", pk=item.pk)
-    return render(request, "inventory/form.html", {"mode": "edit", "item": item})
+            form.add_error(None, str(exc))
+        else:
+            messages.success(request, "Saved changes.")
+            return redirect("inventory-detail", pk=item.pk)
+    return render(request, "inventory/form.html", {"mode": "edit", "item": item, "form": form},
+                  status=400 if form.is_bound else 200)
 
 
 @staff_required
@@ -216,27 +184,18 @@ def item_edit(request, pk):
 def item_receive(request, pk):
     """Add stock: positive quantity plus a reason."""
     item = get_object_or_404(Item, pk=pk)
-    import uuid as _uuid
-
-    key = (request.POST.get("idempotency_key") or "").strip() or f"ui-rx-{_uuid.uuid4().hex}"
-    try:
-        qty = int(request.POST.get("quantity") or 0)
-    except (TypeError, ValueError):
-        messages.error(request, "Add-stock quantity must be a whole number.")
-        return redirect("inventory-detail", pk=item.pk)
-    try:
-        inv.receive_stock(
-            actor=request.user,
-            item_id=item.pk,
-            quantity=qty,
-            reason=request.POST.get("reason", ""),
-            idempotency_key=key,
-        )
-    except DomainError as exc:
-        messages.error(request, f"Could not add stock: {exc}")
-        return redirect("inventory-detail", pk=item.pk)
-    messages.success(request, f"Added {qty} to {item}.")
-    return redirect("inventory-detail", pk=item.pk)
+    data = request.POST.copy()
+    data.setdefault("idempotency_key", f"ui-rx-{_new_uuid()}")
+    form = AddStockForm(data, auto_id="receive_%s")
+    if form.is_valid():
+        try:
+            inv.receive_stock(actor=request.user, item_id=item.pk, **form.cleaned_data)
+        except DomainError as exc:
+            form.add_error(None, str(exc))
+        else:
+            messages.success(request, f"Added {form.cleaned_data['quantity']} to {item}.")
+            return redirect("inventory-detail", pk=item.pk)
+    return _render_detail(request, item, receive_form=form, status=400)
 
 
 @staff_required
@@ -244,32 +203,18 @@ def item_receive(request, pk):
 def item_correct(request, pk):
     """Correct stock count: set Available to the counted value with a reason."""
     item = get_object_or_404(Item, pk=pk)
-    import uuid as _uuid
-
-    key = (request.POST.get("idempotency_key") or "").strip() or f"ui-ct-{_uuid.uuid4().hex}"
-    try:
-        expected = int(request.POST.get("expected_version", item.version))
-    except (TypeError, ValueError):
-        expected = item.version
-    try:
-        counted = int(request.POST.get("counted_qty", ""))
-    except (TypeError, ValueError):
-        messages.error(request, "Counted quantity must be a whole number.")
-        return redirect("inventory-detail", pk=item.pk)
-    try:
-        inv.adjust_count(
-            actor=request.user,
-            item_id=item.pk,
-            counted_qty=counted,
-            reason=request.POST.get("reason", ""),
-            expected_version=expected,
-            idempotency_key=key,
-        )
-    except DomainError as exc:
-        messages.error(request, f"Could not correct the count: {exc}")
-        return redirect("inventory-detail", pk=item.pk)
-    messages.success(request, f"Count corrected to {counted} for {item}.")
-    return redirect("inventory-detail", pk=item.pk)
+    data = request.POST.copy()
+    data.setdefault("idempotency_key", f"ui-ct-{_new_uuid()}")
+    form = CorrectCountForm(data, auto_id="correct_%s")
+    if form.is_valid():
+        try:
+            inv.adjust_count(actor=request.user, item_id=item.pk, **form.cleaned_data)
+        except DomainError as exc:
+            form.add_error(None, str(exc))
+        else:
+            messages.success(request, f"Count corrected to {form.cleaned_data['counted_qty']} for {item}.")
+            return redirect("inventory-detail", pk=item.pk)
+    return _render_detail(request, item, correct_form=form, status=400)
 
 
 @staff_required

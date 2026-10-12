@@ -6,21 +6,8 @@
 <div class="card"><div class="bd">
 <form method="post" class="stack" data-once>
 {% csrf_token %}
-<div class="form-grid">
-<label>Category <input name="category" value="{% if category %}{{ category }}{% elif item %}{{ item.category }}{% endif %}" required></label>
-<label>Item name <input name="name" value="{% if name %}{{ name }}{% elif item %}{{ item.name }}{% endif %}" required></label>
-<label>Size (optional) <input name="size" value="{% if size %}{{ size }}{% elif item %}{{ item.size }}{% endif %}"></label>
-{% if mode == "create" %}
-<label>Opening quantity <input name="opening_qty" inputmode="numeric" pattern="[0-9]*" value="0"></label>
-<label class="full">Reason <input name="reason" value="opening balance"></label>
-<input type="hidden" name="idempotency_key" value="{{ create_key }}">
-{% else %}
-<label>Unit <input name="unit" value="{{ item.unit }}"></label>
-<input type="hidden" name="expected_version" value="{{ item.version }}">
-{% endif %}
-<label>Low-stock alert level <input name="low_threshold" inputmode="numeric" pattern="[0-9]*" value="{% if item %}{{ item.low_threshold }}{% elif default_threshold %}{{ default_threshold }}{% else %}0{% endif %}"></label>
-</div>
-{% if mode == "create" and default_threshold %}<p class="help">Defaults to the site alert level ({{ default_threshold }}). Change it per item if needed.</p>{% endif %}
+{% include "components/form_fields.html" %}
+<p class="help">Stock is changed separately through Add stock or Correct stock count. Conflicting edits keep your input; review the current record before retrying.</p>
 <p><button type="submit" class="primary">{% if mode == "create" %}Add item{% else %}Save changes{% endif %}</button></p>
 </form>
 </div></div>

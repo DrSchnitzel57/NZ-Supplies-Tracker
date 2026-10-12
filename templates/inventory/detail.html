@@ -20,9 +20,7 @@
 <div class="card"><div class="hd"><h2>Add stock</h2></div><div class="bd">
 <form method="post" action="/inventory/{{ item.pk }}/add-stock/" class="stack" data-once>
 {% csrf_token %}
-<input type="hidden" name="idempotency_key" value="{{ receive_key }}">
-<label>Quantity to add <input name="quantity" inputmode="numeric" pattern="[0-9]*" required></label>
-<label>Reason (for example: “delivery from supplier”) <input name="reason" required></label>
+{% include "components/form_fields.html" with form=receive_form %}
 <p><button type="submit" class="primary">Add stock</button></p>
 </form>
 </div></div>
@@ -31,10 +29,8 @@
 <p class="help">Count what is actually on the shelf and enter it here. The difference is recorded as a correction with your reason. If someone else changed stock after you opened this page, you will be asked to refresh first.</p>
 <form method="post" action="/inventory/{{ item.pk }}/correct-count/" class="stack" data-once>
 {% csrf_token %}
-<input type="hidden" name="expected_version" value="{{ item.version }}">
-<input type="hidden" name="idempotency_key" value="{{ correct_key }}">
-<label>Counted quantity now on the shelf <input name="counted_qty" inputmode="numeric" pattern="[0-9]*" value="{{ item.on_hand }}" required></label>
-<label>Reason (for example: “recount found a damaged box”) <input name="reason" required></label>
+{% include "components/form_fields.html" with form=correct_form %}
+<p class="help">A stale count is not refreshed automatically. Your count and reason stay here; <a href="/inventory/{{ item.pk }}/" target="_blank" rel="noopener">review current stock in another tab</a>, then reopen this page to count again.</p>
 <p><button type="submit">Correct stock count</button></p>
 </form>
 </div></div>
@@ -50,4 +46,6 @@
 {% endfor %}
 </tbody>
 </table></div>
+{% include "components/pagination.html" %}
+{% if item.source_corrected %}<p class="help">Migration correction: source balance {{ item.source_remaining }}; opening balance corrected to zero.</p>{% endif %}
 {% endblock %}

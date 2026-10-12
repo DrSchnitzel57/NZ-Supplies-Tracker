@@ -14,6 +14,7 @@
   <label class="check"><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
   <button type="submit" class="primary">Filter</button>
   <a class="btn" href="/inventory/new/">Add an item</a>
+  <a class="btn" href="/transfers/inventory/">Import inventory</a>
 </form>
 <div class="tablewrap"><table>
 <thead><tr><th>Item</th><th class="r">Available</th><th class="r">Given out (net)</th><th>Stock</th><th>Status</th></tr></thead>
@@ -23,12 +24,12 @@
 <td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a>{% if item.on_hand <= item.low_threshold %} <span class="badge-low">low</span>{% endif %}</td>
 <td data-label="Available" class="r tnum stock-num" data-available-for="{{ item.pk }}">{{ item.on_hand }}</td>
 <td data-label="Given out (net)" class="r tnum">{{ item.net_given }}</td>
-<td data-label="Stock"><span class="meter"><span class="{% if item.on_hand <= item.low_threshold %}crit{% endif %}" style="width:{% if item.on_hand > 20 %}80{% elif item.on_hand > 10 %}55{% elif item.on_hand > 0 %}30{% else %}6{% endif %}%"></span></span></td>
+<td data-label="Stock"><span data-stock-status="{{ item.pk }}">{% if item.on_hand == 0 %}Out of stock{% elif item.on_hand <= item.low_threshold %}Low stock{% else %}Available{% endif %}</span></td>
 <td data-label="Status">{% if item.is_archived %}<span class="tag">Archived</span>{% else %}<span class="dot">Active</span>{% endif %}</td>
 </tr>
 {% empty %}<tr><td colspan="5">No items found.</td></tr>
 {% endfor %}
 </tbody>
 </table></div>
-{% if total > shown %}<p class="help">Showing the first {{ shown }} of {{ total }} items — narrow the search to see the rest.</p>{% endif %}
+{% include "components/pagination.html" %}
 {% endblock %}

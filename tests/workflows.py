@@ -334,7 +334,9 @@ class StockCorrectionFlowTests(TestCase):
             "counted_qty": "5", "reason": "recount",
             "expected_version": str(stale), "idempotency_key": "stale-ui-ct",
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'value="5"', status_code=400)
+        self.assertContains(response, 'value="recount"', status_code=400)
         item.refresh_from_db()
         self.assertEqual(item.on_hand, 11)
 

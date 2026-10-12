@@ -8,6 +8,7 @@
   <label class="check"><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
   <button type="submit" class="primary">Search</button>
   <a class="btn" href="/roster/new/">Add a person</a>
+  <a class="btn" href="/transfers/roster/">Import missionaries</a>
 </form>
 <div class="tablewrap"><table>
 <thead><tr><th>Name</th><th>ID</th><th>Status</th></tr></thead>
@@ -18,5 +19,5 @@
 {% endfor %}
 </tbody>
 </table></div>
-{% if total > shown %}<p class="help">Showing the first {{ shown }} of {{ total }} people — narrow the search to see the rest.</p>{% endif %}
+{% include "components/pagination.html" %}
 {% endblock %}

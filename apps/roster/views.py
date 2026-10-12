@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
-
 from django.contrib import messages
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,7 +9,8 @@ from django.views.decorators.http import require_http_methods
 
 from apps.accounts.decorators import staff_required
 from apps.common.errors import DomainError
-from apps.inventory.models import Item
+from apps.common.pagination import paginate
+from apps.roster.forms import MissionaryForm
 from apps.issuing.models import Issue
 from apps.roster import services as roster_services
 from apps.roster.models import Missionary
@@ -28,66 +27,46 @@ def missionary_list(request):
         qs = qs.filter(Q(name__icontains=q) | Q(external_id__icontains=q)
                        | Q(email__icontains=q))
     total = qs.count()
-    qs = qs.order_by("name")[:500]
+    qs, pagination = paginate(request, qs.order_by("name", "pk"))
     return render(
         request,
         "roster/list.html",
         {"missionaries": qs, "q": q, "show_archived": show_archived,
-         "total": total, "shown": len(qs)},
+          "total": total, "shown": len(qs), **pagination},
     )
 
 
 @staff_required
 def missionary_create(request):
-    if request.method == "POST":
+    form = MissionaryForm(request.POST if request.method == "POST" else None)
+    if request.method == "POST" and form.is_valid():
         try:
+            fields = form.cleaned_data.copy()
+            fields.pop("expected_version", None)
             obj = roster_services.create_missionary(
-                actor=request.user,
-                external_id=request.POST.get("external_id", ""),
-                name=request.POST.get("name", ""),
-                email=request.POST.get("email", ""),
-                title_prefix=request.POST.get("title_prefix", ""),
-                arrival_status=request.POST.get("arrival_status", ""),
-                stake=request.POST.get("stake", ""),
-                mission=request.POST.get("mission", ""),
-                language=request.POST.get("language", ""),
-                personal_email=request.POST.get("personal_email", ""),
-            )
+                actor=request.user, **fields)
         except DomainError as exc:
-            messages.error(request, f"Could not add person: {exc}")
-            return render(
-                request,
-                "roster/form.html",
-                {
-                    "mode": "create",
-                    "external_id": request.POST.get("external_id", ""),
-                    "name": request.POST.get("name", ""),
-                    "email": request.POST.get("email", ""),
-                },
-            )
-        messages.success(request, f"Added {obj.name}.")
-        return redirect("roster-detail", pk=obj.pk)
-    return render(request, "roster/form.html", {"mode": "create"})
+            form.add_error(None, str(exc))
+        else:
+            messages.success(request, f"Added {obj.name}.")
+            return redirect("roster-detail", pk=obj.pk)
+    return render(request, "roster/form.html", {"mode": "create", "form": form},
+                  status=400 if form.is_bound else 200)
 
 
 @staff_required
 def missionary_detail(request, pk):
     person = get_object_or_404(Missionary, pk=pk)
-    issues = (
+    issues, pagination = paginate(request, (
         Issue.objects.filter(missionary=person)
         .prefetch_related("lines")
-        .order_by("-issued_at")[:50]
-    )
+        .order_by("-issued_at", "pk")))
     # Net given to this person (active issues only).
     net_total = (
         Issue.objects.filter(missionary=person, status=Issue.ACTIVE)
         .aggregate(s=Sum("lines__quantity"))["s"]
         or 0
     )
-    active_items = Item.objects.filter(is_archived=False).order_by(
-        "category", "name", "size"
-    )[:1000]
-    draft_key = str(uuid.uuid4().hex)
     return render(
         request,
         "roster/detail.html",
@@ -95,8 +74,7 @@ def missionary_detail(request, pk):
             "person": person,
             "issues": issues,
             "net_total": net_total,
-            "active_items": active_items,
-            "draft_key": draft_key,
+            **pagination,
         },
     )
 
@@ -104,43 +82,18 @@ def missionary_detail(request, pk):
 @staff_required
 def missionary_edit(request, pk):
     person = get_object_or_404(Missionary, pk=pk)
-    if request.method == "POST":
-        try:
-            expected = int(request.POST.get("expected_version", person.version))
-        except (TypeError, ValueError):
-            expected = person.version
+    form = MissionaryForm(request.POST if request.method == "POST" else None, instance=person)
+    if request.method == "POST" and form.is_valid():
         try:
             roster_services.update_missionary(
-                actor=request.user,
-                missionary_id=person.pk,
-                expected_version=expected,
-                external_id=request.POST.get("external_id"),
-                name=request.POST.get("name"),
-                email=request.POST.get("email"),
-                title_prefix=request.POST.get("title_prefix"),
-                arrival_status=request.POST.get("arrival_status"),
-                stake=request.POST.get("stake"),
-                mission=request.POST.get("mission"),
-                language=request.POST.get("language"),
-                personal_email=request.POST.get("personal_email"),
-            )
+                actor=request.user, missionary_id=person.pk, **form.cleaned_data)
         except DomainError as exc:
-            messages.error(request, f"Could not save changes: {exc}")
-            person.refresh_from_db()
-            return render(
-                request,
-                "roster/form.html",
-                {
-                    "mode": "edit",
-                    "person": person,
-                    "external_id": request.POST.get("external_id", ""),
-                    "name": request.POST.get("name", ""),
-                    "email": request.POST.get("email", ""),
-                },
-            )
-        messages.success(request, "Saved changes.")
-        return redirect("roster-detail", pk=person.pk)
-    return render(request, "roster/form.html", {"mode": "edit", "person": person})
+            form.add_error(None, str(exc))
+        else:
+            messages.success(request, "Saved changes.")
+            return redirect("roster-detail", pk=person.pk)
+    return render(request, "roster/form.html", {"mode": "edit", "person": person, "form": form},
+                  status=400 if form.is_bound else 200)
 
 
 @staff_required
