@@ -1,12 +1,10 @@
 /* MTC Supplies Tracker — polished LAN UI (offline-safe, no external requests).
-   Design language mirrors the original single-file reference:
-   soft ground, white cards, teal accent, KPI rails, pills, banners.
-   Keeps legacy hooks required by tests: .topbar, .help, .toolbar,
-   .card/.cards, .primary-action, .userbar, .messages, .badge-*, .illus. */
+   Task-led server-template shell; all runtime assets are local. */
 :root{
   color-scheme:light;
   --ground:#f5f7f6; --card:#ffffff; --card-2:#fbfcfc;
-  --ink:#17211d; --muted:#5c6b65; --faint:#8a978f;
+  --ink:#17211d; --muted:#5c6b65; --faint:#5c6b65;
+  --primary-bg:#0f766e; --primary-hover:#0b5850;
   --border:#e4e9e6; --border-2:#eef2f0;
   --accent:#0f766e; --accent-ink:#0b5850; --accent-soft:#d6ece9; --accent-2:#0e7490;
   --good:#15803d; --good-soft:#dcefe1;
@@ -22,7 +20,7 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --ground:#0d1512; --card:#15201c; --card-2:#111a17;
-    --ink:#e8efeb; --muted:#9fb0a9; --faint:#6f7f78;
+    --ink:#e8efeb; --muted:#9fb0a9; --faint:#9fb0a9;
     --border:#243430; --border-2:#1c2925;
     --accent:#2dd4bf; --accent-ink:#5fe6d4; --accent-soft:#123531; --accent-2:#22b8cf;
     --good:#46c26a; --good-soft:#12331f;
@@ -34,7 +32,7 @@
 }
 :root[data-theme="dark"]{
   --ground:#0d1512; --card:#15201c; --card-2:#111a17;
-  --ink:#e8efeb; --muted:#9fb0a9; --faint:#6f7f78;
+  --ink:#e8efeb; --muted:#9fb0a9; --faint:#9fb0a9;
   --border:#243430; --border-2:#1c2925;
   --accent:#2dd4bf; --accent-ink:#5fe6d4; --accent-soft:#123531; --accent-2:#22b8cf;
   --good:#46c26a; --good-soft:#12331f;
@@ -196,9 +194,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .combo .btn{flex:none}
 select[size]{max-height:16rem;overflow-y:auto}
 #person-count,#item-count{min-height:1.2em;display:block}
-.field{position:relative;display:flex;align-items:center}
+.field{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:.4rem;min-width:0}
 .field svg{position:absolute;left:11px;width:15px;height:15px;color:var(--faint);pointer-events:none}
-.field input{padding-left:33px;min-width:210px}
+.field input{min-width:0;width:100%}
 .numedit{width:68px;padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .toolbar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:end;margin:.75rem 0;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;box-shadow:var(--shadow)}
 .toolbar.quick-actions{align-items:center}
@@ -257,3 +255,41 @@ select[size]{max-height:16rem;overflow-y:auto}
   .card,.tablewrap{box-shadow:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none !important}}
+
+/* Finished-product controls and complete small-screen menu. */
+[hidden]{display:none !important}
+input:not([type]),textarea{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--muted);border-radius:9px;padding:9px 12px;max-width:100%}
+input:not([type=hidden]),select,textarea{border-color:var(--muted);min-height:44px}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
+button,.btn{min-height:44px}
+button.primary,.btn.primary,.primary-action{background:var(--primary-bg);color:#fff !important}
+button.primary:hover,.btn.primary:hover,.primary-action:hover{background:var(--primary-hover)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.navlink[aria-current=page],.tabs [aria-current=page]{background:var(--accent-soft);color:var(--accent-ink);font-weight:800}
+.navlink.primary-action[aria-current=page]{background:var(--primary-hover)}
+.stack{display:flex;flex-direction:column;gap:.7rem}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.issue-row{display:grid;grid-template-columns:minmax(0,1fr) 7rem auto;align-items:end;gap:.7rem;padding:.8rem;border:1px solid var(--border);border-radius:9px;margin-bottom:.7rem}
+.line-label,td,dd{overflow-wrap:anywhere}
+.summary{font-weight:800;font-size:1.1rem}
+.errorlist{color:var(--crit);padding-left:1.2rem;margin:.2rem 0}
+.form-errors{padding:.8rem;border:1px solid var(--crit);background:var(--crit-soft);border-radius:9px}
+dl{display:grid;grid-template-columns:minmax(6rem,1fr) 2fr;gap:.4rem 1rem}
+dt{color:var(--muted);font-weight:600}dd{margin:0}
+summary{cursor:pointer;font-weight:700;padding:.5rem 0}
+#issue-feedback:not(:empty){padding:1rem;border:1px solid var(--accent);background:var(--accent-soft);border-radius:9px;margin-bottom:1rem}
+#shortage-review{padding:1rem;border:1px solid var(--warn);background:var(--card);border-radius:14px}
+#shortage-review h2{margin-bottom:1rem}
+#menu-toggle{display:none}
+@media(max-width:900px){
+  #menu-toggle{display:inline-flex}
+  .side{display:flex;position:static;height:auto;border-bottom:1px solid var(--border)}
+  .js-menu .side{display:none}
+  .js-menu.menu-open .side{display:flex}
+  .two{grid-template-columns:minmax(0,1fr)}
+  .wrap{padding-bottom:24px}
+  .issue-row{grid-template-columns:minmax(0,1fr) 6rem}
+  .issue-row .remove-row{grid-column:1/-1}
+  .top-context{max-width:100%}
+  .pill{white-space:normal}
+}

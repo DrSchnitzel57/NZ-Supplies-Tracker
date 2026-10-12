@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
+from django.template.loader import render_to_string
 
 from apps.accounts.decorators import (
     admin_required,
@@ -61,9 +62,8 @@ def guide(request):
 @no_activity_update
 @require_GET
 def stock_api(request):
-    items = Item.objects.filter(is_archived=False).order_by("category", "name")[
-        :2000
-    ]
+    from apps.inventory.views import _summaries
+    items = _summaries(list(Item.objects.filter(is_archived=False).order_by("category", "name")))
     payload = [
         {
             "id": str(i.pk),
@@ -71,6 +71,8 @@ def stock_api(request):
             "available": i.on_hand,
             "low_threshold": i.low_threshold,
             "low": i.on_hand <= (i.low_threshold or 0),
+            "net_given": i.net_given,
+            "corrections_total": i.corrections_total,
         }
         for i in items
     ]
@@ -106,6 +108,11 @@ def dashboard_api(request):
             ).count(),
             "now": timezone.now().isoformat(),
             "expires_in": expires_in,
+            "attention_html": render_to_string("components/home_attention.html", {
+                "low_items": Item.objects.filter(is_archived=False,
+                    on_hand__lte=Coalesce("low_threshold", 0)).order_by("category", "name")[:8],
+                "recent": Issue.objects.prefetch_related("lines").order_by("-issued_at")[:8],
+            }),
         }
     )
 

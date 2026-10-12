@@ -40,12 +40,27 @@
     document.querySelectorAll("[data-live-items]").forEach(function (node) {
       if (typeof data.items !== "undefined") node.textContent = data.items;
     });
+    document.querySelectorAll("[data-live-today]").forEach(function (node) {
+      if (typeof data.issues_today !== "undefined") node.textContent = data.issues_today;
+    });
+    var attention = el("home-attention");
+    if (attention && data.attention_html && !attention.contains(document.activeElement)) attention.innerHTML = data.attention_html;
   }
 
   function refreshStockTable(data) {
     if (!data || !data.items) return;
     var availability = {};
     data.items.forEach(function (it) { availability[it.id] = it; });
+    document.querySelectorAll("[data-stock-status]").forEach(function (node) {
+      var info = availability[node.dataset.stockStatus];
+      if (info) node.textContent = info.available === 0 ? "Out of stock" : info.low ? "Low stock" : "Available";
+    });
+    document.querySelectorAll("[data-net-for]").forEach(function (node) {
+      var info = availability[node.dataset.netFor]; if (info) node.textContent = info.net_given;
+    });
+    document.querySelectorAll("[data-corrections-for]").forEach(function (node) {
+      var info = availability[node.dataset.correctionsFor]; if (info) node.textContent = info.corrections_total;
+    });
     document.querySelectorAll("[data-available-for]").forEach(function (cell) {
       var id = cell.getAttribute("data-available-for");
       var info = availability[id];
@@ -137,6 +152,23 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    var menu = el("menu-toggle");
+    if (menu) {
+      document.documentElement.classList.add("js-menu");
+      menu.addEventListener("click", function () {
+        var open = document.documentElement.classList.toggle("menu-open");
+        menu.setAttribute("aria-expanded", String(open));
+        if (open) el("navigation").querySelector("a").focus();
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && document.documentElement.classList.contains("menu-open")) {
+          document.documentElement.classList.remove("menu-open"); menu.setAttribute("aria-expanded", "false"); menu.focus();
+        }
+      });
+    }
+    document.querySelectorAll(".navlink").forEach(function (link) {
+      if (link.pathname === location.pathname) link.setAttribute("aria-current", "page");
+    });
     initTheme();
     preventDoubleSubmit();
     pollOnce();

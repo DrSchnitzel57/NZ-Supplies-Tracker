@@ -4,8 +4,8 @@
 <div class="page-head"><h1>{{ item }}</h1><div class="sub">{% if item.is_archived %}Archived{% else %}Active{% endif %} · alert at {{ item.low_threshold }}</div></div>
 <div class="grid kpis">
   <div class="kpi good"><span class="rail"></span><div class="lab">Available</div><div class="big tnum" data-available-for="{{ item.pk }}">{{ item.on_hand }}</div><div class="note">On the shelf now</div></div>
-  <div class="kpi"><span class="rail"></span><div class="lab">Given out (net)</div><div class="big tnum">{{ item.net_given }}</div><div class="note">Current issues only</div></div>
-  <div class="kpi"><span class="rail"></span><div class="lab">Count corrections</div><div class="big tnum">{{ item.corrections_total }}</div><div class="note">Recounts &amp; fixes</div></div>
+  <div class="kpi"><span class="rail"></span><div class="lab">Given out (net)</div><div class="big tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</div><div class="note">Current issues only</div></div>
+  <div class="kpi"><span class="rail"></span><div class="lab">Count corrections</div><div class="big tnum" data-corrections-for="{{ item.pk }}">{{ item.corrections_total }}</div><div class="note">Recounts &amp; fixes</div></div>
 </div>
 <p class="help">Available is the shelf count. “Given out” counts only current issues. If the shelf count is wrong, use “Correct stock count” with a reason — it records a correction, it does not invent or erase issues.</p>
 <p><a class="btn" href="/inventory/{{ item.pk }}/edit/">Edit details</a>

@@ -21,9 +21,9 @@
 <tbody>
 {% for item in items %}
 <tr>
-<td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a>{% if item.on_hand <= item.low_threshold %} <span class="badge-low">low</span>{% endif %}</td>
+<td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a></td>
 <td data-label="Available" class="r tnum stock-num" data-available-for="{{ item.pk }}">{{ item.on_hand }}</td>
-<td data-label="Given out (net)" class="r tnum">{{ item.net_given }}</td>
+<td data-label="Given out (net)" class="r tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</td>
 <td data-label="Stock"><span data-stock-status="{{ item.pk }}">{% if item.on_hand == 0 %}Out of stock{% elif item.on_hand <= item.low_threshold %}Low stock{% else %}Available{% endif %}</span></td>
 <td data-label="Status">{% if item.is_archived %}<span class="tag">Archived</span>{% else %}<span class="dot">Active</span>{% endif %}</td>
 </tr>
