@@ -209,3 +209,70 @@ source manual gate (95/224/four corrections against the separately supplied
 private HTML, never force-added). The earlier "no push performed" statement
 below is superseded: the operator pushed this branch to the private remote;
 no public publish, real-data initialization, or live deploy has occurred.
+
+---
+
+# Product assessment — before milestone 06 implementation
+
+Baseline: `548aad3`. This assessment supports the agreed single product-overhaul
+milestone, not implementation or rollout approval. Prior automated SHIP evidence
+above remains historical; it does not cover the new probes or proposed redesign.
+Only synthetic records were used, in a separate ignored audit database. The
+private HTML/roster was not inspected or copied. No application code changed.
+
+## Verified baseline
+
+- `.venv/bin/python manage.py test --noinput`: 195 passed; system check clean.
+- `.venv/bin/python -m pytest tests/browser`: 17 passed, no skips.
+- `.venv/bin/python -m pytest tests/deployment`: 21 passed, including an actual
+  `docker build -t supplies-tracker:test .`, TLS, persistence and recovery.
+- `.venv/bin/python manage.py makemigrations --check --dry-run`: no changes.
+- `.venv/bin/python manage.py check`: no issues.
+- `docker compose -f compose.test.yaml config --quiet`: passed.
+- `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh`: passed.
+- `git diff --check`: passed; checkout clean before planning-document changes.
+
+These results establish a regression baseline, not proof of finished usability.
+New failure probes are outside the old suites; new tests must cover the actual
+interaction and content rather than only DOM hooks or file headers.
+
+## Open findings (most severe first)
+
+| ID | Finding and evidence | Source |
+|---|---|---|
+| P01 | Recipient ambiguity: type one missionary name, then another. Chromium retained the first UUID while hiding its selected option. Selection/search disagreement can issue to the wrong person. | `templates/issuing/issue.html:86–104` |
+| P02 | Roster loss: a routine ID/name-only import cleared existing email, mission and language. A new import with a valid arrival date stored `None`. Reproduced through the real preview/confirm services inside rolled-back synthetic transactions. | `apps/transfers/row_imports.py:275–284`, `apps/transfers/services.py:429–471`, `apps/roster/services.py:27–41` |
+| P03 | Settings maintenance race: its write check is outside the mutation transaction. A deterministic boundary probe acquired maintenance immediately after the check; settings were written while maintenance was active (the probe transaction was then rolled back). Settings/audit are also separate autocommit writes in normal use. | `apps/operations/views.py:128–140` |
+| P04 | Sensitive-export protection inconsistent: a freshly authenticated administrator without recent password confirmation gets a redirect from `/transfers/bundle/export/`, but a ZIP/200 from `/reports/bundle/export/`. This is a fresh-password-policy bypass, not a staff/anonymous privilege escalation. | `apps/reports/views.py:44–50`, `apps/transfers/views.py:46–52` |
+| P05 | Broken ordinary reauth flow: submit Create account without fresh confirmation, enter the correct password on the offered page, and the browser follows a GET to the POST-only creation endpoint, ending at HTTP 405. Existing browser coverage manually chooses a different return URL instead. | `apps/accounts/reauth.py:79–83`, `apps/operations/views.py:169`, `tests/browser/test_admin.py:29–38` |
+| P06 | Another-tab sign-in advice is unsafe for an existing draft: sign out/in through a second tab, then submit the original form. Chromium received 403 for its stale CSRF token. Current guide/banner recommends that recovery without repairing tokens or checking submission identity. | `templates/base.html:66`, `templates/guide.html:14`, `static/app.js` |
+| P07 | Shortage cancellation drops the draft: request more stock than available, then choose Back without issuing. Chromium found recipient, item, quantity and note blank. The copy promises the original request is retained. Other inventory/roster error paths redirect or rebuild from stored records, discarding entered fields. | `templates/issuing/shortage.html:28`, `apps/issuing/views.py:139`, `apps/inventory/views.py`, `apps/roster/views.py` |
+| P08 | Screen/download filters disagree: selecting archived records on Reports leaves family download links without that flag; raw roster/inventory CSV endpoints separately default to including archives. Browser link inspection and view inspection confirm the mismatch. | `templates/reports/home.html:13–28`, `apps/reports/views.py:20–35` |
+| P09 | Valid long descriptions break printed reports: a synthetic supported-length item name produced a PDF whose table extended beyond both page edges, hiding most columns. Rendered PDF inspected; current browser tests only assert the `%PDF` signature. | `apps/reports/services.py:241–301`, `tests/browser/test_transfers_reports.py:81–98` |
+| P10 | Locale/live presentation unreliable: no NZ locale/timezone is configured; runtime settings report `America/Chicago`/`en-us`. Today queries use a UTC date. Refresh updates some values but not issues-today, dashboard rows or corresponding stock badges/meters; initial dashboard low count uses a capped list. | `config/settings.py`, `apps/operations/views.py:29–44,102–104`, `static/app.js:32–63`, `templates/dashboard.html`, `templates/inventory/list.html` |
+| P11 | Older records are not browsable: issue history silently stops at 200 without search/pagination; other lists/detail histories also use fixed caps. This is source inspection, not a synthetic >200-record execution in this assessment. | `apps/issuing/views.py:302–309`, roster/inventory views |
+| P12 | Narrow-screen navigation incomplete: below 900px the sidebar disappears and the replacement exposes only five links, with no complete menu for imports, help, administration or theme. Browser navigation inspection confirms the omission. | `static/app.css:233–245`, `templates/base.html:88–94` |
+| P13 | Contrast/control inconsistency: computed dark-theme primary-button colours have a 1.86:1 text contrast ratio. Inputs without an explicit type do not match the `input[type=text]` styling; issue quantities/notes visibly use browser-default controls. Active links lack `aria-current`; connection changes lack an appropriate announcement mechanism. This is targeted inspection, not a full accessibility certification. | `static/app.css:35–42,181,187`, `templates/issuing/issue.html`, `templates/base.html`, `static/app.js` |
+
+## Product-design gaps and agreed response
+
+- Reports currently combine about 17 download choices and eight summaries on one
+  long page. Select one report with relevant shared filters instead.
+- Stored roster context is absent from the profile/edit UI. Show useful task
+  context first, expandable details and complete supported editing.
+- Summary queries group by historical descriptions and can fragment a stable
+  record after renaming. The user chose stable-ID/current-name summaries while
+  preserving exact original issue/history snapshots.
+- Repeated technical explanations and arbitrary stock percentages obscure the
+  next task. Replace them with consistent controls, concise contextual help,
+  real status and clear recovery states; keep operator tools out of daily work.
+
+All findings are **open** here. The agreed design/decisions are recorded in
+`docs/ARCHITECTURE.md`; `.openchamber/plans/06-product-overhaul.md` covers one
+milestone with ordered internal phases. Reproduce failures with committed
+synthetic behavioral regressions, fix them, then independently rerun the whole
+product acceptance contract. Ignore local audit artifacts as dependencies.
+
+VERDICT: FIX — keep the tested foundation; complete product correctness and
+usability before presenting it as finished. Manual staff/source/target-host
+gates, certificate trust limitations and host-only backup risk remain explicit.
