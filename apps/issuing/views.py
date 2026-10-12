@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import uuid
+import re
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.http import JsonResponse
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from apps.accounts.decorators import staff_required
@@ -16,11 +20,17 @@ from apps.issuing.models import Issue
 from apps.roster.models import Missionary
 
 
+def _line_indices(post):
+    return sorted({int(match.group(1)) for key in post
+                   if (match := re.fullmatch(r"(?:item|qty)-(\d+)", key))})
+
+
 def _parse_lines(post) -> list[dict]:
     """Collect item/quantity pairs; consolidate later in the service."""
     lines: list[dict] = []
-    # Multi-line form fields: item-0/qty-0 ... item-9/qty-9.
-    for i in range(10):
+    # Read every submitted row; the service bounds distinct items, never slices.
+    indices = _line_indices(post)
+    for i in indices:
         item_id = (post.get(f"item-{i}") or "").strip()
         qty_raw = (post.get(f"qty-{i}") or "").strip()
         if not item_id and not qty_raw:
@@ -31,6 +41,10 @@ def _parse_lines(post) -> list[dict]:
             qty = int(qty_raw)
         except (TypeError, ValueError):
             raise ValueError("Quantities must be whole numbers.")
+        try:
+            uuid.UUID(item_id)
+        except ValueError:
+            raise ValueError("Choose a valid item.")
         lines.append({"item_id": item_id, "quantity": qty})
     # Single-line quick form fallback.
     if not lines:
@@ -55,21 +69,21 @@ def _form_context(draft_key=None, draft_lines=None, missionary_id="", note=""):
         ]
     )
     if draft_lines is None:
-        draft_lines = [{"item_id": "", "quantity": ""} for _ in range(3)]
-    # Pad to at least 3 visible rows.
-    while len(draft_lines) < 3:
-        draft_lines.append({"item_id": "", "quantity": ""})
+        draft_lines = []
+    labels = {str(item.pk): str(item) for item in items}
+    draft_lines = [{**row, "label": labels.get(str(row["item_id"]), "Unavailable item")}
+                   for row in draft_lines if row.get("item_id") or row.get("quantity")]
     return {
         "missionaries": missionaries,
         "items": items,
         "draft_key": draft_key or str(uuid.uuid4().hex),
-        "draft_lines": draft_lines[:10],
+        "draft_lines": draft_lines,
         "missionary_id": missionary_id,
         "note": note,
     }
 
 
-def _shortage_context(*, missionary, requested_lines, err, return_to="/issue/"):
+def _shortage_context(*, missionary, requested_lines, err, draft_key, return_to="/issue/"):
     item_map = {
         str(i.pk): i for i in Item.objects.filter(pk__in=[s["item_id"] for s in err.shortages])
     }
@@ -124,7 +138,7 @@ def _shortage_context(*, missionary, requested_lines, err, return_to="/issue/"):
         "shortage_rows": rows,
         "ok_rows": ok_rows,
         "proposal": err.proposal,
-        "confirm_key": str(uuid.uuid4().hex),
+        "confirm_key": draft_key,
         "return_to": return_to,
         "requested_lines": requested_lines,
     }
@@ -136,7 +150,7 @@ def issue_main(request):
         return _handle_issue_post(
             request, return_to="/issue/", template="issuing/issue.html"
         )
-    ctx = _form_context()
+    ctx = _form_context(missionary_id=request.GET.get("missionary", ""))
     return render(request, "issuing/issue.html", ctx)
 
 
@@ -147,7 +161,7 @@ def issue_quick(request):
     missionary_id = (request.POST.get("missionary_id") or "").strip()
     try:
         person = Missionary.objects.get(pk=missionary_id) if missionary_id else None
-    except (Missionary.DoesNotExist, ValueError, TypeError):
+    except (Missionary.DoesNotExist, ValueError, TypeError, DjangoValidationError):
         person = None
     return_to = f"/roster/{person.pk}/" if person is not None else "/issue/"
     return _handle_issue_post(
@@ -161,6 +175,10 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
     idem = (request.POST.get("idempotency_key") or "").strip() or str(
         uuid.uuid4().hex
     )
+    draft_user = request.POST.get("draft_user_id")
+    if draft_user and draft_user != str(request.user.pk):
+        messages.error(request, "This draft belongs to a different account. Sign in as the original staff member; nothing was issued.")
+        return render(request, template, _form_context(), status=409)
     try:
         lines = _parse_lines(request.POST)
     except ValueError as exc:
@@ -168,7 +186,7 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
         kept_rows = [
             {"item_id": (request.POST.get(f"item-{i}") or ""),
              "quantity": (request.POST.get(f"qty-{i}") or "")}
-            for i in range(10)
+            for i in _line_indices(request.POST)
         ]
         ctx = _form_context(
             draft_key=idem,
@@ -177,15 +195,15 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
             draft_lines=kept_rows or None,
         )
         # Preserve single-line quick drafts too.
-        if not any(d["item_id"] or d["quantity"] for d in ctx["draft_lines"]):
-            ctx["draft_lines"][0] = {
+        if not ctx["draft_lines"]:
+            ctx["draft_lines"].append({
                 "item_id": request.POST.get("item_id", ""),
                 "quantity": request.POST.get("quantity", ""),
-            }
+            })
         return render(request, template, ctx, status=400)
     try:
         missionary = Missionary.objects.get(pk=missionary_id) if missionary_id else None
-    except (Missionary.DoesNotExist, ValueError, TypeError):
+    except (Missionary.DoesNotExist, ValueError, TypeError, DjangoValidationError):
         missionary = None
     if missionary is None:
         messages.error(request, "Choose a person to issue goods to.")
@@ -194,8 +212,11 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
         kept = []
         for entry in lines:
             kept.append({"item_id": entry["item_id"], "quantity": entry["quantity"]})
-        ctx["draft_lines"] = (kept + ctx["draft_lines"])[:10]
+        ctx = _form_context(draft_key=idem, missionary_id="", note=note, draft_lines=kept)
         return render(request, template, ctx, status=400)
+    if request.POST.get("edit_draft") == "1":
+        return render(request, template, _form_context(
+            draft_key=idem, missionary_id=missionary_id, note=note, draft_lines=lines))
     try:
         issue = issuing.create_issue(
             actor=request.user,
@@ -209,6 +230,7 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
             missionary=missionary,
             requested_lines=lines,
             err=exc,
+            draft_key=idem,
             return_to=return_to,
         )
         ctx["note"] = note
@@ -219,11 +241,12 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
         return render(request, "issuing/shortage.html", ctx, status=409)
     except DomainError as exc:
         messages.error(request, f"Could not issue goods: {exc}")
-        ctx = _form_context(draft_key=str(uuid.uuid4().hex), missionary_id=missionary_id, note=note)
+        ctx = _form_context(draft_key=idem, missionary_id=missionary_id, note=note, draft_lines=lines)
         kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in lines]
-        ctx["draft_lines"] = (kept + ctx["draft_lines"])[:10]
         return render(request, template, ctx, status=400)
     messages.success(request, f"Issued goods to {issue.missionary_name}.")
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({"redirect_url": reverse("issue-detail", kwargs={"pk": issue.pk})})
     return redirect("issue-detail", pk=issue.pk)
 
 
@@ -239,11 +262,16 @@ def issue_confirm(request):
     idem = (request.POST.get("idempotency_key") or "").strip() or str(
         uuid.uuid4().hex
     )
+    if request.POST.get("draft_user_id") not in (None, "", str(request.user.pk)):
+        messages.error(request, "Sign in as the original staff member. Nothing was issued.")
+        return render(request, "issuing/issue.html", _form_context(), status=409)
     proposal = []
     p_items = request.POST.getlist("p-item")
     p_qtys = request.POST.getlist("p-qty")
     if p_items:
         try:
+            if len(p_items) != len(p_qtys):
+                raise ValueError("Each revised item needs a quantity.")
             proposal = [
                 {"item_id": i, "quantity": int(q)}
                 for i, q in zip(p_items, p_qtys)
@@ -265,11 +293,11 @@ def issue_confirm(request):
         return render(request, "issuing/issue.html", ctx, status=400)
     try:
         missionary = Missionary.objects.get(pk=missionary_id)
-    except (Missionary.DoesNotExist, ValueError, TypeError):
+    except (Missionary.DoesNotExist, ValueError, TypeError, DjangoValidationError):
         messages.error(request, "Choose a person to issue goods to.")
         kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in proposal]
         ctx = _form_context(draft_key=idem, missionary_id="", note=note)
-        ctx["draft_lines"] = (kept + ctx["draft_lines"])[:10]
+        ctx = _form_context(draft_key=idem, missionary_id="", note=note, draft_lines=kept)
         return render(request, "issuing/issue.html", ctx, status=400)
     try:
         issue = issuing.create_issue(
@@ -280,8 +308,9 @@ def issue_confirm(request):
             idempotency_key=idem,
         )
     except InsufficientStockError as exc:
+        original = _parse_lines(request.POST) or proposal
         ctx = _shortage_context(
-            missionary=missionary, requested_lines=proposal, err=exc
+            missionary=missionary, requested_lines=original, err=exc, draft_key=idem
         )
         ctx["note"] = note
         messages.warning(
@@ -293,9 +322,11 @@ def issue_confirm(request):
         messages.error(request, f"Could not issue goods: {exc}")
         kept = [{"item_id": e["item_id"], "quantity": e["quantity"]} for e in proposal]
         ctx = _form_context(draft_key=idem, missionary_id=str(missionary.pk), note=note)
-        ctx["draft_lines"] = (kept + ctx["draft_lines"])[:10]
+        ctx = _form_context(draft_key=idem, missionary_id=str(missionary.pk), note=note, draft_lines=kept)
         return render(request, "issuing/issue.html", ctx, status=400)
     messages.success(request, f"Issued revised quantities to {issue.missionary_name}.")
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({"redirect_url": reverse("issue-detail", kwargs={"pk": issue.pk})})
     return redirect("issue-detail", pk=issue.pk)
 
 

@@ -4,6 +4,7 @@ from django.urls import include, path
 from django.views.decorators.http import require_GET
 
 from apps.accounts.decorators import no_activity_update
+from apps.accounts.views import session_refresh
 
 
 @no_activity_update
@@ -18,6 +19,7 @@ urlpatterns = [
     path("accounts/", include("apps.accounts.urls")),
     path("poll/", poll, name="poll"),
     path("api/poll/", poll, name="api-poll"),
+    path("api/session/", require_GET(session_refresh), name="session-refresh"),
     path("", include("apps.operations.urls")),
     path("roster/", include("apps.roster.urls")),
     path("inventory/", include("apps.inventory.urls")),

@@ -1,0 +1,4 @@
+<nav class="toolbar tabs" aria-label="Issuing">
+<a class="btn" href="/issue/" {% if request.path == '/issue/' %}aria-current="page"{% endif %}>New issue</a>
+<a class="btn" href="/issue/history/" {% if request.path == '/issue/history/' %}aria-current="page"{% endif %}>History</a>
+</nav>

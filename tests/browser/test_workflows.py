@@ -20,13 +20,18 @@ def _seed(staff):
     return person, item
 
 
+def add_item(page, item, quantity='1'):
+    page.select_option('#catalogue-select', str(item.pk))
+    page.fill('#catalogue-qty', quantity)
+    page.click('#add-item')
+
+
 def test_issue_goods_desktop(page, live_server, externals):
     staff, _ = staff_login(page, live_server, "issue")
     person, item = _seed(staff)
     page.goto(f"{live_server.url}/issue/")
     page.select_option("select[name=missionary_id]", str(person.pk))
-    page.select_option("select[name=item-0]", str(item.pk))
-    page.fill("input[name=qty-0]", "3")
+    add_item(page, item, '3')
     page.fill("input[name=note]", "browser issue")
     with page.expect_navigation():
         page.click("#issue-form button[type=submit]")
@@ -49,8 +54,7 @@ def test_issue_goods_mobile_layout(mobile_page, live_server, externals):
         "document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert overflow <= 1, f"horizontal overflow on narrow screen: {overflow}px"
     mobile_page.select_option("select[name=missionary_id]", str(person.pk))
-    mobile_page.select_option("select[name=item-0]", str(item.pk))
-    mobile_page.fill("input[name=qty-0]", "1")
+    add_item(mobile_page, item)
     with mobile_page.expect_navigation():
         mobile_page.click("#issue-form button[type=submit]")
     assert "Issued goods" in mobile_page.content()
@@ -63,10 +67,9 @@ def test_shortage_review_then_confirm_rechecks(page, live_server, externals):
     person, item = _seed(staff)
     page.goto(f"{live_server.url}/issue/")
     page.select_option("select[name=missionary_id]", str(person.pk))
-    page.select_option("select[name=item-0]", str(item.pk))
-    page.fill("input[name=qty-0]", "999")
+    add_item(page, item, '999')
     page.click("form[action='/issue/confirm/'] button[type=submit], #issue-form button[type=submit]")
-    page.wait_for_selector("text=nothing was issued yet")
+    page.wait_for_selector('#shortage-review:not([hidden])')
     assert "revised" in page.content().lower()
     with page.expect_navigation():
         page.click("form[action='/issue/confirm/'] button[type=submit]")
@@ -116,20 +119,20 @@ def test_add_remove_rows_and_filter(page, live_server, externals):
     items = [make_item(staff, opening_qty=10) for _ in range(5)]
     page.goto(f"{live_server.url}/issue/")
     page.select_option("select[name=missionary_id]", str(person.pk))
-    for _ in range(3):
-        page.click("#add-row")
-    assert page.locator("#issue-rows .issue-row").count() == 6
-    # Filter hides non-matching item options across every row.
-    page.fill("#item-filter", items[0].name[:8])
+    page.fill("#item-filter", items[0].name)
     hidden = page.evaluate(
-        """Array.from(document.querySelectorAll('#issue-rows .item-select'))
-            .map(s => Array.from(s.options).filter(o => o.value && o.hidden).length)
-            .reduce((a, b) => a + b, 0)""")
+        """Array.from(document.querySelector('#catalogue-select').options)
+            .filter(o => o.value && o.hidden).length""")
     assert hidden > 0
     page.fill("#item-filter", "")
     for i, item in enumerate(items):
-        page.select_option(f"select[name=item-{i}]", str(item.pk))
-        page.fill(f"input[name=qty-{i}]", "1")
+        add_item(page, item)
+    add_item(page, items[0])
+    assert page.locator('#issue-rows .issue-row').count() == 5
+    assert page.input_value('input[name=qty-0]') == '2'
+    page.click('#issue-rows .remove-row:last-child >> nth=4')
+    assert page.locator('#issue-rows .issue-row').count() == 4
+    add_item(page, items[-1])
     with page.expect_navigation():
         page.click("#issue-form button[type=submit]")
     assert "Issued goods" in page.content()
@@ -142,8 +145,7 @@ def test_double_submit_issues_once(page, live_server, externals):
     person, item = _seed(staff)
     page.goto(f"{live_server.url}/issue/")
     page.select_option("select[name=missionary_id]", str(person.pk))
-    page.select_option("select[name=item-0]", str(item.pk))
-    page.fill("input[name=qty-0]", "2")
+    add_item(page, item, '2')
     page.evaluate(
         "const f = document.querySelector('#issue-form');"
         "f.requestSubmit(); f.requestSubmit();")

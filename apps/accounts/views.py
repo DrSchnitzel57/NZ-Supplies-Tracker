@@ -6,7 +6,7 @@ from django.urls import reverse_lazy
 from django.views.decorators.http import require_http_methods
 
 from apps.accounts import lifecycle
-from apps.accounts.decorators import admin_required
+from apps.accounts.decorators import admin_required, staff_required_api, no_activity_update
 from apps.accounts.forms import ForcedPasswordChangeForm, ThrottledLoginForm
 from apps.accounts.reauth import reauth_required
 from apps.common.errors import DomainError
@@ -19,6 +19,18 @@ class LoginView(auth_views.LoginView):
 
 class LogoutView(auth_views.LogoutView):
     pass
+
+
+@staff_required_api
+@no_activity_update
+def session_refresh(request):
+    """Repair open-tab security tokens without extending idle expiry or writing."""
+    from django.http import JsonResponse
+    from django.middleware.csrf import get_token
+
+    response = JsonResponse({'user_id': str(request.user.pk), 'csrf_token': get_token(request)})
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 class ForcedPasswordChangeView(LoginRequiredMixin, auth_views.PasswordChangeView):

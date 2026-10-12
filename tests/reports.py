@@ -43,6 +43,8 @@ class ReportPermissionTests(TestCase):
         self.client.login(username=self.staff.username, password=self.pw)
         self.assertEqual(self.client.get("/reports/bundle/export/").status_code, 403)
         self.client.login(username=self.admin.username, password=self.apw)
+        self.assertEqual(self.client.get('/reports/bundle/export/').status_code, 302)
+        self.client.post('/admin-area/reauth/', {'password': self.apw})
         response = self.client.get("/reports/bundle/export/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/zip")

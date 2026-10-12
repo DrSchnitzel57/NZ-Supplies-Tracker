@@ -175,3 +175,57 @@ class ProductSafetyTests(TestCase):
         self.assertEqual(form['idempotency_key'].value(), 'keep-rx')
         item.refresh_from_db()
         self.assertEqual(item.on_hand, 10)
+
+    def test_50_distinct_items_commit_and_51_never_partially_write(self):
+        person = make_missionary(self.admin)
+        items = [make_item(self.admin, opening_qty=2) for _ in range(51)]
+        lines = [{'item_id': str(item.pk), 'quantity': 1} for item in items]
+        with self.assertRaisesMessage(DomainError, '50'):
+            issuing.create_issue(actor=self.admin, missionary_id=person.pk, lines=lines,
+                                 idempotency_key='too-many-service')
+        payload = {'missionary_id': str(person.pk), 'idempotency_key': 'too-many-view'}
+        for i, item in enumerate(items):
+            payload[f'item-{i}'] = str(item.pk)
+            payload[f'qty-{i}'] = '1'
+        response = self.client.post('/issue/', payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Issue.objects.exists())
+        self.assertTrue(all(item.on_hand == 2 for item in Item.objects.all()))
+        payload.pop('item-50')
+        payload.pop('qty-50')
+        response = self.client.post('/issue/', payload)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Issue.objects.get().lines.count(), 50)
+
+    def test_shortage_back_keeps_original_request_and_key(self):
+        person = make_missionary(self.admin)
+        item = make_item(self.admin, opening_qty=2)
+        payload = {'missionary_id': str(person.pk), 'idempotency_key': 'original-short',
+                   'item-0': str(item.pk), 'qty-0': '7', 'note': 'Original note'}
+        response = self.client.post('/issue/', payload)
+        self.assertEqual(response.status_code, 409)
+        payload['edit_draft'] = '1'
+        response = self.client.post('/issue/', payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['draft_key'], 'original-short')
+        self.assertEqual(response.context['draft_lines'][0]['quantity'], 7)
+        self.assertEqual(response.context['note'], 'Original note')
+        self.assertFalse(Issue.objects.exists())
+
+    def test_draft_cannot_be_submitted_as_a_different_user(self):
+        person = make_missionary(self.admin)
+        item = make_item(self.admin)
+        response = self.client.post('/issue/', {
+            'missionary_id': str(person.pk), 'draft_user_id': str(self.admin.pk + 1),
+            'item-0': str(item.pk), 'qty-0': '1', 'idempotency_key': 'wrong-identity'})
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(Issue.objects.exists())
+
+    def test_session_refresh_supplies_current_csrf_without_activity(self):
+        response = self.client.get('/api/session/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['user_id'], str(self.admin.pk))
+        self.assertTrue(response.json()['csrf_token'])
+        before = self.client.session.get('last_activity')
+        self.client.get('/api/session/')
+        self.assertEqual(self.client.session.get('last_activity'), before)

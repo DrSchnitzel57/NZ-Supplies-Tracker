@@ -1,247 +1,54 @@
 {% extends "base.html" %}
 {% block title %}Issue goods — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Issue goods</h1><div class="sub">Record a donation to a missionary · the primary daily task</div></div>
-<p class="help">Type to narrow the person or item list — matching rows filter <strong>as you type</strong> and the list opens automatically. Press <strong>Enter</strong> to pick the top match, or click any row. Repeating the same item adds the quantities together. If something is short, nothing is issued until you review and confirm the revised list. Your draft stays on this page if there is an error — nothing is lost.</p>
-<div class="card"><div class="bd">
-<form method="post" class="stack" data-once id="issue-form">
+<div class="page-head"><h1>Issue goods</h1><div class="sub">Choose a missionary, add items, then review the named summary.</div></div>
+{% include "issuing/tabs.html" %}
+<p class="help">Up to 50 distinct items per issue. Repeated items combine. Drafts last only in this open tab; reload or close discards them. Nothing is queued or sent automatically.</p>
+<div id="issue-feedback" role="status" aria-live="polite"></div>
+<div id="shortage-review" hidden></div>
+<form method="post" class="stack" id="issue-form" data-draft-user="{{ user.pk }}">
 {% csrf_token %}
+<input type="hidden" name="draft_user_id" value="{{ user.pk }}">
 <input type="hidden" name="idempotency_key" value="{{ draft_key }}">
-<div class="form-grid">
-<label class="full">Person (active records only)
-<span class="combo">
-<input type="search" id="person-filter" placeholder="Type a name or ID — list filters live…" aria-label="Find a person" autocomplete="off" aria-controls="person-select" aria-describedby="person-count">
-<button type="button" id="person-clear" class="btn ghost" aria-label="Clear person search">Clear</button>
-</span>
-<span class="mini" id="person-count" role="status" aria-live="polite"></span>
-<select name="missionary_id" id="person-select" required size="1" aria-label="Person">
-<option value="">— Choose a person —</option>
-{% for m in missionaries %}<option value="{{ m.pk }}" data-base="{{ m.name }} ({{ m.external_id }})" {% if m.pk|stringformat:"s" == missionary_id %}selected{% endif %}>{{ m.name }} ({{ m.external_id }})</option>{% endfor %}
-</select></label>
-</div>
-{% if missionaries|length >= 2000 %}<p class="help">Showing the first 2000 people — search the Missionaries page to find anyone else.</p>{% endif %}
-<h2>Items</h2>
-<label>Find an item
-<span class="combo">
-<input type="search" id="item-filter" placeholder="Type to filter every item row live…" aria-label="Filter items" autocomplete="off" aria-describedby="item-count">
-<button type="button" id="item-clear" class="btn ghost" aria-label="Clear item search">Clear</button>
-</span></label>
-<span class="mini" id="item-count" role="status" aria-live="polite"></span>
+<section class="card"><div class="hd"><h2>1. Missionary</h2></div><div class="bd stack">
+<label for="person-filter">Find a missionary by name or ID</label>
+<input type="search" id="person-filter" autocomplete="off" placeholder="Search missionaries" aria-controls="person-select">
+<span id="person-count" class="mini" role="status"></span>
+<label for="person-select">Selected missionary</label>
+<select name="missionary_id" id="person-select" required>
+<option value="">— Choose a missionary —</option>
+{% for person in missionaries %}<option value="{{ person.pk }}" {% if person.pk|stringformat:"s" == missionary_id %}selected{% endif %}>{{ person.name }} ({{ person.external_id }})</option>{% endfor %}
+</select>
+<p class="help">Typing searches only; choose a visible result explicitly. Changing the recipient clears items and the note after confirmation.</p>
+</div></section>
+<div class="grid two">
+<section class="card"><div class="hd"><h2>2. Item catalogue</h2></div><div class="bd stack">
+<label for="item-filter">Search item, category or size</label>
+<input type="search" id="item-filter" autocomplete="off" placeholder="Search catalogue" aria-controls="catalogue-select">
+<span id="item-count" class="mini" role="status"></span>
+<label for="catalogue-select">Item</label>
+<select id="catalogue-select" name="item_id" size="8">
+<option value="">— Choose an item —</option>
+{% for item in items %}<option value="{{ item.pk }}" data-label="{{ item }}" data-available="{{ item.on_hand }}">{{ item }} — Available: {{ item.on_hand }}</option>{% endfor %}
+</select>
+<label for="catalogue-qty">Quantity to add</label><input type="number" name="quantity" id="catalogue-qty" min="1" max="999999999" value="1">
+<button type="button" id="add-item" class="primary" hidden>Add to issue</button>
+<noscript><p>Add one catalogue item on submission, or change the quantities below. JavaScript enables a searchable multi-item workspace and open-tab error recovery.</p></noscript>
+</div></section>
+<section class="card"><div class="hd"><h2>3. Review this issue</h2></div><div class="bd stack">
+<p id="recipient-summary" class="summary">Choose the recipient above.</p>
 <div id="issue-rows">
-{% for row in draft_lines %}
-<div class="toolbar issue-row">
-<label>Item
-<select name="item-{{ forloop.counter0 }}" class="item-select" aria-label="Item row {{ forloop.counter }}">
-<option value="">— Choose —</option>
-{% for item in items %}<option value="{{ item.pk }}" data-base="{{ item }}" data-avail="{{ item.on_hand }}" {% if item.pk|stringformat:"s" == row.item_id %}selected{% endif %}>{{ item }} — Available: {{ item.on_hand }}</option>{% endfor %}
-</select></label>
-<label>Quantity <input name="qty-{{ forloop.counter0 }}" inputmode="numeric" pattern="[0-9]*" value="{{ row.quantity }}"></label>
-<button type="button" class="remove-row" aria-label="Remove this row">Remove</button>
+{% for row in draft_lines %}<div class="issue-row" data-item="{{ row.item_id }}">
+<input type="hidden" name="item-{{ forloop.counter0 }}" value="{{ row.item_id }}">
+<span class="line-label">{{ row.label }}</span>
+<label>Quantity <input type="number" name="qty-{{ forloop.counter0 }}" min="1" max="999999999" value="{{ row.quantity }}" required></label>
+<button type="button" class="remove-row" aria-label="Remove {{ row.label }}">Remove</button>
+</div>{% endfor %}
 </div>
-{% endfor %}
-</div>
-{% if items|length >= 2000 %}<p class="help">Showing the first 2000 items — search the Inventory page to find anything else.</p>{% endif %}
-<p class="toolbar"><button type="button" id="add-row">Add another item</button></p>
-<label>Note (optional) <input name="note" value="{{ note }}"></label>
-<p><button type="submit" class="primary">Issue goods</button></p>
+<p id="draft-count" class="mini"></p>
+<label for="issue-note">Note (optional)</label><input id="issue-note" name="note" value="{{ note }}" maxlength="4000">
+<button type="submit" class="primary">Issue goods</button>
+</div></section></div>
 </form>
-</div></div>
-<p class="help">Made a mistake later? Open the issue in <a href="/issue/history/">History</a> and choose “Undo this issue” with a reason.</p>
-<script>
-(function () {
-  "use strict";
-  var MAX_ROWS = 10;
-  function rows() { return document.querySelectorAll("#issue-rows .issue-row"); }
-  function renumber() {
-    rows().forEach(function (row, i) {
-      row.querySelector(".item-select").name = "item-" + i;
-      row.querySelector(".item-select").setAttribute("aria-label", "Item row " + (i + 1));
-      row.querySelector("input[name^='qty-']").name = "qty-" + i;
-    });
-    document.querySelectorAll("#issue-rows .remove-row").forEach(function (btn) {
-      btn.disabled = rows().length <= 1;
-    });
-  }
-
-  function visibleOptions(select) {
-    return Array.prototype.filter.call(select.options, function (opt) {
-      return opt.value && !opt.hidden;
-    });
-  }
-  function expand(select, n) {
-    // Open the listbox while filtering so matches are visible without a click.
-    select.size = Math.max(2, Math.min(9, (typeof n === "number" ? n : visibleOptions(select).length) + 1));
-  }
-  function collapse(select) { select.size = 1; }
-
-  /* ---- person combobox ---- */
-  var personInput = document.getElementById("person-filter");
-  var personSelect = document.getElementById("person-select");
-  var personCount = document.getElementById("person-count");
-  var personClear = document.getElementById("person-clear");
-
-  function baseText(opt) {
-    return opt.getAttribute("data-base") || opt.text;
-  }
-  function filterPerson(autoPick) {
-    var q = personInput.value.trim().toLowerCase();
-    var shown = 0;
-    Array.prototype.forEach.call(personSelect.options, function (opt) {
-      if (!opt.value) { opt.hidden = false; return; }
-      var hit = q === "" || baseText(opt).toLowerCase().indexOf(q) !== -1;
-      opt.hidden = !hit;
-      if (hit) shown += 1;
-    });
-    if (personCount) {
-      personCount.textContent = q === "" ? "" : (shown === 0 ? "No matching people — clear the search to see everyone." : shown + " matching " + (shown === 1 ? "person" : "people") + " — Enter picks the first.");
-    }
-    if (q !== "") expand(personSelect, shown);
-    else if (document.activeElement !== personInput) collapse(personSelect);
-    // Typing auto-highlights the top match so Enter/click is one step, never two.
-    if (autoPick && q !== "" && shown > 0 && !personSelect.value) {
-      var first = visibleOptions(personSelect)[0];
-      if (first) personSelect.value = first.value;
-    }
-    return shown;
-  }
-  if (personInput && personSelect) {
-    // Seed the search box from a server-kept draft so filtering matches the selection.
-    if (personSelect.value) {
-      var sel = personSelect.options[personSelect.selectedIndex];
-      if (sel && sel.value && !personInput.value) personInput.value = (sel.getAttribute("data-base") || sel.text).split(" (")[0];
-    }
-    personInput.addEventListener("input", function () { filterPerson(true); });
-    personInput.addEventListener("focus", function () { expand(personSelect); });
-    personInput.addEventListener("keydown", function (ev) {
-      if (ev.key === "Enter") {
-        var vis = visibleOptions(personSelect);
-        if (vis.length && !personSelect.value) {
-          personSelect.value = vis[0].value;
-          ev.preventDefault();
-        }
-        collapse(personSelect);
-      } else if (ev.key === "Escape") {
-        personInput.value = "";
-        filterPerson(false);
-        personInput.focus();
-      } else if (ev.key === "ArrowDown") {
-        expand(personSelect);
-        personSelect.focus();
-        ev.preventDefault();
-      }
-    });
-    personSelect.addEventListener("change", function () {
-      var opt = personSelect.options[personSelect.selectedIndex];
-      if (opt && opt.value && personInput) {
-        personInput.value = (opt.getAttribute("data-base") || opt.text).split(" (")[0];
-        filterPerson(false);
-      }
-      collapse(personSelect);
-    });
-    // Keep the list usable with mouse/touch: collapse shortly after leaving.
-    personSelect.addEventListener("blur", function () {
-      setTimeout(function () {
-        if (document.activeElement !== personInput) collapse(personSelect);
-      }, 150);
-    });
-    if (personClear) personClear.addEventListener("click", function () {
-      personInput.value = "";
-      personSelect.value = "";
-      filterPerson(false);
-      collapse(personSelect);
-      personInput.focus();
-    });
-    filterPerson(false);
-  }
-
-  /* ---- item combobox (filters every row at once) ---- */
-  var itemInput = document.getElementById("item-filter");
-  var itemCount = document.getElementById("item-count");
-  var itemClear = document.getElementById("item-clear");
-  function itemBase(opt) {
-    return opt.getAttribute("data-base") || opt.text;
-  }
-  function filterItems() {
-    if (!itemInput) return 0;
-    var q = itemInput.value.trim().toLowerCase();
-    var total = 0;
-    document.querySelectorAll("#issue-rows .item-select").forEach(function (select) {
-      var shown = 0;
-      Array.prototype.forEach.call(select.options, function (opt) {
-        if (!opt.value) { opt.hidden = false; return; }
-        var hit = q === "" || itemBase(opt).toLowerCase().indexOf(q) !== -1;
-        opt.hidden = !hit;
-        if (hit) { shown += 1; total += 1; }
-      });
-      if (q !== "" && document.activeElement === itemInput) expand(select, shown);
-      else collapse(select);
-    });
-    if (itemCount) {
-      var perRow = document.querySelectorAll("#issue-rows .item-select").length || 1;
-      var per = Math.round(total / perRow);
-      itemCount.textContent = q === "" ? "" : (per === 0 ? "No matching items — clear the search to see everything." : per + " matching items per row — pick from any row.");
-    }
-    return total;
-  }
-  if (itemInput) {
-    itemInput.addEventListener("input", filterItems);
-    itemInput.addEventListener("focus", filterItems);
-    itemInput.addEventListener("keydown", function (ev) {
-      if (ev.key === "Enter") {
-        // Jump straight to the first row so the match is one keypress away.
-        var first = document.querySelector("#issue-rows .item-select");
-        if (first) {
-          var vis = visibleOptions(first);
-          if (vis.length && !first.value) first.value = vis[0].value;
-          expand(first, vis.length);
-          first.focus();
-          ev.preventDefault();
-        }
-      } else if (ev.key === "Escape") {
-        itemInput.value = "";
-        filterItems();
-      }
-    });
-    if (itemClear) itemClear.addEventListener("click", function () {
-      itemInput.value = "";
-      filterItems();
-      itemInput.focus();
-    });
-  }
-
-  /* ---- rows ---- */
-  document.getElementById("add-row").addEventListener("click", function () {
-    if (rows().length >= MAX_ROWS) return;
-    var first = rows()[0];
-    var clone = first.cloneNode(true);
-    clone.querySelector(".item-select").selectedIndex = 0;
-    clone.querySelector("input[name^='qty-']").value = "";
-    document.getElementById("issue-rows").appendChild(clone);
-    renumber();
-    filterItems();
-  });
-  document.getElementById("issue-rows").addEventListener("click", function (ev) {
-    if (!ev.target.classList.contains("remove-row")) return;
-    if (rows().length <= 1) return;
-    ev.target.closest(".issue-row").remove();
-    renumber();
-    filterItems();
-  });
-
-  /* ---- live availability inside the dropdowns (fed by the 15s poll) ---- */
-  window.updateIssueAvailability = function (availability) {
-    document.querySelectorAll("#issue-rows .item-select option[value]").forEach(function (opt) {
-      if (!opt.value) return;
-      var info = availability[opt.value];
-      if (!info) return;
-      var base = opt.getAttribute("data-base") || opt.text.split(" — Available:")[0];
-      opt.setAttribute("data-base", base);
-      opt.text = base + " — Available: " + info.available + (info.low ? " (low)" : "");
-    });
-  };
-
-  renumber();
-  filterItems();
-})();
-</script>
+<p class="help">A shortage never issues anything until you explicitly confirm revised quantities. Stock is checked again on the server. Made a mistake later? Open History and choose Undo this issue with a reason.</p>
 {% endblock %}

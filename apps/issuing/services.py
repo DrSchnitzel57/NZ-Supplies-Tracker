@@ -9,6 +9,7 @@ a whole issue exactly once, with a reason, even for archived records.
 """
 
 from __future__ import annotations
+import uuid
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -36,7 +37,13 @@ def _aggregate(lines) -> dict:
         if qty <= 0:
             raise ValidationError("issue quantities must be positive")
         key = str(item_id)
+        try:
+            uuid.UUID(key)
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValidationError("choose a valid item") from exc
         aggregated[key] = aggregated.get(key, 0) + qty
+        if len(aggregated) > 50:
+            raise ValidationError("an issue can contain at most 50 distinct items")
     if not aggregated:
         raise ValidationError("at least one line is required")
     return aggregated
@@ -82,11 +89,17 @@ def create_issue(*, actor, missionary_id, lines, idempotency_key: str, note: str
     from apps.inventory.models import Item, StockMovement
     from apps.issuing.models import Issue, IssueLine
     from apps.roster.models import Missionary
+    try:
+        uuid.UUID(str(missionary_id))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValidationError("choose a valid missionary") from exc
 
     def _work():
         assert_writes_allowed()
         existing = Issue.objects.filter(idempotency_key=idempotency_key).first()
         if existing is not None:
+            if existing.issued_by_id != actor.pk:
+                raise ValidationError("this request belongs to another staff member")
             return existing
         try:
             missionary = Missionary.objects.select_for_update().get(pk=missionary_id)
