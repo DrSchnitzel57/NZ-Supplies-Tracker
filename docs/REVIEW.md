@@ -175,10 +175,24 @@ test is skipped.
 
 ## Verdict and gates
 
-VERDICT: HOLD — all seven findings remediated with behavioral regressions and
-real container proof above, but rollout still requires (a) an independent
-review of this branch and (b) the user-owned manual gates: target-host
+VERDICT: SHIP (automated evidence only) — recorded 2026-10-12 after an
+independent review of `19376ee`. The reviewer reran every acceptance
+command serially on main and behaviorally reprobed all seven findings:
+
+- `.venv/bin/python manage.py test --noinput`: 195 tests, OK.
+- `.venv/bin/python manage.py makemigrations --check --dry-run`: no changes.
+- `.venv/bin/python -m pytest tests/browser`: 17 passed, no skips.
+- `.venv/bin/python -m pytest tests/deployment`: 20 passed.
+- `docker compose -f compose.test.yaml config --quiet`, image build,
+  `bash -n` on all three scripts, and `git diff --check`: all pass.
+- Seed `remain`/metadata mapping, pinned `IMAGE_BASE:VERSION` with matching
+  `APP_VERSION`, initialized `verify_backup`, `--takeover` recovery,
+  snapshot-consistent exports, ordered ledger chains, and reversal snapshots
+  all reprobed with synthetic fixtures and confirmed fixed.
+
+Rollout still requires the user-owned manual gates: target-host
 networking/registry/reboot/restore drill, nontechnical staff trial, and the
 source manual gate (95/224/four corrections against the separately supplied
-private HTML, never force-added). No real-data initialization, push, publish,
-or deploy was performed from this worktree.
+private HTML, never force-added). The earlier "no push performed" statement
+below is superseded: the operator pushed this branch to the private remote;
+no public publish, real-data initialization, or live deploy has occurred.
