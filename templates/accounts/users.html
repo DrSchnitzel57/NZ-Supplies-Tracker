@@ -1,27 +1,30 @@
 {% extends "base.html" %}
-{% block title %}User accounts — Supplies Tracker{% endblock %}
+{% block title %}User accounts — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>User accounts</h1>
+<div class="page-head"><h1>User accounts</h1><div class="sub">Administrator-only · temporary passwords must change on first sign-in</div></div>
 <p class="help">Administrator-only. New accounts get a temporary password and must change it on first sign-in. Deactivating signs them out everywhere.</p>
-<h2>Create an account</h2>
-<form method="post" action="/accounts/users/create/">
+<div class="card"><div class="hd"><h2>Create an account</h2></div><div class="bd">
+<form method="post" action="/accounts/users/create/" class="stack">
 {% csrf_token %}
+<div class="form-grid">
 <label>Username <input name="username" required autocomplete="off"></label>
 <label>Temporary password <input type="password" name="password" required autocomplete="new-password"></label>
-<label><input type="checkbox" name="is_admin" value="1"> Administrator</label>
-<button type="submit">Create account</button>
+<label class="full inline-label"><input type="checkbox" name="is_admin" value="1"> Administrator</label>
+</div>
+<p><button type="submit" class="primary">Create account</button></p>
 </form>
-<h2>Existing accounts</h2>
-<table>
+</div></div>
+<div class="section-title">Existing accounts</div>
+<div class="tablewrap"><table>
 <thead><tr><th>Username</th><th>Role</th><th>Active</th><th>Actions</th></tr></thead>
 <tbody>
 {% for u in users %}
 <tr>
-<td>{{ u.username }}</td>
-<td>{% if u.is_superuser %}Administrator{% elif u.is_staff %}Staff{% else %}No access{% endif %}</td>
-<td>{% if u.is_active %}Yes{% else %}No{% endif %}</td>
-<td>
-<form method="post" action="/accounts/users/{{ u.pk }}/reset-password/" class="inline">{% csrf_token %}<input type="password" name="password" placeholder="New temporary password" required autocomplete="new-password"><button type="submit">Set temporary password</button></form>
+<td data-label="Username"><strong>{{ u.username }}</strong></td>
+<td data-label="Role">{% if u.is_superuser %}<span class="tag">Administrator</span>{% elif u.is_staff %}<span class="tag">Staff</span>{% else %}<span class="tag">No access</span>{% endif %}</td>
+<td data-label="Active">{% if u.is_active %}<span class="dot">Yes</span>{% else %}<span class="dot warn">No</span>{% endif %}</td>
+<td data-label="Actions">
+<form method="post" action="/accounts/users/{{ u.pk }}/reset-password/" class="inline">{% csrf_token %}<input type="password" name="password" placeholder="New temporary password" required autocomplete="new-password" aria-label="New temporary password for {{ u.username }}"><button type="submit">Set temporary password</button></form>
 {% if u.pk != user.pk %}
 {% if u.is_active %}<form method="post" action="/accounts/users/{{ u.pk }}/deactivate/" class="inline">{% csrf_token %}<button type="submit">Deactivate</button></form>
 {% else %}<form method="post" action="/accounts/users/{{ u.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>{% endif %}
@@ -30,5 +33,5 @@
 </tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
 {% endblock %}

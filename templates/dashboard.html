@@ -1,35 +1,50 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Supplies Tracker{% endblock %}
+{% block title %}Dashboard — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
-<p class="help">Start here. <a href="/issue/" class="primary-action">Issue goods</a> is the main daily task. Numbers below refresh automatically about every 15 seconds without touching any form you are filling in.</p>
-<div class="cards">
-  <div class="card"><h2>People</h2><p data-live-people>{{ counts.people }}</p></div>
-  <div class="card"><h2>Items</h2><p data-live-items>{{ counts.items }}</p></div>
-  <div class="card"><h2>Issues today</h2><p>{{ counts.issues_today }}</p></div>
-  <div class="card"><h2>Low stock lines</h2><p data-live-low>{{ low_items|length }}</p></div>
+<div class="page-head"><h1>Dashboard</h1><div class="sub">Overview &amp; low-stock alerts · every number opens its list</div></div>
+<div class="toolbar quick-actions" aria-label="Quick actions">
+  <a class="btn primary" href="/issue/">Issue goods</a>
+  <a class="btn" href="/inventory/new/">Add an item</a>
+  <a class="btn" href="/roster/new/">Add a person</a>
+  <a class="btn" href="/reports/">Reports</a>
+  <span class="mini">Numbers refresh automatically about every 15 seconds without touching any form.</span>
 </div>
-<h2>Low stock — needs attention</h2>
+<div class="grid kpis">
+  <a class="kpi good" href="/roster/" aria-label="View people — {{ counts.people }} active"><span class="rail"></span><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>People<span class="go" aria-hidden="true">→</span></div><div class="big tnum" data-live-people>{{ counts.people }}</div><div class="note">Active roster · tap to open</div></a>
+  <a class="kpi" href="/inventory/" aria-label="View inventory — {{ counts.items }} lines"><span class="rail"></span><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Items<span class="go" aria-hidden="true">→</span></div><div class="big tnum" data-live-items>{{ counts.items }}</div><div class="note">Tracked lines · tap to open</div></a>
+  <a class="kpi" href="/issue/history/" aria-label="View issue history — {{ counts.issues_today }} today"><span class="rail"></span><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>Issues today<span class="go" aria-hidden="true">→</span></div><div class="big tnum">{{ counts.issues_today }}</div><div class="note">Current issues · tap for history</div></a>
+  <a class="kpi {% if low_items %}crit{% else %}good{% endif %}" href="/inventory/?low=1" aria-label="View low stock lines"><span class="rail"></span><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>Low stock lines<span class="go" aria-hidden="true">→</span></div><div class="big tnum" data-live-low>{{ low_items|length }}</div><div class="note">{% if low_items %}Needs attention · tap to restock{% else %}All stocked · tap to check{% endif %}</div></a>
+</div>
 {% if low_items %}
-<table>
-<thead><tr><th>Item</th><th>Available</th><th>Alert level</th></tr></thead>
+<div class="banner crit" role="alert"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><h2><a href="/inventory/?low=1">Low stock — needs attention ({{ low_items|length }})</a></h2><p>Top up these lines soon. Every row opens the item to add stock.</p></div></div>
+{% else %}
+<div class="banner info"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg><div><h2>Stock looks healthy</h2><p>Nothing is below its alert level right now. <a href="/inventory/">Browse inventory</a>.</p></div></div>
+{% endif %}
+<div class="grid two">
+<div class="card flush"><div class="hd"><h2>Needs restocking</h2><span class="spacer"></span><a class="btn" href="/inventory/?low=1">View all low</a></div>
+{% if low_items %}
+<div class="tablewrap" style="border:0;border-radius:0 0 14px 14px;box-shadow:none"><table>
+<thead><tr><th>Item</th><th class="r">Available</th><th class="r">Alert</th></tr></thead>
 <tbody>
-{% for item in low_items %}
-<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a> <span class="badge-low">low</span></td><td data-label="Available">{{ item.on_hand }}</td><td data-label="Alert level">{{ item.low_threshold }}</td></tr>
+{% for item in low_items|slice:":8" %}
+<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a> <span class="badge-low">low</span></td><td data-label="Available" class="r tnum">{{ item.on_hand }}</td><td data-label="Alert" class="r tnum">{{ item.low_threshold }}</td></tr>
 {% endfor %}
 </tbody>
-</table>
-{% else %}<p>Nothing is low right now.</p>{% endif %}
-<h2>Recent issues</h2>
+</table></div>
+{% else %}<div class="bd"><p>Nothing is low right now.</p></div>{% endif %}
+</div>
+<div class="card flush"><div class="hd"><h2>Recent issues</h2><span class="spacer"></span><a class="btn" href="/issue/history/">Full history</a></div>
 {% if recent %}
-<table>
-<thead><tr><th>When</th><th>Person</th><th>Items</th><th>Status</th></tr></thead>
+<div class="tablewrap" style="border:0;border-radius:0 0 14px 14px;box-shadow:none"><table>
+<thead><tr><th>Person</th><th>Items</th><th></th></tr></thead>
 <tbody>
-{% for issue in recent %}
-<tr><td data-label="When">{{ issue.issued_at }}</td><td data-label="Person"><a href="/roster/{{ issue.missionary_id }}/">{{ issue.missionary_name }}</a></td><td data-label="Items">{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</td><td data-label="Status">{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</td></tr>
+{% for issue in recent|slice:":8" %}
+<tr><td data-label="Person"><a href="/roster/{{ issue.missionary_id }}/">{{ issue.missionary_name }}</a><br><span class="mini">{{ issue.issued_at }}</span></td><td data-label="Items">{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %} {% if issue.status == "REVERSED" %}<span class="badge-reversed">Undone</span>{% endif %}</td><td data-label="Open"><a href="/issue/{{ issue.pk }}/">Open</a></td></tr>
 {% endfor %}
 </tbody>
-</table>
-{% else %}<p>No issues recorded yet.</p>{% endif %}
-<p><a href="/guide/">New here? Read the one-page quick-start guide.</a></p>
+</table></div>
+{% else %}<div class="bd"><p>No issues recorded yet. <a href="/issue/">Issue goods</a> to begin.</p></div>{% endif %}
+</div>
+</div>
+<p class="help">New here? Read the <a href="/guide/">one-page quick-start guide</a> — issuing, adding stock, and undoing a mistake in four steps.</p>
 {% endblock %}

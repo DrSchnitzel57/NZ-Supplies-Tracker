@@ -1,23 +1,27 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == "create" %}Add an item{% else %}Edit {{ item }}{% endif %} — Supplies Tracker{% endblock %}
+{% block title %}{% if mode == "create" %}Add an item{% else %}Edit {{ item }}{% endif %} — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>{% if mode == "create" %}Add an item{% else %}Edit item{% endif %}</h1>
+<div class="page-head"><h1>{% if mode == "create" %}Add an item{% else %}Edit item{% endif %}</h1><div class="sub">Matched by category, name and size · alert level drives low-stock warnings</div></div>
 <p class="help">Items are matched by category, name and size (ignoring extra spaces and letter case). Set the low-stock alert level so the dashboard can warn you.</p>
+<div class="card"><div class="bd">
 <form method="post" class="stack" data-once>
 {% csrf_token %}
+<div class="form-grid">
 <label>Category <input name="category" value="{% if category %}{{ category }}{% elif item %}{{ item.category }}{% endif %}" required></label>
 <label>Item name <input name="name" value="{% if name %}{{ name }}{% elif item %}{{ item.name }}{% endif %}" required></label>
 <label>Size (optional) <input name="size" value="{% if size %}{{ size }}{% elif item %}{{ item.size }}{% endif %}"></label>
 {% if mode == "create" %}
 <label>Opening quantity <input name="opening_qty" inputmode="numeric" pattern="[0-9]*" value="0"></label>
-<label>Reason <input name="reason" value="opening balance"></label>
+<label class="full">Reason <input name="reason" value="opening balance"></label>
 <input type="hidden" name="idempotency_key" value="{{ create_key }}">
 {% else %}
 <label>Unit <input name="unit" value="{{ item.unit }}"></label>
 <input type="hidden" name="expected_version" value="{{ item.version }}">
 {% endif %}
 <label>Low-stock alert level <input name="low_threshold" inputmode="numeric" pattern="[0-9]*" value="{% if item %}{{ item.low_threshold }}{% elif default_threshold %}{{ default_threshold }}{% else %}0{% endif %}"></label>
+</div>
 {% if mode == "create" and default_threshold %}<p class="help">Defaults to the site alert level ({{ default_threshold }}). Change it per item if needed.</p>{% endif %}
-<button type="submit">{% if mode == "create" %}Add item{% else %}Save changes{% endif %}</button>
+<p><button type="submit" class="primary">{% if mode == "create" %}Add item{% else %}Save changes{% endif %}</button></p>
 </form>
+</div></div>
 {% endblock %}

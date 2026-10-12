@@ -1,89 +1,109 @@
 {% extends "base.html" %}
-{% block title %}Reports — Supplies Tracker{% endblock %}
+{% block title %}Reports — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Reports</h1>
+<div class="page-head"><h1>Reports</h1><div class="sub">Summaries for staff · net issuance excludes undone issues</div></div>
 <p class="help">On-screen summaries. “Given out” counts only current issues — undone issues are excluded but remain visible in history. Low-stock lines use each item’s alert level. <a href="/guide/">Quick-start guide</a>.</p>
 <form method="get" class="toolbar">
-<label><input type="checkbox" name="archived" value="1" {% if include_archived %}checked{% endif %}> Include archived records</label>
+<label class="check"><input type="checkbox" name="archived" value="1" {% if include_archived %}checked{% endif %}> Include archived records</label>
 <button type="submit">Apply</button>
 </form>
-<p class="help">Downloads: <a href="/reports/roster.csv">Missionaries CSV</a> · <a href="/reports/inventory.csv">Inventory CSV</a> · per-item <a href="/reports/family/per-item/?format=csv">CSV</a>/<a href="/reports/family/per-item/?format=pdf">PDF</a> · per-person <a href="/reports/family/per-person/?format=csv">CSV</a>/<a href="/reports/family/per-person/?format=pdf">PDF</a> · low-stock <a href="/reports/family/low-stock/?format=csv">CSV</a>/<a href="/reports/family/low-stock/?format=pdf">PDF</a> · stock <a href="/reports/family/stock/?format=csv">CSV</a>/<a href="/reports/family/stock/?format=pdf">PDF</a> · by-category <a href="/reports/family/category/?format=csv">CSV</a>/<a href="/reports/family/category/?format=pdf">PDF</a> · arrivals <a href="/reports/family/intake/?format=csv">CSV</a>/<a href="/reports/family/intake/?format=pdf">PDF</a> · history <a href="/reports/family/history/?format=csv">CSV</a>/<a href="/reports/family/history/?format=pdf">PDF</a>{% if user.is_superuser %} · <a href="/reports/bundle/export/">Full bundle ZIP</a>{% endif %}</p>
-<h2>Given out per item (net)</h2>
+<div class="panel"><h2>Downloads</h2>
+<p class="help" style="margin-top:0">Part of <strong>Data exchange</strong>: imports live at <a href="/transfers/roster/">Missionary import</a> / <a href="/transfers/inventory/">Inventory import</a>{% if user.is_superuser %} and full history moves at <a href="/transfers/bundle/">Full bundle &amp; backups</a>{% endif %}.</p>
+<div class="dl-grid">
+<a class="btn" href="/reports/roster.csv">Missionaries CSV</a>
+<a class="btn" href="/reports/inventory.csv">Inventory CSV</a>
+<a class="btn" href="/reports/family/per-item/?format=csv">Per-item CSV</a>
+<a class="btn" href="/reports/family/per-item/?format=pdf">Per-item PDF</a>
+<a class="btn" href="/reports/family/per-person/?format=csv">Per-person CSV</a>
+<a class="btn" href="/reports/family/per-person/?format=pdf">Per-person PDF</a>
+<a class="btn" href="/reports/family/low-stock/?format=csv">Low-stock CSV</a>
+<a class="btn" href="/reports/family/low-stock/?format=pdf">Low-stock PDF</a>
+<a class="btn" href="/reports/family/stock/?format=csv">Stock CSV</a>
+<a class="btn" href="/reports/family/stock/?format=pdf">Stock PDF</a>
+<a class="btn" href="/reports/family/category/?format=csv">By-category CSV</a>
+<a class="btn" href="/reports/family/category/?format=pdf">By-category PDF</a>
+<a class="btn" href="/reports/family/intake/?format=csv">Arrivals CSV</a>
+<a class="btn" href="/reports/family/intake/?format=pdf">Arrivals PDF</a>
+<a class="btn" href="/reports/family/history/?format=csv">History CSV</a>
+<a class="btn" href="/reports/family/history/?format=pdf">History PDF</a>
+{% if user.is_superuser %}<a class="btn" href="/reports/bundle/export/">Full bundle ZIP</a>{% endif %}
+</div></div>
+<div class="section-title">Given out per item (net)</div>
 {% if per_item_total > per_item|length %}<p class="help">Showing the first {{ per_item|length }} of {{ per_item_total }} rows — download the CSV for the full list.</p>{% endif %}
-<table>
-<thead><tr><th>Item</th><th>Given out (net)</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th class="r">Given out (net)</th></tr></thead>
 <tbody>
 {% for row in per_item %}
-<tr><td data-label="Item">{{ row.item_category }} / {{ row.item_name }}{% if row.item_size %} ({{ row.item_size }}){% endif %}</td><td data-label="Given out (net)">{{ row.total }}</td></tr>
+<tr><td data-label="Item">{{ row.item_category }} / {{ row.item_name }}{% if row.item_size %} ({{ row.item_size }}){% endif %}</td><td data-label="Given out (net)" class="r tnum">{{ row.total }}</td></tr>
 {% empty %}<tr><td colspan="2">No issues yet.</td></tr>
 {% endfor %}
 </tbody>
-</table>
-<h2>Given out per person (net)</h2>
+</table></div>
+<div class="section-title">Given out per person (net)</div>
 {% if per_person_total > per_person|length %}<p class="help">Showing the first {{ per_person|length }} of {{ per_person_total }} rows — download the CSV for the full list.</p>{% endif %}
-<table>
-<thead><tr><th>Person</th><th>Given out (net)</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Person</th><th class="r">Given out (net)</th></tr></thead>
 <tbody>
 {% for row in per_person %}
-<tr><td data-label="Person">{{ row.issue__missionary_name }} ({{ row.issue__missionary_external_id }})</td><td data-label="Given out (net)">{{ row.total }}</td></tr>
+<tr><td data-label="Person">{{ row.issue__missionary_name }} ({{ row.issue__missionary_external_id }})</td><td data-label="Given out (net)" class="r tnum">{{ row.total }}</td></tr>
 {% empty %}<tr><td colspan="2">No issues yet.</td></tr>
 {% endfor %}
 </tbody>
-</table>
-<h2>Low stock</h2>
+</table></div>
+<div class="section-title">Low stock</div>
 {% if low_total > low_items|length %}<p class="help">Showing the first {{ low_items|length }} of {{ low_total }} rows — download the CSV for the full list.</p>{% endif %}
-<table>
-<thead><tr><th>Item</th><th>Available</th><th>Alert level</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th class="r">Available</th><th class="r">Alert level</th></tr></thead>
 <tbody>
 {% for item in low_items %}
-<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a></td><td data-label="Available">{{ item.on_hand }}</td><td data-label="Alert level">{{ item.low_threshold }}</td></tr>
+<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a> <span class="badge-low">low</span></td><td data-label="Available" class="r tnum">{{ item.on_hand }}</td><td data-label="Alert level" class="r tnum">{{ item.low_threshold }}</td></tr>
 {% empty %}<tr><td colspan="3">Nothing is low right now.</td></tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
 <p class="help">Low-stock follow-up: copy the table above or <a href="mailto:?subject=Low%20stock%20order">open your mail app to contact suppliers</a> — the app sends no email itself.</p>
-<h2>Available stock</h2>
+<div class="section-title">Available stock</div>
 {% if stock_total > stock_rows|length %}<p class="help">Showing the first {{ stock_rows|length }} of {{ stock_total }} rows — download the CSV for the full list.</p>{% endif %}
-<table>
-<thead><tr><th>Item</th><th>Available</th><th>Alert level</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th class="r">Available</th><th class="r">Alert level</th></tr></thead>
 <tbody>
 {% for item in stock_rows %}
-<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a></td><td data-label="Available">{{ item.on_hand }}</td><td data-label="Alert level">{{ item.low_threshold }}</td></tr>
+<tr><td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a></td><td data-label="Available" class="r tnum">{{ item.on_hand }}</td><td data-label="Alert level" class="r tnum">{{ item.low_threshold }}</td></tr>
 {% empty %}<tr><td colspan="3">No items yet.</td></tr>
 {% endfor %}
 </tbody>
-</table>
-<h2>Given out by category (net)</h2>
+</table></div>
+<div class="section-title">Given out by category (net)</div>
 {% if category_total > per_category|length %}<p class="help">Showing the first {{ per_category|length }} of {{ category_total }} rows — download the CSV for the full list.</p>{% endif %}
-<table>
-<thead><tr><th>Category</th><th>Given out (net)</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Category</th><th class="r">Given out (net)</th></tr></thead>
 <tbody>
 {% for row in per_category %}
-<tr><td data-label="Category">{{ row.item_category|default:"(uncategorized)" }}</td><td data-label="Given out (net)">{{ row.total }}</td></tr>
+<tr><td data-label="Category">{{ row.item_category|default:"(uncategorized)" }}</td><td data-label="Given out (net)" class="r tnum">{{ row.total }}</td></tr>
 {% empty %}<tr><td colspan="2">No issues yet.</td></tr>
 {% endfor %}
 </tbody>
-</table>
-<h2>Arrivals overview</h2>
+</table></div>
+<div class="section-title">Arrivals overview</div>
 <p class="help">{{ intake.total }} people in this view.</p>
-<table>
-<thead><tr><th>Arrival status</th><th>People</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Arrival status</th><th class="r">People</th></tr></thead>
 <tbody>
 {% for row in intake.by_status %}
-<tr><td data-label="Arrival status">{{ row.arrival_status|default:"(unspecified)" }}</td><td data-label="People">{{ row.total }}</td></tr>
+<tr><td data-label="Arrival status">{{ row.arrival_status|default:"(unspecified)" }}</td><td data-label="People" class="r tnum">{{ row.total }}</td></tr>
 {% empty %}<tr><td colspan="2">No people yet.</td></tr>
 {% endfor %}
 </tbody>
-</table>
-<h2>Recent issues (original and undone)</h2>
+</table></div>
+<div class="section-title">Recent issues (original and undone)</div>
 {% if recent_total > recent|length %}<p class="help">Showing the first {{ recent|length }} of {{ recent_total }} rows — download the CSV for the full list.</p>{% endif %}
-<table>
+<div class="tablewrap"><table>
 <thead><tr><th>When</th><th>Person</th><th>Status</th><th>Given by / undone by</th></tr></thead>
 <tbody>
 {% for issue in recent %}
-<tr><td data-label="When">{{ issue.issued_at }}</td><td data-label="Person">{{ issue.missionary_name }}</td><td data-label="Status">{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</td><td data-label="Given by / undone by">{{ issue.issued_by_username }}{% if issue.status == "REVERSED" %} / {{ issue.reversed_by_username|default:issue.reversed_by.username }} ({{ issue.reversal_reason }}){% endif %}</td></tr>
+<tr><td data-label="When">{{ issue.issued_at }}</td><td data-label="Person">{{ issue.missionary_name }}</td><td data-label="Status">{% if issue.status == "REVERSED" %}<span class="badge-reversed">Undone</span>{% else %}<span class="badge-ok">Current</span>{% endif %}</td><td data-label="Given by / undone by">{{ issue.issued_by_username }}{% if issue.status == "REVERSED" %} / {{ issue.reversed_by_username|default:issue.reversed_by.username }} ({{ issue.reversal_reason }}){% endif %}</td></tr>
 {% empty %}<tr><td colspan="4">No issues yet.</td></tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
 {% endblock %}

@@ -1,20 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Not enough stock — Supplies Tracker{% endblock %}
+{% block title %}Not enough stock — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Not enough stock — review before confirming</h1>
-<p class="help">Nothing was issued yet. The table shows what you asked for, what is Available right now, and the revised quantity we can give. Confirm the revised list, or go back — your original request is shown below so nothing is lost. Stock is checked again when you confirm.</p>
-<h2>Shortages for {{ missionary.name }}</h2>
-<table>
-<thead><tr><th>Item</th><th>You asked for</th><th>Available now</th><th>Revised quantity</th></tr></thead>
+<div class="page-head"><h1>Not enough stock — review before confirming</h1><div class="sub">Shortages for {{ missionary.name }} · nothing was issued yet</div></div>
+<div class="banner warn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><h2>Review the revised list</h2><p>Nothing was issued yet. The table shows what you asked for, what is Available right now, and the revised quantity we can give. Confirm the revised list, or go back — your original request is shown below so nothing is lost. Stock is checked again when you confirm.</p></div></div>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th class="r">You asked for</th><th class="r">Available now</th><th class="r">Revised quantity</th></tr></thead>
 <tbody>
 {% for row in shortage_rows %}
-<tr><td data-label="Item">{{ row.item }}</td><td data-label="You asked for">{{ row.requested }}</td><td data-label="Available now">{{ row.available }}</td><td data-label="Revised quantity">{{ row.revised }}</td></tr>
+<tr><td data-label="Item">{{ row.item }} <span class="badge-low">short</span></td><td data-label="You asked for" class="r tnum">{{ row.requested }}</td><td data-label="Available now" class="r tnum">{{ row.available }}</td><td data-label="Revised quantity" class="r tnum"><strong>{{ row.revised }}</strong></td></tr>
 {% endfor %}
 {% for row in ok_rows %}
-<tr><td data-label="Item">{{ row.item }}</td><td data-label="You asked for">{{ row.requested }}</td><td data-label="Available now">{{ row.available }}</td><td data-label="Revised quantity">{{ row.revised }}</td></tr>
+<tr><td data-label="Item">{{ row.item }}</td><td data-label="You asked for" class="r tnum">{{ row.requested }}</td><td data-label="Available now" class="r tnum">{{ row.available }}</td><td data-label="Revised quantity" class="r tnum">{{ row.revised }}</td></tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
+<div class="card"><div class="bd">
 <form method="post" action="/issue/confirm/" class="stack" data-once>
 {% csrf_token %}
 <input type="hidden" name="missionary_id" value="{{ missionary.pk }}">
@@ -25,7 +25,7 @@
 <input type="hidden" name="p-qty" value="{{ e.quantity }}">
 {% endfor %}
 <input type="hidden" name="proposal_json" value='[{% for e in proposal %}{"item_id": "{{ e.item_id }}", "quantity": {{ e.quantity }}}{% if not forloop.last %}, {% endif %}{% endfor %}]'>
-<button type="submit">Confirm revised quantities</button>
-<a href="{{ return_to }}">Back without issuing</a>
+<p><button type="submit" class="primary">Confirm revised quantities</button> <a class="btn" href="{{ return_to }}">Back without issuing</a></p>
 </form>
+</div></div>
 {% endblock %}

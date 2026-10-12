@@ -1,18 +1,19 @@
 {% extends "base.html" %}
-{% block title %}{{ person.name }} — Supplies Tracker{% endblock %}
+{% block title %}{{ person.name }} — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>{{ person.name }}</h1>
-<p>ID: {{ person.external_id }}{% if person.email %} · {{ person.email }}{% endif %} · {% if person.is_archived %}Archived{% else %}Active{% endif %}</p>
-<p><a href="/roster/{{ person.pk }}/edit/">Edit</a>
+<div class="page-head"><h1>{{ person.name }}</h1><div class="sub">ID {{ person.external_id }}{% if person.email %} · {{ person.email }}{% endif %} · {% if person.is_archived %}Archived{% else %}Active{% endif %}</div></div>
+<div class="panel">
+<p style="margin:0"><a class="btn" href="/roster/{{ person.pk }}/edit/">Edit</a>
 {% if person.is_archived %}
 <form method="post" action="/roster/{{ person.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>
 {% else %}
 <form method="post" action="/roster/{{ person.pk }}/archive/" class="inline">{% csrf_token %}<button type="submit">Archive</button></form>
 {% endif %}
-</p>
+<a class="btn" href="/roster/">Back to list</a></p>
 <p class="help">Net received below counts only current (not undone) issues. Archived people cannot receive new goods. To give goods from this profile, pick an item and quantity — it uses the same check as the main Issue goods screen.</p>
+</div>
 
-<h2>Issue goods to {{ person.name }}</h2>
+<div class="card"><div class="hd"><h2>Issue goods to {{ person.name }}</h2></div><div class="bd">
 {% if person.is_archived %}
 <p>This record is archived, so new issues are disabled. Past history below is kept.</p>
 {% else %}
@@ -20,21 +21,24 @@
 {% csrf_token %}
 <input type="hidden" name="missionary_id" value="{{ person.pk }}">
 <input type="hidden" name="idempotency_key" value="{{ draft_key }}">
+<div class="form-grid">
 <label>Item
 <select name="item_id" required>
 <option value="">— Choose an item —</option>
 {% for item in active_items %}<option value="{{ item.pk }}">{{ item }} — Available: {{ item.on_hand }}</option>{% endfor %}
 </select></label>
 <label>Quantity <input name="quantity" inputmode="numeric" pattern="[0-9]*" value="1" required></label>
-<label>Note (optional) <input name="note" value=""></label>
-<button type="submit">Issue goods</button>
+<label class="full">Note (optional) <input name="note" value=""></label>
+</div>
+<p><button type="submit" class="primary">Issue goods</button></p>
 </form>
 {% endif %}
+</div></div>
 
-<h2>Net received: {{ net_total }}</h2>
-<h2>History for this person</h2>
+<div class="section-title">Net received: {{ net_total }}</div>
+<div class="card flush"><div class="hd"><h2>History for this person</h2></div>
 {% if issues %}
-<table>
+<div class="tablewrap" style="border:0;border-radius:0 0 14px 14px;box-shadow:none"><table>
 <thead><tr><th>When</th><th>Items</th><th>Given by</th><th>Status</th><th></th></tr></thead>
 <tbody>
 {% for issue in issues %}
@@ -42,12 +46,13 @@
 <td data-label="When">{{ issue.issued_at }}</td>
 <td data-label="Items">{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
 <td data-label="Given by">{{ issue.issued_by_username }}</td>
-<td data-label="Status">{% if issue.status == "REVERSED" %}<span class="badge-reversed">Undone</span>{% else %}Current{% endif %}</td>
+<td data-label="Status">{% if issue.status == "REVERSED" %}<span class="badge-reversed">Undone</span>{% else %}<span class="badge-ok">Current</span>{% endif %}</td>
 <td data-label="Details"><a href="/issue/{{ issue.pk }}/">Open</a></td>
 </tr>
 {% endfor %}
 </tbody>
-</table>
-{% else %}<p>No issues for this person yet.</p>{% endif %}
-<p><a href="/issue/">Or use the full Issue goods screen for several items at once.</a></p>
+</table></div>
+{% else %}<div class="bd"><p>No issues for this person yet.</p></div>{% endif %}
+</div>
+<p class="help"><a href="/issue/">Or use the full Issue goods screen</a> for several items at once.</p>
 {% endblock %}

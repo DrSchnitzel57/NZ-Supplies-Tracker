@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Missionaries — Supplies Tracker{% endblock %}
+{% block title %}Missionaries — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Missionaries</h1>
-<p class="help">Find a person to see their profile and issue goods to them. Archived people stay in history but cannot receive new goods. Search by name, ID or email.</p>
+<div class="page-head"><h1>Missionaries</h1><div class="sub">Intake roster &amp; goods received · {{ shown }} of {{ total }} shown</div></div>
+<p class="help">Find a person to see their profile and issue goods to them. Archived people stay in history but cannot receive new goods. Search by name, ID or email. <a href="/guide/">Quick-start guide</a>.</p>
 <form method="get" class="toolbar" role="search">
-  <label>Search <input type="search" name="q" value="{{ q }}" placeholder="Name, ID or email"></label>
-  <label><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
-  <button type="submit">Search</button>
-  <a href="/roster/new/">Add a person</a>
+  <label>Search<input type="search" name="q" value="{{ q }}" placeholder="Name, ID or email"></label>
+  <label class="check"><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
+  <button type="submit" class="primary">Search</button>
+  <a class="btn" href="/roster/new/">Add a person</a>
 </form>
-<table>
+<div class="tablewrap"><table>
 <thead><tr><th>Name</th><th>ID</th><th>Status</th></tr></thead>
 <tbody>
 {% for m in missionaries %}
-<tr><td data-label="Name"><a href="/roster/{{ m.pk }}/">{{ m.name }}</a></td><td data-label="ID">{{ m.external_id }}</td><td data-label="Status">{% if m.is_archived %}Archived{% else %}Active{% endif %}</td></tr>
+<tr><td data-label="Name"><a href="/roster/{{ m.pk }}/">{{ m.name }}</a></td><td data-label="ID"><span class="tag">{{ m.external_id }}</span></td><td data-label="Status">{% if m.is_archived %}<span class="tag">Archived</span>{% else %}<span class="dot">Active</span>{% endif %}</td></tr>
 {% empty %}<tr><td colspan="3">No people found.</td></tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
 {% if total > shown %}<p class="help">Showing the first {{ shown }} of {{ total }} people — narrow the search to see the rest.</p>{% endif %}
 {% endblock %}

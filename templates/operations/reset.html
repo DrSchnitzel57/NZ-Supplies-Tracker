@@ -1,17 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Full reset — Supplies Tracker{% endblock %}
+{% block title %}Full reset — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Destructive area: full reset</h1>
-<p class="error" role="alert"><strong>This permanently clears all missionaries, items, issues, movements, audits and import previews.</strong> Accounts and system settings are kept, plus one reset marker. A verified backup is taken first — if the backup fails, nothing is deleted.</p>
-<p>Current data: {{ counts.people }} people · {{ counts.items }} items · {{ counts.issues }} issues.</p>
+<div class="page-head"><h1>Destructive area: full reset</h1><div class="sub">Clears operational data · keeps accounts and settings</div></div>
+<div class="banner crit" role="alert"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><h2>This permanently clears all missionaries, items, issues, movements, audits and import previews.</h2><p>Accounts and system settings are kept, plus one reset marker. A verified backup is taken first — if the backup fails, nothing is deleted.</p></div></div>
+<p>Current data: <strong>{{ counts.people }}</strong> people · <strong>{{ counts.items }}</strong> items · <strong>{{ counts.issues }}</strong> issues.</p>
 {% if not fresh %}<p class="error" role="alert">Confirm your password first: <a href="/admin-area/reauth/?next=/admin-area/reset/">Confirm identity</a>.</p>{% endif %}
-<form method="post">
+<div class="card"><div class="bd">
+<form method="post" class="stack">
 {% csrf_token %}
 <input type="hidden" name="expected_people" value="{{ counts.people }}">
 <input type="hidden" name="expected_items" value="{{ counts.items }}">
 <input type="hidden" name="expected_issues" value="{{ counts.issues }}">
 <label>Type <strong>RESET</strong> to confirm <input name="confirmation" autocomplete="off" required></label>
-<button type="submit" {% if not fresh %}disabled{% endif %}>Clear all operational data</button>
+<p><button type="submit" class="danger" {% if not fresh %}disabled{% endif %}>Clear all operational data</button></p>
 </form>
+</div></div>
 <p class="help">This lives only here — never in ordinary troubleshooting screens.</p>
 {% endblock %}

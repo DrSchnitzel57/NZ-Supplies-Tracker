@@ -1,19 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Import preview — Supplies Tracker{% endblock %}
+{% block title %}Import preview — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Import preview ({{ preview.kind }}, {{ preview.mode }})</h1>
+<div class="page-head"><h1>Import preview ({{ preview.kind }}, {{ preview.mode }})</h1><div class="sub">{{ valid|length }} valid · {{ errors|length }} with errors</div></div>
 {% if stale %}<p class="error" role="alert">Source data changed since this preview was made. Re-upload and review again — confirmation is blocked.</p>{% endif %}
 <p class="help">{{ valid|length }} valid · {{ errors|length }} with errors{% if preview.mode == "replace" %} · {{ to_archive }} record(s) would be archived as missing{% endif %}.</p>
 {% if errors %}
-<h2>Rows needing fixes ({{ errors|length }})</h2>
-<table>
-<thead><tr><th>Row</th><th>Problems</th><th>Details</th></tr></thead>
+<div class="section-title">Rows needing fixes ({{ errors|length }})</div>
+<div class="tablewrap"><table>
+<thead><tr><th class="r">Row</th><th>Problems</th><th>Details</th></tr></thead>
 <tbody>
-{% for r in errors %}<tr><td>{{ r.row }}</td><td>{% for p in r.problems %}{{ p }}{% if not forloop.last %}; {% endif %}{% endfor %}</td><td>{{ r.category }} {{ r.name }} {{ r.external_id }}</td></tr>{% endfor %}
+{% for r in errors %}<tr><td data-label="Row" class="r tnum">{{ r.row }}</td><td data-label="Problems">{{ r.problems|join:"; " }}</td><td data-label="Details">{{ r.category }} {{ r.name }} {{ r.external_id }}</td></tr>{% endfor %}
 </tbody>
-</table>
+</table></div>
 {% endif %}
-<h2>Valid rows ({{ valid|length }})</h2>
+<div class="section-title">Valid rows ({{ valid|length }})</div>
+<div class="card"><div class="bd">
 <form method="post" action="/transfers/preview/{{ preview.token }}/confirm/">
 {% csrf_token %}
 {% if preview.mode == "add_update" %}
@@ -24,24 +25,25 @@
 </p>
 <p class="help">Tick the rows to apply and choose “Apply approved rows”, or apply everything / nothing at once. Confirming with nothing ticked writes nothing.</p>
 {% endif %}
-<table>
-<thead><tr>{% if preview.mode == "add_update" %}<th>Apply?</th>{% endif %}<th>Row</th><th>Action</th><th>Summary</th><th>Change</th><th>Note</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr>{% if preview.mode == "add_update" %}<th>Apply?</th>{% endif %}<th class="r">Row</th><th>Action</th><th>Summary</th><th>Change</th><th>Note</th></tr></thead>
 <tbody>
 {% for r in valid %}
 <tr>
-{% if preview.mode == "add_update" %}<td><input type="checkbox" name="row-{{ r.row }}" checked aria-label="Apply row {{ r.row }}"></td>{% endif %}
-<td>{{ r.row }}</td><td>{{ r.action }}</td>
-<td>{% if preview.kind == "roster" %}{{ r.external_id }} — {{ r.name }}{% if r.archived %} (archived — will be reactivated){% endif %}{% else %}{{ r.category }} / {{ r.name }}{% if r.size %} ({{ r.size }}){% endif %}{% if r.archived %} (archived — will be reactivated){% endif %}{% endif %}</td>
-<td>{% if preview.kind == "inventory" %}{% if r.current is not None %}now {{ r.current }} → {% endif %}{% if r.counted is not None %}count {{ r.counted }} ({{ r.delta|stringformat:"+d" }}, {{ r.movement }}){% else %}details only{% endif %}{% if r.low_threshold is not None %} · alert {{ r.low_threshold }}{% endif %}{% else %}—{% endif %}</td>
-<td>{{ r.reason|default:"—" }}</td>
+{% if preview.mode == "add_update" %}<td data-label="Apply?"><input type="checkbox" name="row-{{ r.row }}" checked aria-label="Apply row {{ r.row }}"></td>{% endif %}
+<td data-label="Row" class="r tnum">{{ r.row }}</td><td data-label="Action"><span class="tag">{{ r.action }}</span></td>
+<td data-label="Summary">{% if preview.kind == "roster" %}{{ r.external_id }} — {{ r.name }}{% if r.archived %} (archived — will be reactivated){% endif %}{% else %}{{ r.category }} / {{ r.name }}{% if r.size %} ({{ r.size }}){% endif %}{% if r.archived %} (archived — will be reactivated){% endif %}{% endif %}</td>
+<td data-label="Change">{% if preview.kind == "inventory" %}{% if r.current is not None %}now {{ r.current }} → {% endif %}{% if r.counted is not None %}count {{ r.counted }} ({{ r.delta|stringformat:"+d" }}, {{ r.movement }}){% else %}details only{% endif %}{% if r.low_threshold is not None %} · alert {{ r.low_threshold }}{% endif %}{% else %}—{% endif %}</td>
+<td data-label="Note">{{ r.reason|default:"—" }}</td>
 </tr>
 {% empty %}<tr><td colspan="6">No valid rows.</td></tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
 {% if not stale and valid %}
 {% if preview.mode == "replace" %}<p class="help">Replacement needs every row valid and archives {{ to_archive }} missing record(s). This cannot be partially approved.</p>{% endif %}
-<button type="submit" {% if stale %}disabled{% endif %}>Apply approved rows</button>
+<p><button type="submit" class="primary" {% if stale %}disabled{% endif %}>Apply approved rows</button></p>
 {% endif %}
 </form>
+</div></div>
 {% endblock %}

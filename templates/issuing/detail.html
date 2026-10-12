@@ -1,29 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Issue to {{ issue.missionary_name }} — Supplies Tracker{% endblock %}
+{% block title %}Issue to {{ issue.missionary_name }} — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Issue to {{ issue.missionary_name }}</h1>
-<p>Person: {{ issue.missionary_name }} ({{ issue.missionary_external_id }}) · Given by <strong>{{ issue.issued_by_username }}</strong> at {{ issue.issued_at }} · Status: <strong>{% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</strong></p>
+<div class="page-head"><h1>Issue to {{ issue.missionary_name }}</h1><div class="sub">{{ issue.missionary_external_id }} · Given by {{ issue.issued_by_username }} at {{ issue.issued_at }} · {% if issue.status == "REVERSED" %}Undone{% else %}Current{% endif %}</div></div>
 {% if issue.status == "REVERSED" %}
-<p>Undone by <strong>{{ issue.reversed_by_username|default:issue.reversed_by.username }}</strong> at {{ issue.reversed_at }}. Reason: {{ issue.reversal_reason }}</p>
+<div class="banner warn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><h2>Undone</h2><p>Undone by <strong>{{ issue.reversed_by_username|default:issue.reversed_by.username }}</strong> at {{ issue.reversed_at }}. Reason: {{ issue.reversal_reason }}</p></div></div>
 {% endif %}
-{% if issue.note %}<p>Note: {{ issue.note }}</p>{% endif %}
-<h2>Items in this issue (original record — never changed)</h2>
-<table>
-<thead><tr><th>Item</th><th>Quantity</th></tr></thead>
+{% if issue.note %}<p class="help">Note: {{ issue.note }}</p>{% endif %}
+<div class="card flush"><div class="hd"><h2>Items in this issue (original record — never changed)</h2></div>
+<div class="tablewrap" style="border:0;border-radius:0 0 14px 14px;box-shadow:none"><table>
+<thead><tr><th>Item</th><th class="r">Quantity</th></tr></thead>
 <tbody>
 {% for line in issue.lines.all %}
-<tr><td data-label="Item">{{ line.item_category }} / {{ line.item_name }}{% if line.item_size %} ({{ line.item_size }}){% endif %}</td><td data-label="Quantity">{{ line.quantity }}</td></tr>
+<tr><td data-label="Item">{{ line.item_category }} / {{ line.item_name }}{% if line.item_size %} ({{ line.item_size }}){% endif %}</td><td data-label="Quantity" class="r tnum">{{ line.quantity }}</td></tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div></div>
 {% if issue.status == "ACTIVE" %}
-<h2>Undo this issue</h2>
+<div class="card"><div class="hd"><h2>Undo this issue</h2></div><div class="bd">
 <p class="help">Made a mistake? Undoing adds everything in this issue back to Available. You must give a reason. An issue can only be undone once.</p>
 <form method="post" action="/issue/{{ issue.pk }}/undo/" class="stack" data-once>
 {% csrf_token %}
 <label>Reason for undoing (required) <input name="reason" required placeholder="For example: wrong person selected"></label>
-<button type="submit">Undo this issue</button>
+<p><button type="submit" class="danger">Undo this issue</button></p>
 </form>
+</div></div>
 {% endif %}
-<p><a href="/issue/history/">Back to history</a></p>
+<p><a class="btn" href="/issue/history/">Back to history</a></p>
 {% endblock %}

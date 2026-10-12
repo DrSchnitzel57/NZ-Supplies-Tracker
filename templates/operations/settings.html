@@ -1,13 +1,15 @@
 {% extends "base.html" %}
-{% block title %}System settings — Supplies Tracker{% endblock %}
+{% block title %}System settings — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>System settings</h1>
+<div class="page-head"><h1>System settings</h1><div class="sub">Administrator-only · no secrets stored here</div></div>
 <p class="help">Administrator-only. No secrets are stored here.</p>
-<form method="post">
+<div class="card"><div class="bd">
+<form method="post" class="stack">
 {% csrf_token %}
 <label>Site notice (shown to staff) <input name="site_notice" value="{{ settings.site_notice|default:'' }}" maxlength="500"></label>
 <label>Default low-stock alert level for new items <input name="default_low_threshold" value="{{ settings.default_low_threshold|default:'0' }}" inputmode="numeric"></label>
-<button type="submit">Save settings</button>
+<p><button type="submit" class="primary">Save settings</button></p>
 </form>
-<p><a href="/admin-area/reset/">Destructive tools: full reset</a></p>
+</div></div>
+<p><a class="btn danger" href="/admin-area/reset/">Destructive tools: full reset</a></p>
 {% endblock %}

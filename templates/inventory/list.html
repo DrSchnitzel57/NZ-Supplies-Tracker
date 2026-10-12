@@ -1,33 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Inventory — Supplies Tracker{% endblock %}
+{% block title %}Inventory — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<h1>Inventory</h1>
-<p class="help">Available is what is on the shelf right now. “Given out” is net issued goods (undone issues don’t count). Count corrections are shown separately — they never invent issues. Archived items stay in history but cannot be issued.</p>
+<div class="page-head"><h1>Inventory</h1><div class="sub">Stock levels &amp; thresholds · {{ shown }} of {{ total }} shown</div></div>
+<p class="help">Available is what is on the shelf right now. “Given out” is net issued goods (undone issues don’t count). Count corrections are shown separately — they never invent issues. Archived items stay in history but cannot be issued. <a href="/guide/">Quick-start guide</a>.</p>
 <form method="get" class="toolbar" role="search">
-  <label>Search <input type="search" name="q" value="{{ q }}" placeholder="Item, category or size"></label>
+  <label>Search<input type="search" name="q" value="{{ q }}" placeholder="Item, category or size"></label>
   <label>Category
     <select name="category"><option value="">All</option>
     {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
     </select></label>
-  <label>Size <input name="size" value="{{ size }}" placeholder="Any size"></label>
-  <label><input type="checkbox" name="low" value="1" {% if low_only %}checked{% endif %}> Low stock only</label>
-  <label><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
-  <button type="submit">Filter</button>
-  <a href="/inventory/new/">Add an item</a>
+  <label>Size<input name="size" value="{{ size }}" placeholder="Any size"></label>
+  <label class="check"><input type="checkbox" name="low" value="1" {% if low_only %}checked{% endif %}> Low stock only</label>
+  <label class="check"><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
+  <button type="submit" class="primary">Filter</button>
+  <a class="btn" href="/inventory/new/">Add an item</a>
 </form>
-<table>
-<thead><tr><th>Item</th><th>Available</th><th>Given out (net)</th><th>Status</th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th class="r">Available</th><th class="r">Given out (net)</th><th>Stock</th><th>Status</th></tr></thead>
 <tbody>
 {% for item in items %}
 <tr>
 <td data-label="Item"><a href="/inventory/{{ item.pk }}/">{{ item }}</a>{% if item.on_hand <= item.low_threshold %} <span class="badge-low">low</span>{% endif %}</td>
-<td data-label="Available" data-available-for="{{ item.pk }}">{{ item.on_hand }}</td>
-<td data-label="Given out (net)">{{ item.net_given }}</td>
-<td data-label="Status">{% if item.is_archived %}Archived{% else %}Active{% endif %}</td>
+<td data-label="Available" class="r tnum stock-num" data-available-for="{{ item.pk }}">{{ item.on_hand }}</td>
+<td data-label="Given out (net)" class="r tnum">{{ item.net_given }}</td>
+<td data-label="Stock"><span class="meter"><span class="{% if item.on_hand <= item.low_threshold %}crit{% endif %}" style="width:{% if item.on_hand > 20 %}80{% elif item.on_hand > 10 %}55{% elif item.on_hand > 0 %}30{% else %}6{% endif %}%"></span></span></td>
+<td data-label="Status">{% if item.is_archived %}<span class="tag">Archived</span>{% else %}<span class="dot">Active</span>{% endif %}</td>
 </tr>
-{% empty %}<tr><td colspan="4">No items found.</td></tr>
+{% empty %}<tr><td colspan="5">No items found.</td></tr>
 {% endfor %}
 </tbody>
-</table>
+</table></div>
 {% if total > shown %}<p class="help">Showing the first {{ shown }} of {{ total }} items — narrow the search to see the rest.</p>{% endif %}
 {% endblock %}
