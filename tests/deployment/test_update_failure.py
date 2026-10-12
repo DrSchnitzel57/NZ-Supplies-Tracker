@@ -95,6 +95,41 @@ def test_production_image_tag_matches_requested_version(tmp_path):
         "ghcr.io/example/supplies-tracker:1.2.3"
 
 
+def test_production_caddy_mapping_matches_listen_port(tmp_path):
+    """Laptop-trial find: production compose forwarded host 8443 to container
+    443 while the Caddyfile serves {$APP_PORT} (8443), so TLS died after the
+    TCP open and every browser/curl failed. compose.test.yaml had the right
+    mapping; production did not, and no test resolved the production file.
+    Proven by real `compose config` JSON: the published target must equal
+    APP_PORT, including a non-default port (a hardcoded :443 fails that)."""
+    import shutil
+
+    shutil.copy("compose.yaml", tmp_path / "compose.yaml")
+    (tmp_path / ".env").write_text(
+        "DJANGO_SECRET_KEY=synthetic-only-not-a-real-secret-123\n"
+        "DJANGO_ALLOWED_HOSTS=127.0.0.1\n"
+        "DJANGO_CSRF_TRUSTED_ORIGINS=https://127.0.0.1:8443\n"
+        "APP_HOST=127.0.0.1\nAPP_PORT=8443\nVERSION=0.4.0\n"
+        "IMAGE_BASE=supplies-tracker\n")
+    for port in ("8443", "9443"):
+        env = {**os.environ, "APP_HOST": "127.0.0.1", "APP_PORT": port,
+               "VERSION": "0.4.0", "IMAGE_BASE": "supplies-tracker"}
+        proc = subprocess.run(
+            ["docker", "compose", "-f", "compose.yaml", "config",
+             "--format", "json"],
+            capture_output=True, text=True, cwd=tmp_path, timeout=120,
+            env=env)
+        assert proc.returncode == 0, proc.stderr
+        ports = json.loads(proc.stdout)["services"]["caddy"]["ports"]
+        assert len(ports) == 1, ports
+        assert str(ports[0]["target"]) == port, ports
+        assert str(ports[0]["published"]) == port, ports
+    # The container side is whatever Caddy serves: the Caddyfile site must
+    # be parameterized on the same APP_PORT, not a fixed port.
+    caddyfile = open(os.path.abspath("deploy/Caddyfile")).read()
+    assert "{$APP_PORT}" in caddyfile
+
+
 def test_update_script_refuses_bad_input(tmp_path):
     script = os.path.abspath("scripts/update.sh")
     # Missing version.

@@ -157,6 +157,17 @@ test is skipped.
 - One new in-scope issue found and fixed here: the pre-restore takeover audit
   was lost by the file swap, leaving same-owner retries unaudited. Fixed by
   re-recording `--force-takeover` after the swap (survives restore).
+- Laptop-trial find (post-SHIP, fixed with regression): production
+  `compose.yaml` forwarded host port to container **443** while the
+  Caddyfile serves `{$APP_PORT}` (8443), so TLS died after the TCP open on
+  any real `compose.yaml` stack. `compose.test.yaml` had the correct `:8443`
+  mapping, and every deployment test resolved only the test file — the
+  production mapping was never executed or asserted. Fixed the mapping to
+  `${APP_PORT}:${APP_PORT}` and added
+  `test_production_caddy_mapping_matches_listen_port`, which resolves the
+  production file at two ports (a hardcoded `:443` fails the non-default
+  one). Lesson: deployment tests must resolve the production compose file,
+  not just the test double.
 - No other new blockers found in scope. Out of scope (deferred): certificate
   trust setup, SMTP, signatures, multi-intake/offline sync, zero-downtime.
 
@@ -167,7 +178,8 @@ test is skipped.
 - `/tmp/opencode/workvenv/bin/python manage.py makemigrations --check --dry-run`:
   No changes detected. `manage.py check` passes.
 - `/tmp/opencode/workvenv/bin/python -m pytest tests/browser`: 17 passed.
-- `/tmp/opencode/workvenv/bin/python -m pytest tests/deployment`: 20 passed.
+- `/tmp/opencode/workvenv/bin/python -m pytest tests/deployment`: 20 passed
+  (21 after the production Caddy-mapping regression below).
 - `docker compose -f compose.test.yaml config --quiet` passes;
   `docker build -t supplies-tracker:test .` succeeds (exclusions covered).
 - `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh` passes;
@@ -182,7 +194,8 @@ command serially on main and behaviorally reprobed all seven findings:
 - `.venv/bin/python manage.py test --noinput`: 195 tests, OK.
 - `.venv/bin/python manage.py makemigrations --check --dry-run`: no changes.
 - `.venv/bin/python -m pytest tests/browser`: 17 passed, no skips.
-- `.venv/bin/python -m pytest tests/deployment`: 20 passed.
+- `.venv/bin/python -m pytest tests/deployment`: 21 passed (20 + the
+  production Caddy-mapping regression).
 - `docker compose -f compose.test.yaml config --quiet`, image build,
   `bash -n` on all three scripts, and `git diff --check`: all pass.
 - Seed `remain`/metadata mapping, pinned `IMAGE_BASE:VERSION` with matching
