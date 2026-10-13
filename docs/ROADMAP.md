@@ -12,3 +12,9 @@ Product assessment at `548aad3` reran 195 Django, 17 browser and 21 deployment t
 - [x] **06 — Finished product overhaul:** product-assessment failures fixed; desktop-first five-section shell/Home landing, single issuing workspace with 50-item bound and open-tab recovery, task-focused editable records, safe contextual imports, searchable paginated history, stable-ID/current-net filtered reports with consistent CSV/A4 PDF output, coherent administration/in-app help, and fresh whole-product behavioral validation. One implemented application deliverable; all ten automated acceptance criteria pass. Manual gates remain separate; no real-data import or rollout performed. [Plan](../.openchamber/plans/06-product-overhaul.md)
 
 Milestones are dependency ordered. Do not advertise intermediate scaffolding as a production replacement. Staff usability, real deployment, private registry permissions and host networking are manual checks. Certificate trust setup is out of scope for now; HTTPS remains required and browser warnings remain possible. Never push or publish releases without explicit authorization.
+
+Independent review of `60d4c9f` subsequently returned **FIX** with six findings.
+All were reproduced and remediated at `465475b`; fresh acceptance passes 228
+Django, 36 internet-blocked Chromium and 21 real deployment tests plus supporting
+checks. Implementation remains complete, but independent re-review and all manual
+gates remain pending. See the dated follow-up in `docs/REVIEW.md`.

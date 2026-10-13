@@ -40,9 +40,10 @@ automatically (see `.github/workflows/tests.yml`).
 
 Run Django and browser suites serially: they share a file-backed test database.
 PDF tests extract text/font/geometry and rasterize in a checked subprocess.
-Final milestone-06 acceptance: 224 Django, 33 browser (no skips) and 21 deployment
+Latest milestone-06 review-follow-up acceptance: 228 Django, 36 browser (no skips) and 21 deployment
 tests pass. See `docs/REVIEW.md` for fresh rendered/export evidence and the
-separate pending staff/source/target-host manual gates. No rollout performed.
+separate pending staff/source/target-host manual gates. All six independent-review
+findings were remediated; independent re-review is pending. No rollout performed.
 
 Local database defaults to `.local/db.sqlite3` (gitignored). Override with
 `DJANGO_DB_PATH`. Copy `.env.example` to `.env` for local tweaks; never commit

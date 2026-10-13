@@ -158,6 +158,11 @@ field explicitly in its Edit details form. New arrival/release dates are saved.
 Previews now record uploaded field presence. Legacy previews without that
 contract must be re-uploaded; the application cannot reconstruct erased data.
 
+Canonical headers take priority over legacy aliases regardless of column order.
+In particular, exported `external_id` is the roster matching identity; the
+separate exported internal `id` is not used as its alias when `external_id` exists.
+Legacy sheets with only `id` still map it to the external ID.
+
 ## Staff reports
 
 Screens, CSV and A4 PDF downloads share validated filters and all matching rows

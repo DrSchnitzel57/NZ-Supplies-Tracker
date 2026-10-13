@@ -1,4 +1,14 @@
-# Current verdict — milestone 06
+# Current status — independent-review follow-up
+
+The independent review of `60d4c9f` returned **FIX** with six findings despite
+green baseline suites. All six were reproduced and remediated at `465475b` on
+2026-10-13. Fresh acceptance passes: **228 Django, 36 internet-blocked Chromium,
+21 real Compose tests**, plus all build/config/migration/syntax/whitespace checks.
+Implementation-side automated verdict after remediation: **SHIP**. Independent
+re-review remains pending; this does not supersede the reviewer's verdict by
+assertion. See the follow-up section below. Manual rollout gates remain pending.
+
+# Historical implementation verdict — milestone 06
 
 **VERDICT: SHIP — automated product acceptance at `138ae8b` (2026-10-12).**
 224 Django, 33 internet-blocked Chromium and 21 real Compose tests pass.
@@ -411,3 +421,52 @@ accounting, presentation or new stack/roles were added.
 **VERDICT: SHIP for milestone-06 automated product acceptance.** Manual gates
 remain separate and pending; this implementation-side review is not a claim
 of independent approval or production rollout.
+
+# Independent-review follow-up — 2026-10-13
+
+Reviewed baseline: `60d4c9f`; application fixes/tests: `465475b`.
+All six findings are accepted; none declined. New synthetic tests were run
+against the baseline first and failed on the reported behaviors, then passed
+after remediation. No private source/data was accessed, no real-data import or
+rollout occurred, and nothing was pushed. This is remediation evidence for a
+fresh independent re-review, not a replacement independent verdict.
+
+| Finding | Change and reason | Regression |
+|---|---|---|
+| 1. Roster CSV duplicate identity | Canonical headers take priority over aliases independent of column order. Legacy `id` still works only when `external_id` is absent; exported internal UUID no longer becomes the external identity. | `ReviewFollowupTests.test_roster_csv_roundtrip_preserves_identity_in_both_modes` applies real web CSV exports in add/update and replacement; zero creates/archives, stable IDs/issue relationship retained. Header-order/legacy fallback matrix also passes. |
+| 2. Cross-form uncertain receipt lost | Serialize safe-form writes through definitive completion. A competing form cannot POST or replace main while another form has an in-flight/uncertain request. Original payload/key remain frozen and retryable; abandoning uncertainty warns before leaving. | Chromium `test_uncertain_receipt_blocks_other_form_and_retries_original_once`: server commits receipt, reply is lost, count form is blocked without POST, original reason/key survive, retry leaves exactly one receipt/stock increment. |
+| 3. Stale logout CSRF after recovery | Refresh all page form CSRF fields, including the untouched shell, after same-user session verification; shared helper also serves issuing. | Extended `test_record_form_cross_tab_security_recovery_retains_nonpassword_fields` completes recovered edit, signs out from the original tab and proves `/api/session/` is 401. |
+| 4. POST-only URLs on errors | Update browser URL only after a successful redirect. Rejected action POSTs retain the current GET screen URL. | Parameterized Chromium stock-action errors preserve detail URL, follow stock-history pagination and reload with HTTP 200 for both Add stock and Correct stock count. |
+| 5. Password silently trimmed | `AdminUserForm.password` uses `strip=False`: hashing/authentication receives the exact password provided. Password widgets still never repopulate values. | Account-creation test with leading/trailing spaces proves exact password authenticates, trimmed password does not. |
+| 6. Edited external ID unsearchable | Search current missionary external IDs as well as current names and immutable snapshots. | Edit-before-search test covers report screen/CSV and issue history with both current and old external IDs; snapshot remains unchanged. |
+
+The cross-form tradeoff is deliberate: one safe-form write owns page recovery
+until its outcome is known. A second write is blocked rather than letting a
+whole-page response destroy the first request's memory. No persistent draft,
+queue or automatic mutation retry was added.
+
+## Fresh follow-up acceptance
+
+| Criterion | Result | Exact command / evidence |
+|---|---|---|
+| 1. Django tests | PASS | `.venv/bin/python manage.py test --noinput` — 228 tests, OK (155.076s) |
+| 2. Browser tests | PASS | `.venv/bin/python -m pytest tests/browser` — 36 passed, no skips, internet blocked (135.32s) |
+| 3. Deployment tests | PASS | `.venv/bin/python -m pytest tests/deployment` — 21 passed (91.45s) |
+| 4. Configuration | PASS | `.venv/bin/python manage.py check` — no issues |
+| 5. Migrations | PASS | `.venv/bin/python manage.py makemigrations --check --dry-run` — no changes |
+| 6. Compose | PASS | `docker compose -f compose.test.yaml config --quiet` — exit 0 |
+| 7. Image | PASS | `docker build -t supplies-tracker:test .` — successful export/tag |
+| 8. Shell syntax | PASS | `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh` — exit 0 |
+| 9. Whitespace | PASS | `git diff --check` — clean |
+| 10. Product evidence | PASS, implementation-side | Existing rendered/export probes reran; this section records fresh automated SHIP after remediation and keeps manual gates/independent re-review separate. |
+
+Logs: ignored `.local/followup-{django,browser,deployment,build}-final.log`;
+before/after targeted regressions: `.local/review-followup-{before,after}.log`
+and `.local/browser-followup-{before,after}.log`. Django/browser suites ran
+serially. Existing rendered UI and Unicode/long-PDF probes reran successfully;
+artifacts regenerate under `.local/review/`. Non-blocking local-test warnings
+remain the absent collected-static directory and ReportLab deprecation.
+
+**Pending:** independent re-review and all user-owned staff/source/actual-host
+manual gates described above. Certificate trust remains deferred and host-local
+backups still do not protect against host/disk loss.
