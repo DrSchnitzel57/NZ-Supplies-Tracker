@@ -135,6 +135,7 @@
       if (!identity.ok) { say("Sign in again in a new tab, then retry here. Your original draft is still in this tab; nothing was sent."); return; }
       var security = await identity.json();
       if (security.user_id !== form.dataset.draftUser) { say("This draft belongs to a different account. Sign in as the original staff member before retrying; nothing was sent."); return; }
+      window.refreshShellCsrf(security.csrf_token);
       payload.set("csrfmiddlewaretoken", security.csrf_token);
       payload.set("draft_user_id", form.dataset.draftUser);
       var url = uncertain ? uncertain.action : source.action;

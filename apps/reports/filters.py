@@ -66,7 +66,8 @@ def filter_issues(qs, filters, *, net=False):
     if filters.get('q'):
         q = filters['q']
         qs = qs.filter(Q(missionary_name__icontains=q) | Q(missionary_external_id__icontains=q)
-            | Q(missionary__name__icontains=q) | Q(lines__item_name__icontains=q)
+            | Q(missionary__name__icontains=q) | Q(missionary__external_id__icontains=q)
+            | Q(lines__item_name__icontains=q)
             | Q(lines__item__name__icontains=q) | Q(note__icontains=q))
     return qs.distinct()
 

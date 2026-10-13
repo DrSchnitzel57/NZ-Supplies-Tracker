@@ -65,6 +65,13 @@ def _map_headers(headers: list[str], aliases: dict[str, set[str]]) -> dict[str, 
     normed = [_norm_header(h) for h in headers]
     mapping: dict[str, int] = {}
     for field, names in aliases.items():
+        # Exports contain both internal `id` and canonical `external_id`.
+        # Prefer the canonical field independent of column order; aliases are
+        # only a fallback for legacy/source-shaped sheets.
+        canonical = _norm_header(field)
+        if canonical in normed:
+            mapping[field] = normed.index(canonical)
+            continue
         for i, h in enumerate(normed):
             if h in names and field not in mapping:
                 mapping[field] = i

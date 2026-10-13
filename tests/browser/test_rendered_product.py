@@ -85,6 +85,10 @@ def test_record_form_cross_tab_security_recovery_retains_nonpassword_fields(page
     person.refresh_from_db()
     assert person.mission == 'Recovered synthetic mission'
     assert person.arrival_date.isoformat() == '2026-10-12'
+    # Recovery must repair the untouched shell too, not just the submitted form.
+    page.click(".userbar form[action='/accounts/logout/'] button")
+    page.wait_for_url('**/accounts/login/')
+    assert page.context.request.get(f'{live_server.url}/api/session/').status == 401
     assert_no_internet(externals)
 
 

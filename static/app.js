@@ -132,6 +132,18 @@
   }
 
   var EXPIRY_WARN_SECONDS = 5 * 60;
+  var safeFormOwner = null;
+  var uncertainSafeWrite = false;
+
+  // Same-user recovery rotates the cookie's CSRF secret. Repair the untouched
+  // shell (especially Sign out) as well as the submitted form's payload.
+  window.refreshShellCsrf = function (token) {
+    document.querySelectorAll('form input[name="csrfmiddlewaretoken"]').forEach(function (field) { field.value = token; });
+  };
+
+  window.addEventListener("beforeunload", function (event) {
+    if (uncertainSafeWrite) { event.preventDefault(); event.returnValue = ""; }
+  });
 
   function safeForms() {
     document.querySelectorAll("form[data-safe-form]").forEach(function (form) {
@@ -146,6 +158,14 @@
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
         if (busy) return;
+        // A whole-page response would destroy another form's in-memory retry.
+        // Serialize these writes through definitive completion; only the owner
+        // can retry an uncertain request, without changing its payload/key.
+        if (safeFormOwner && safeFormOwner !== form) {
+          status.textContent = "Resolve the pending request in the other form first. Nothing was sent from this form.";
+          return;
+        }
+        safeFormOwner = form;
         busy = true;
         var button = form.querySelector("button[type=submit]"); button.disabled = true;
         var data = pending || new FormData(form);
@@ -154,15 +174,16 @@
           if (!identity.ok) { status.textContent = "Sign in as the same staff member in another tab, then retry here. Your input is retained; nothing was sent."; return; }
           var security = await identity.json();
           if (security.user_id !== form.dataset.draftUser) { status.textContent = "This form belongs to a different account. Sign in as the original staff member; nothing was sent."; return; }
+          window.refreshShellCsrf(security.csrf_token);
           data.set("csrfmiddlewaretoken", security.csrf_token);
           var reply, text;
           try {
             reply = await fetch(form.action, {method: "POST", body: data, credentials: "same-origin"});
             text = await reply.text();
           } catch (error) {
-            pending = data; freeze(true); status.textContent = "No reply — success is not confirmed. Retry this same request deliberately, or review the current record in another tab. Nothing is queued."; return;
+            pending = data; uncertainSafeWrite = true; freeze(true); status.textContent = "No reply — success is not confirmed. Retry this same request deliberately, or review the current record in another tab. Nothing is queued."; return;
           }
-          if (reply.status >= 500) { pending = data; freeze(true); status.textContent = "Server error — success is not confirmed. Retry deliberately or review the current record in another tab."; return; }
+          if (reply.status >= 500) { pending = data; uncertainSafeWrite = true; freeze(true); status.textContent = "Server error — success is not confirmed. Retry deliberately or review the current record in another tab."; return; }
           if (reply.status === 403) { status.textContent = "Security token changed. Your input is retained; retry here to refresh it safely."; return; }
           if (reply.redirected && new URL(reply.url).pathname.startsWith("/accounts/login/")) { status.textContent = "Sign in in another tab as the original staff member, then retry here."; return; }
           if (reply.redirected && new URL(reply.url).pathname === "/admin-area/reauth/") {
@@ -173,14 +194,20 @@
           var main = result.getElementById("main");
           if (!main) { status.textContent = "Unexpected reply. Your input is retained; review the record before retrying."; return; }
           pending = null;
+          uncertainSafeWrite = false;
           document.getElementById("main").replaceChildren.apply(document.getElementById("main"), Array.from(main.childNodes).map(function (node) { return document.importNode(node, true); }));
-          history.replaceState(null, "", reply.url);
+          // Rejected action POSTs render their parent screen but are not GET
+          // destinations. Keep its existing URL for reload and relative links.
+          if (reply.ok && reply.redirected) history.replaceState(null, "", reply.url);
           document.title = result.title;
           safeForms(); preventDoubleSubmit();
           var errors = document.querySelector(".form-errors, .messages");
           if (errors) { errors.tabIndex = -1; errors.focus(); }
         } catch (error) { status.textContent = "Cannot check sign-in while disconnected. Nothing was sent; your input is retained."; }
-        finally { busy = false; button.disabled = false; }
+        finally {
+          busy = false; button.disabled = false;
+          if (!pending && safeFormOwner === form) safeFormOwner = null;
+        }
       });
     });
   }
