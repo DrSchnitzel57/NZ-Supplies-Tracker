@@ -40,9 +40,10 @@ prototype, not this application.
 ### Open a command window in the application folder
 
 Get the application ZIP/folder from the maintainer. For a published release,
-use the folder that matches that release. If downloading from GitHub, sign in
-with repository access, select the supplied release/tag, then use **Code →
-Download ZIP**. Extract it first; do not work inside the ZIP preview.
+use the folder that matches that release. The [repository](https://github.com/DrSchnitzel57/NZ-Supplies-Tracker)
+is public: downloading its source needs no GitHub account. Select the supplied
+release/tag, then use **Code → Download ZIP**. Extract it first; do not work
+inside the ZIP preview.
 
 Open the extracted folder containing `README.md`, `compose.yaml`,
 `compose.test.yaml`, `.env.example` and `Dockerfile`.
@@ -79,6 +80,9 @@ Docker installation path below.
 
 This downloads an already-built, approved release. **You do not build source**
 or run developer tests on the live host.
+Public release images need **no GitHub account, download token or Docker login**.
+Public downloads do not make your running installation public: keep it LAN-only,
+and keep its database, backups and `.env` private.
 
 ### 1. Obtain the release details
 
@@ -86,8 +90,6 @@ Ask the maintainer for:
 
 - The **image address**, without a version at the end.
 - The **release version** and matching application folder.
-- Access to download the private image: a GitHub account with package access
-  and a personal access token (classic) with `read:packages` permission.
 - The hosting computer's **fixed local-network address**, and confirmation that
   its firewall will allow staff access on port `8443` only from the approved LAN.
 
@@ -96,17 +98,10 @@ If you do not know the fixed address or firewall settings, get setup assistance.
 
 **A release must actually have been published first.** The image/version in
 `.env.example` are placeholders, not proof that a downloadable release exists.
-
-Sign in to the image service:
-
-```sh
-docker login ghcr.io
-```
-
-Enter your GitHub username when asked. At the password prompt, paste the
-**download token**, not your GitHub password. It may not show characters while
-you type. Look for `Login Succeeded`. Do not put this token in `.env`, screenshots
-or messages to staff.
+Use `ghcr.io/drschnitzel57/nz-supplies-tracker` for `IMAGE_BASE` once the maintainer
+confirms a public release there, and use the exact version they supply.
+If downloading is denied, ask the maintainer to check the package is public;
+you should not need their publishing credentials.
 
 ### 2. Set the installation details
 
@@ -327,7 +322,7 @@ or issue. Other stock forms are blocked until that uncertain request is resolved
 | `docker` is not recognised / command not found | Install Docker, then reopen the command window. |
 | Cannot connect to the Docker daemon | Open Docker Desktop and wait until it is running; on Linux ask the operator to check the Docker service/permissions. |
 | No configuration file / cannot find `compose.test.yaml` | Open the extracted folder containing this README, then open the command window there. |
-| Download denied / image or manifest not found | Confirm the actual published version/address, GitHub package access and download-token login with the maintainer. Do not guess `latest`. |
+| Download denied / image or manifest not found | Ask the maintainer to confirm the release exists at the supplied address/version and its package is public. No download token is needed for public images. Do not guess `latest`. |
 | Port already allocated / address already in use | Another application/trial may be using the port. Ask for help; do not stop unfamiliar services or disable the firewall. |
 | Cannot assign requested address | `APP_HOST` must belong to this computer. Confirm its fixed LAN address. |
 | Website does not open | Check Docker is running, the hosting computer is awake, and you used the exact HTTPS address/port for your chosen path. |

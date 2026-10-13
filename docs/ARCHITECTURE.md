@@ -59,7 +59,7 @@ The product assessment at `548aad3` reran 195 Django, 17 browser and 21 deployme
 - Poll read-only dashboard/stock values approximately every 15 seconds, without disturbing drafts or extending sessions. Clearly show connection/save failures and preserve drafts in memory; do not silently queue offline mutations or persist personal data in localStorage.
 - Bundle fonts and dependencies. Routine work needs only the LAN host. Low-stock alerts can be copied or opened using `mailto:`; no SMTP service. Browser PDF/clipboard/mail behavior needs client checks.
 - Daily SQLite-safe backups on the host, 30-day daily retention; preserve the latest successful pre-update recovery backup until superseded. Verify integrity/checksums and document restore. A host/disk failure can destroy both live data and these backups.
-- Versioned private GHCR images built/tested by GitHub Actions. The host has a separate least-privilege registry download credential, not a developer's general token. No source checkout/build required there.
+- Versioned public GHCR release images; the user approved public distribution after milestone 06. Hosts download anonymously, without a registry credential or source build. Publishing still requires authenticated maintainer access; the running app stays LAN-only and operational data/secrets are excluded from images. Existing release automation needs its image address normalized to lowercase before use.
 - Operator-triggered updates: validate selected version/config, enter maintenance, quiesce writes, verify backup, pull pinned images, migrate, restart and check readiness. Fail closed rather than continue with half-upgraded data. Rollback may require matching image plus database restore; no unattended latest updates or zero-downtime promise.
 
 ## Finished-product design (milestone 06; implemented)
@@ -90,6 +90,7 @@ The product assessment at `548aad3` reran 195 Django, 17 browser and 21 deployme
 
 ## Decisions and why
 
+- **Public prebuilt images over private registry downloads (2026-10-13):** the user approved public application distribution to remove installer accounts/tokens. This supersedes the original private-image choice, not the LAN-only deployment or data/privacy protections. Keep version pins and controlled updates; reject distributing live databases, backups, credentials or the private source HTML.
 - **Page-owned uncertain recovery over competing safe-form submissions (review follow-up):** a second AJAX response can replace main content and erase another form's retained request/key. Serialize safe-form writes until the active request has a definitive outcome; permit only its deliberate retry while uncertain and warn before abandoning it. Retain the current GET URL on rejected action POSTs, and repair shell CSRF during same-user recovery. Reject allowing concurrent whole-page responses to destroy pending state; no persistent draft/queue is introduced.
 - **Canonical spreadsheet headers before aliases (review follow-up):** exports include internal `id` and canonical `external_id`; canonical headers win regardless of order, while legacy aliases remain fallbacks. Reject first-column matching that changes a roster identity during export/re-import.
 
@@ -114,7 +115,7 @@ The product assessment at `548aad3` reran 195 Django, 17 browser and 21 deployme
 - **Explicit partial fulfillment over silent reduction or blanket rejection:** staff can finish available work but must confirm the revised list.
 - **Single roster and staff attribution over multi-intake/signature expansion:** preserve the requested scope without adding unused features.
 - **ZIP/CSV manifest over opaque database interchange:** portable and inspectable for Power App migration while representing complete relationships; backups remain the recovery source.
-- **Compose/private prebuilt images over on-host builds or OS-specific installers:** consistent deployment and controlled remote updates.
+- **Compose/prebuilt images over on-host builds or OS-specific installers:** consistent deployment and controlled remote updates. Image visibility is now public as recorded above.
 - **LAN HTTPS/self-issued certificates over public hosting:** matches available infrastructure; trust warnings and host controls remain explicit operational limitations.
 - **Guided everyday workflows over exposing technical controls:** nontechnical staff need plain language, progressive disclosure and a short guide; operational complexity stays with the operator. Certificate trust configuration is deferred by user request, while HTTPS remains required.
 - **Immediate transactions plus bounded retry of transient SQLite locks (milestone 01):** WAL and `BEGIN IMMEDIATE` serialize writers, but contended writers can still see transient `database is/table locked` errors; write services retry the whole atomic block a bounded number of times so the loser re-reads fresh state and raises the proper domain error (shortage, stale version, already-reversed) instead of a raw database error.
