@@ -470,3 +470,35 @@ remain the absent collected-static directory and ReportLab deprecation.
 **Pending:** independent re-review and all user-owned staff/source/actual-host
 manual gates described above. Certificate trust remains deferred and host-local
 backups still do not protect against host/disk loss.
+# Milestone 07 — implementation evidence (in progress)
+
+This section is implementation-side evidence, not independent approval. Synthetic
+data only; private source fidelity, staff trial, target host/restore/network and
+final visual acceptance remain user-owned manual gates. No rollout is authorized.
+
+## Capability and safe-substitution map
+
+| Capability | 07 destination / safety retained |
+|---|---|
+| Roster, all source fields, archives | Missionaries, profile and full edit; stable IDs and versions |
+| Inventory, categories/sizes, alerts | Grouped/sorted Inventory; thresholds, ledger and current availability |
+| Multi-item creation | Reviewed 1–50 row batch, atomic opening movements/audit and fingerprinted retry |
+| Receipt / physical count / item edit | Short panels with canonical page fallback; reasons, versions and page-owned uncertain requests |
+| Issue / profile shortcut | One recipient combobox, catalogue rows and named summary; 50 items and explicit ID selection |
+| Negative-stock prototype override | Replaced by explicit shortage review plus atomic server recheck, never negative stock |
+| Free-text staff / destructive prototype reset | Authenticated actor; protected admin reset with reauth, confirmation and verified backup |
+| History / correction | Direct History, filters/pagination, immutable snapshots and reasoned whole-issue undo |
+| Local/global search | Shared bounded all-term matching, exact identity priority, active-only background lookup without idle renewal |
+| Reports / low-stock follow-up | Nine families, complete CSV/Unicode A4 PDF, current-net semantics, copy/mail-app without SMTP |
+| CSV/XLSX / full interchange | Contextual previews, blank preservation, ownership/TTL/revision, explicit valid-subset approval; admin-only lossless ZIP |
+| Accounts/settings/auth/help | Shared controls; roles, reauth/expiry/recovery and synthetic illustrated guide |
+| Browser persistence | No personal storage, queue or autosave; drafts and retry payloads stay in open-tab memory |
+
+Design: compact 216px sidebar, Overview landing, direct History, restrained blue
+`#006184`, bundled OFL Noto Sans, locally authored SVG icons, neutral tables and
+short contextual copy. No Church assets, remote UI dependencies or schema change.
+Panels intentionally reuse full bound pages in same-origin dialogs, retaining the
+tested write/recovery path rather than implementing a competing client mutation.
+
+Validation and rendered evidence will be recorded below after execution. **Not
+yet accepted; no SHIP claim while implementation or validation is incomplete.**
