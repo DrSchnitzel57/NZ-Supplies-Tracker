@@ -26,12 +26,17 @@
       }); count.value = rows.children.length;
     }
   });
-  var batch = document.getElementById("batch-form"), batchDirty = false;
-  if (batch) {
+  var batchDirty = false;
+  function bindBatchDraft() {
+    var batch = document.getElementById("batch-form"); if (!batch || batch.dataset.draftGuard) return;
+    batch.dataset.draftGuard = "1"; batchDirty = batch.dataset.draftPresent === "1";
     batch.addEventListener("input", function() { batchDirty = true; });
-    batch.addEventListener("submit", function() { batchDirty = false; });
-    window.addEventListener("beforeunload", function(event) { if (batchDirty) { event.preventDefault(); event.returnValue = ""; } });
+    batch.addEventListener("submit", function() { if (!batch.hasAttribute("data-safe-form")) batchDirty = false; });
   }
+  bindBatchDraft();
+  window.addEventListener("content-refreshed", bindBatchDraft);
+  window.addEventListener("safe-form-complete", function(event) { bindBatchDraft(); if (event.detail.saved) batchDirty = false; });
+  window.addEventListener("beforeunload", function(event) { if (batchDirty) { event.preventDefault(); event.returnValue = ""; } });
   document.querySelectorAll("[data-finder]").forEach(function (root) {
     var input = root.querySelector("input[role=combobox]"), popup = root.querySelector("[role=listbox]");
     var status = root.querySelector(".finder-status"), timer, serial = 0, active = -1, results = [];
@@ -80,14 +85,17 @@
     });
     input.addEventListener("blur", function () { ++serial; clearTimeout(timer); close(); });
     root.addEventListener("finder-clear", function () { ++serial; close(); results = []; popup.replaceChildren(); input.value = ""; });
+    window.addEventListener("finder-expired", function () { ++serial; clearTimeout(timer); close(); results = []; popup.replaceChildren(); status.textContent = "Sign in again to search."; });
   });
 
   // A panel is a bound server page in a same-origin frame. This deliberately
   // reuses the page-owned safe-form serializer instead of inventing a write path.
-  var dialog = document.createElement("dialog"); dialog.className = "side-dialog";
-  var closeButton = document.createElement("button"); closeButton.type = "button"; closeButton.textContent = "Close";
+  var dialog = document.createElement("dialog"); dialog.className = "side-dialog"; dialog.setAttribute("aria-label", "Inventory task");
+  var closeButton = document.createElement("button"); closeButton.type = "button"; closeButton.textContent = "Cancel";
+  var loading = document.createElement("p"); loading.setAttribute("role", "status");
+  var fallback = document.createElement("a"); fallback.textContent = "Open full page"; fallback.target = "_blank"; fallback.rel = "noopener";
   var frame = document.createElement("iframe"); frame.title = "Edit inventory";
-  dialog.append(closeButton, frame); document.body.append(dialog);
+  dialog.append(closeButton, fallback, loading, frame); document.body.append(dialog);
   var opener, originalUrl;
   window.addEventListener("beforeunload", function(event) {
     if (dialog.open && (frame.contentWindow.panelDirty || frame.contentWindow.panelPending)) { event.preventDefault(); event.returnValue = ""; }
@@ -102,13 +110,20 @@
   closeButton.addEventListener("click", closePanel); dialog.addEventListener("cancel", closePanel);
   document.addEventListener("click", function (event) {
     var link = event.target.closest("a[data-panel]"); if (!link || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (window.safeWritePending) { event.preventDefault(); window.alert("Resolve the pending request before opening another form."); return; }
+    if (window.safeWritePending || (dialog.open && frame.contentWindow.panelPending)) { event.preventDefault(); window.alert("Resolve the pending request before opening another form."); return; }
+    if (dialog.open) { event.preventDefault(); return; }
     event.preventDefault(); opener = link; originalUrl = location.href;
+    loading.textContent = "Loading…"; fallback.href = link.href;
+    if (location.pathname === "/inventory/") {
+      var fallbackUrl = new URL(link.href); fallbackUrl.searchParams.set("return_to", location.pathname + location.search); fallback.href = fallbackUrl.href;
+    }
     frame.src = link.href + (link.search ? "&" : "?") + "panel=1";
     dialog.showModal(); closeButton.focus();
   });
   frame.addEventListener("load", function () {
-    if (!dialog.open || !frame.contentDocument) return;
+    if (!dialog.open) return;
+    if (!frame.contentDocument) { loading.textContent = "Unable to open this panel. Sign in again if needed, then use the full page."; return; }
+    loading.textContent = "";
     var child = frame.contentWindow, doc = frame.contentDocument;
     doc.documentElement.classList.add("in-panel");
     var form = doc.querySelector("main form[data-safe-form]");
@@ -124,8 +139,13 @@
           if (!reply.ok || reply.redirected) throw new Error("Refresh required");
           var result = new DOMParser().parseFromString(await reply.text(), "text/html");
           var top = scrollY, href = opener.getAttribute("href");
+          var horizontal = Array.from(document.querySelectorAll("#main .tablewrap")).map(function(node) {return node.scrollLeft;});
           document.getElementById("main").replaceChildren.apply(document.getElementById("main"), Array.from(result.getElementById("main").childNodes).map(function(node) {return document.importNode(node, true);}));
+          var saved = document.createElement("p"); saved.className = "notice"; saved.setAttribute("role", "status"); saved.textContent = event.detail.message;
+          document.getElementById("main").prepend(saved);
+          window.dispatchEvent(new Event("content-refreshed"));
           dialog.close(); frame.src = "about:blank";
+          document.querySelectorAll("#main .tablewrap").forEach(function(node, index) {node.scrollLeft = horizontal[index] || 0;});
           var returned = Array.from(document.querySelectorAll("a[data-panel]")).find(function(link) {return link.getAttribute("href") === href;});
           if (returned) returned.focus({preventScroll:true}); scrollTo(0,top);
         } catch (error) { child.alert("Saved. The list could not refresh; close the panel and refresh the page to see the new values."); }

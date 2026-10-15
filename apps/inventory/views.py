@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.contrib import messages
-from django.db.models import Q, Sum
+from django.db.models import Sum
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -139,7 +139,10 @@ def _new_uuid() -> str:
 
 @staff_required
 def item_batch(request):
-    formset = BatchItemFormSet(request.POST if request.method == "POST" else None)
+    from apps.operations.models import SystemSetting
+    threshold = SystemSetting.objects.filter(key="default_low_threshold").first()
+    formset = BatchItemFormSet(request.POST if request.method == "POST" else None,
+        form_kwargs={"initial": {"low_threshold": threshold.value if threshold else 0, "unit": "each"}})
     key = request.POST.get("idempotency_key", "") if request.method == "POST" else "ui-batch-" + _new_uuid()
     error, reviewed = "", False
     if request.method == "POST" and formset.is_valid():
@@ -169,12 +172,24 @@ def item_batch(request):
 @xframe_options_sameorigin
 def item_stock_form(request, pk, mode):
     item = get_object_or_404(Item, pk=pk)
-    form = (AddStockForm(initial={"idempotency_key": "ui-rx-" + _new_uuid()}) if mode == "stock"
+    form = (AddStockForm(auto_id="receive_%s", initial={"idempotency_key": "ui-rx-" + _new_uuid()}) if mode == "stock"
             else CorrectCountForm(initial={"idempotency_key": "ui-ct-" + _new_uuid(),
-                 "expected_version": item.version, "counted_qty": item.on_hand}))
+                 "expected_version": item.version, "counted_qty": item.on_hand}, auto_id="correct_%s"))
+    return _render_stock_form(request, item, form, mode)
+
+
+def _render_stock_form(request, item, form, mode, status=200):
     return render(request, "inventory/stock_form.html", {"item": item, "form": form,
         "heading": "Add stock" if mode == "stock" else "Correct stock count",
-        "action": "add-stock" if mode == "stock" else "correct-count"})
+        "return_to": list_return(request, '/inventory/'),
+        "action": "add-stock" if mode == "stock" else "correct-count"}, status=status)
+
+
+def _item_destination(request, item):
+    destination = f"/inventory/{item.pk}/"
+    if 'return_to' in request.GET:
+        destination += '?' + urlencode({'return_to': list_return(request, '/inventory/')})
+    return destination
 
 
 @staff_required
@@ -183,7 +198,7 @@ def item_detail(request, pk):
     return _render_detail(request, item)
 
 
-def _render_detail(request, item, *, receive_form=None, correct_form=None, status=200):
+def _render_detail(request, item):
     _summaries([item])
     page, pagination = paginate(request, StockMovement.objects.filter(item=item).order_by("-created_at", "pk"))
     movements = list(page)
@@ -205,12 +220,8 @@ def _render_detail(request, item, *, receive_form=None, correct_form=None, statu
             "return_to": list_return(request, '/inventory/'),
             "movements": movements,
             "ledger_total": ledger_total,
-            "receive_form": receive_form or AddStockForm(auto_id="receive_%s", initial={"idempotency_key": f"ui-rx-{_new_uuid()}"}),
-            "correct_form": correct_form or CorrectCountForm(initial={
-                "idempotency_key": f"ui-ct-{_new_uuid()}", "expected_version": item.version,
-                "counted_qty": item.on_hand}, auto_id="correct_%s"),
             **pagination,
-        }, status=status,
+        },
     )
 
 
@@ -227,10 +238,7 @@ def item_edit(request, pk):
             form.add_error(None, str(exc))
         else:
             messages.success(request, "Saved changes.")
-            destination = f"/inventory/{item.pk}/"
-            if 'return_to' in request.GET:
-                destination += '?' + urlencode({'return_to': list_return(request, '/inventory/')})
-            return redirect(destination)
+            return redirect(_item_destination(request, item))
     return render(request, "inventory/form.html", {"mode": "edit", "item": item, "form": form},
                   status=400 if form.is_bound else 200)
 
@@ -250,8 +258,8 @@ def item_receive(request, pk):
             form.add_error(None, str(exc))
         else:
             messages.success(request, f"Added {form.cleaned_data['quantity']} to {item}.")
-            return redirect("inventory-detail", pk=item.pk)
-    return _render_detail(request, item, receive_form=form, status=400)
+            return redirect(_item_destination(request, item))
+    return _render_stock_form(request, item, form, "stock", status=400)
 
 
 @staff_required
@@ -269,8 +277,8 @@ def item_correct(request, pk):
             form.add_error(None, str(exc))
         else:
             messages.success(request, f"Count corrected to {form.cleaned_data['counted_qty']} for {item}.")
-            return redirect("inventory-detail", pk=item.pk)
-    return _render_detail(request, item, correct_form=form, status=400)
+            return redirect(_item_destination(request, item))
+    return _render_stock_form(request, item, form, "count", status=400)
 
 
 @staff_required

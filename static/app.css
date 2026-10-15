@@ -250,6 +250,7 @@ select[size]{max-height:16rem;overflow-y:auto}
   th,td{padding-top:12px;padding-bottom:12px}
 }
 @media print{
+  .app{display:block}
   .side,.top,.topbar,.botnav,.controls,.statusbar,.no-print{display:none !important}
   .wrap{padding:0;max-width:none}
   body{background:#fff}
@@ -266,6 +267,7 @@ button,.btn{min-height:44px}
 button.primary,.btn.primary,.primary-action{background:var(--primary-bg);color:#fff !important}
 button.primary:hover,.btn.primary:hover,.primary-action:hover{background:var(--primary-hover)}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.tablewrap:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 .navlink[aria-current=page],.tabs [aria-current=page]{background:var(--accent-soft);color:var(--accent-ink);font-weight:800}
 .navlink.primary-action[aria-current=page]{background:var(--primary-hover)}
 .stack{display:flex;flex-direction:column;gap:.7rem}
@@ -334,8 +336,17 @@ td{padding:12px 16px}td a{font-weight:600;text-decoration:none}td a:hover{text-d
 .empty-draft{padding:32px 0;color:var(--muted);text-align:center}#issue-rows:has(.issue-row)+.empty-draft{display:none}
 .result-list{padding:0;list-style:none}.result-list li{padding:12px 0;border-bottom:1px solid var(--border)}.result-list span{display:block;color:var(--muted);font-size:12px}
 .summary-bars{list-style:none;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:var(--r)}.summary-bars li{display:grid;grid-template-columns:minmax(100px,1fr) minmax(80px,2fr) 48px;gap:16px;align-items:center;padding:8px 0}.summary-bars li>div{height:8px;background:var(--border-2);border-radius:2px}.summary-bars i{display:block;height:8px;background:var(--accent);border-radius:2px}.summary-bars strong{text-align:right;font-variant-numeric:tabular-nums}
+.toolbar .check{flex:0 0 auto;white-space:nowrap;min-height:44px}.toolbar .check input{width:18px;height:18px;min-height:0;flex:none}
+.dot,[data-stock-status]{white-space:nowrap}.records-table{min-width:880px}.records-table .row-actions{min-width:170px}.records-table td:first-child{min-width:230px}
+#home-attention .grid{align-items:start}
+#issue-feedback.quiet{background:none;border:0;padding:0;margin:0 0 8px;color:var(--muted);font-size:12px}
+.form-status:not(:empty),#issue-feedback.warning{background:var(--warn-soft);border:1px solid var(--warn);border-radius:var(--r);padding:12px;color:var(--ink)}
+.catalogue-head+label+input{width:100%;margin:4px 0 16px}
+.wrap{container-type:inline-size}
+@container(max-width:760px){.issuing-workspace{grid-template-columns:minmax(0,1fr)}.issue-summary{position:static}.grid.two{grid-template-columns:minmax(0,1fr)}}
 .side-dialog{position:fixed;inset:0 0 0 auto;margin:0;width:min(560px,100%);height:100dvh;max-height:none;max-width:100%;padding:16px;border:0;border-left:1px solid var(--border);background:var(--ground);color:var(--ink)}
 .side-dialog::backdrop{background:#10253880}.side-dialog>button{display:flex;margin-left:auto}.side-dialog iframe{width:100%;height:calc(100% - 52px);border:0;margin-top:8px}
+.side-dialog>p:empty{display:none}.side-dialog>a{font-size:12px}.side-dialog iframe{height:calc(100% - 84px)}
 .in-panel .app{display:block}.in-panel .side,.in-panel .top,.in-panel .statusbar,.in-panel footer,.in-panel .skip{display:none}.in-panel .wrap{padding:16px 4px}.in-panel .main{min-height:0}
 .batch-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);margin:12px 0}.batch-row legend{font-weight:700}.batch-row input{width:100%}
 @media(max-width:1100px){.top-context{display:none}.userbar>span{display:none}.issuing-workspace{grid-template-columns:minmax(0,1fr) minmax(300px,1fr)}.wrap{padding:24px}}

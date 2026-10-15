@@ -26,7 +26,7 @@
 <nav class="nav" aria-label="Help and administration">
 <a class="navlink" href="/guide/" {% if request.path == '/guide/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="help" %}Help</a>
 {% if user.is_superuser %}
-<details class="admin-nav"><summary>Administration</summary>
+<details class="admin-nav" {% if request.path|slice:':12' == '/admin-area/' or request.path|slice:':16' == '/accounts/users/' or request.path == '/transfers/bundle/' %}open{% endif %}><summary>Administration</summary>
 <a class="navlink" href="/accounts/users/">Accounts</a>
 <a class="navlink" href="/admin-area/settings/">Settings</a>
 <a class="navlink" href="/transfers/bundle/">Migration and full bundles</a>

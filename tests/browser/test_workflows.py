@@ -12,6 +12,7 @@ from tests.browser.conftest import (
     tag,
 )
 from tests.factories import make_item, make_missionary
+from playwright.sync_api import expect
 
 
 def _seed(staff):
@@ -21,16 +22,24 @@ def _seed(staff):
 
 
 def add_item(page, item, quantity='1'):
-    page.select_option('#catalogue-select', str(item.pk))
-    page.fill('#catalogue-qty', quantity)
-    page.click('#add-item')
+    page.locator(f'.catalogue-row[data-item="{item.pk}"] button').click()
+    if quantity != '1':
+        page.locator(f'.issue-row[data-item="{item.pk}"] input[type=number]').fill(quantity)
+
+
+def choose_person(page, person):
+    page.fill('#person-filter', person.external_id)
+    expect(page.locator('#person-results [role=option]').first).to_be_visible()
+    page.press('#person-filter', 'ArrowDown')
+    page.press('#person-filter', 'Enter')
+    expect(page.locator('#selected-name')).to_have_text(person.name)
 
 
 def test_issue_goods_desktop(page, live_server, externals):
     staff, _ = staff_login(page, live_server, "issue")
     person, item = _seed(staff)
     page.goto(f"{live_server.url}/issue/")
-    page.select_option("select[name=missionary_id]", str(person.pk))
+    choose_person(page, person)
     add_item(page, item, '3')
     page.fill("input[name=note]", "browser issue")
     with page.expect_navigation():
@@ -49,11 +58,11 @@ def test_issue_goods_mobile_layout(mobile_page, live_server, externals):
     staff, _ = staff_login(mobile_page, live_server, "mob")
     person, item = _seed(staff)
     mobile_page.goto(f"{live_server.url}/issue/")
-    assert "Issue goods" in mobile_page.content()
+    assert "Issue supplies" in mobile_page.content()
     overflow = mobile_page.evaluate(
         "document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert overflow <= 1, f"horizontal overflow on narrow screen: {overflow}px"
-    mobile_page.select_option("select[name=missionary_id]", str(person.pk))
+    choose_person(mobile_page, person)
     add_item(mobile_page, item)
     with mobile_page.expect_navigation():
         mobile_page.click("#issue-form button[type=submit]")
@@ -66,7 +75,7 @@ def test_shortage_review_then_confirm_rechecks(page, live_server, externals):
     staff, _ = staff_login(page, live_server, "short")
     person, item = _seed(staff)
     page.goto(f"{live_server.url}/issue/")
-    page.select_option("select[name=missionary_id]", str(person.pk))
+    choose_person(page, person)
     add_item(page, item, '999')
     page.click("form[action='/issue/confirm/'] button[type=submit], #issue-form button[type=submit]")
     page.wait_for_selector('#shortage-review:not([hidden])')
@@ -118,11 +127,11 @@ def test_add_remove_rows_and_filter(page, live_server, externals):
     person = make_missionary(staff)
     items = [make_item(staff, opening_qty=10) for _ in range(5)]
     page.goto(f"{live_server.url}/issue/")
-    page.select_option("select[name=missionary_id]", str(person.pk))
+    choose_person(page, person)
     page.fill("#item-filter", items[0].name)
     hidden = page.evaluate(
-        """Array.from(document.querySelector('#catalogue-select').options)
-            .filter(o => o.value && o.hidden).length""")
+        """Array.from(document.querySelectorAll('.catalogue-row'))
+            .filter(o => o.hidden).length""")
     assert hidden > 0
     page.fill("#item-filter", "")
     for i, item in enumerate(items):
@@ -144,7 +153,7 @@ def test_double_submit_issues_once(page, live_server, externals):
     staff, _ = staff_login(page, live_server, "dbl")
     person, item = _seed(staff)
     page.goto(f"{live_server.url}/issue/")
-    page.select_option("select[name=missionary_id]", str(person.pk))
+    choose_person(page, person)
     add_item(page, item, '2')
     page.evaluate(
         "const f = document.querySelector('#issue-form');"

@@ -988,7 +988,7 @@ class ViewBehaviorTests(TestCase):
         self.assertEqual(response.status_code, 400)
         content = response.content.decode()
         self.assertIn("keep-this-note", content)
-        self.assertIn("Issue goods", content)
+        self.assertIn("Issue supplies", content)
 
     def test_staff_never_sees_replace_mode_or_others_previews(self):
         from apps.transfers.models import RowImportPreview

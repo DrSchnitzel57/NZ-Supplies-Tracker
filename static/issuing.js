@@ -20,7 +20,10 @@
   var picker = document.getElementById("recipient-picker");
   var identityCard = document.getElementById("selected-person");
 
-  function say(text) { feedback.textContent = text; }
+  function say(text) {
+    feedback.textContent = text; feedback.classList.toggle("quiet", text.startsWith("Added"));
+    feedback.classList.toggle("warning", /not confirmed|Sign.in|Cannot|Could not|Security/.test(text));
+  }
   function rows() { return Array.from(list.querySelectorAll(".issue-row")); }
   function renumber() {
     rows().forEach(function (row, i) {
@@ -93,7 +96,7 @@
       remove.textContent = "Remove"; remove.setAttribute("aria-label", "Remove " + labelText);
       row.append(id, label, quantityLabel, remove); list.append(row);
     }
-    dirty = true; renumber(); say("Added to the list. Review the recipient and quantities before issuing.");
+    dirty = true; renumber(); say("Added to issue.");
   }
   catalogue.addEventListener("click", function(event) { if (event.target.closest(".catalogue-add")) addItem(event.target.closest(".catalogue-row")); });
   list.addEventListener("click", function (event) {
@@ -115,9 +118,11 @@
     var payload = uncertain || new FormData(source);
     try {
       var identity = await fetch("/api/session/", {cache: "no-store", credentials: "same-origin"});
-      if (!identity.ok) { say("Sign in again in a new tab, then retry here. Your original draft is still in this tab; nothing was sent."); return; }
+      if (!identity.ok) { say(uncertain
+        ? "Sign in again as the original staff member in a new tab. The original issue may already be saved; success is not confirmed. Retry that same request here deliberately."
+        : "Sign in again in a new tab, then retry here. Your original draft is still in this tab; nothing was sent."); return; }
       var security = await identity.json();
-      if (security.user_id !== form.dataset.draftUser) { say("This draft belongs to a different account. Sign in as the original staff member before retrying; nothing was sent."); return; }
+      if (security.user_id !== form.dataset.draftUser) { say("This draft belongs to a different account. Sign in as the original staff member before retrying. " + (uncertain ? "The original issue may already be saved; success is not confirmed." : "Nothing was sent.")); return; }
       window.refreshShellCsrf(security.csrf_token);
       payload.set("csrfmiddlewaretoken", security.csrf_token);
       payload.set("draft_user_id", form.dataset.draftUser);
@@ -137,7 +142,7 @@
         uncertain = payload; freeze(true);
         say("Server error — success is not confirmed. Retry this same request deliberately, or check History in another tab."); return;
       }
-      if (response.ok && response.headers.get("Content-Type").includes("application/json")) {
+      if (response.ok && (response.headers.get("Content-Type") || "").includes("application/json")) {
         var saved;
         try { saved = JSON.parse(html); if (!saved.redirect_url || !saved.redirect_url.startsWith("/issue/")) throw new Error("Missing result"); }
         catch (error) { uncertain = payload; freeze(true); say("Unexpected reply — success is not confirmed. Retry the original request deliberately, or check History in another tab."); return; }
@@ -174,7 +179,9 @@
           : errors ? errors.textContent.trim() : "Could not issue goods. Your original draft is retained; review it before retrying.");
       }
     } catch (error) {
-      say("Cannot check sign-in while disconnected. Nothing was sent; keep this tab open and retry when connected.");
+      say(uncertain
+        ? "Cannot check sign-in. The original issue may already be saved; success is not confirmed. Keep this tab open and retry deliberately."
+        : "Cannot check sign-in while disconnected. Nothing was sent; keep this tab open and retry when connected.");
     } finally { sending = false; button.disabled = false; }
   }
   form.addEventListener("submit", function (e) { submit(form, e); });

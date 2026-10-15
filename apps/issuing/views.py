@@ -76,13 +76,14 @@ def _form_context(draft_key=None, draft_lines=None, missionary_id="", note=""):
     labels = {str(item.pk): str(item) for item in items}
     draft_lines = [{**row, "label": labels.get(str(row["item_id"]), "Unavailable item")}
                    for row in draft_lines if row.get("item_id") or row.get("quantity")]
+    selected_person = next((p for p in missionaries if str(p.pk) == str(missionary_id)), None)
     return {
         "missionaries": missionaries,
         "items": items,
         "draft_key": draft_key or str(uuid.uuid4().hex),
         "draft_lines": draft_lines,
-        "missionary_id": missionary_id,
-        "selected_person": next((p for p in missionaries if str(p.pk) == str(missionary_id)), None),
+        "missionary_id": str(selected_person.pk) if selected_person else "",
+        "selected_person": selected_person,
         "note": note,
     }
 
@@ -126,7 +127,7 @@ def issue_main(request):
 @require_http_methods(["POST"])
 def issue_quick(request):
     """Single-line issue from a missionary profile; same shared service."""
-    missionary_id = (request.POST.get("missionary_id") or request.POST.get("fallback_missionary_id") or "").strip()
+    missionary_id = (request.POST.get("fallback_missionary_id") or request.POST.get("missionary_id") or "").strip()
     try:
         person = Missionary.objects.get(pk=missionary_id) if missionary_id else None
     except (Missionary.DoesNotExist, ValueError, TypeError, DjangoValidationError):
@@ -138,7 +139,7 @@ def issue_quick(request):
 
 
 def _handle_issue_post(request, *, return_to, template, quick_person=None):
-    missionary_id = (request.POST.get("missionary_id") or request.POST.get("fallback_missionary_id") or "").strip()
+    missionary_id = (request.POST.get("fallback_missionary_id") or request.POST.get("missionary_id") or "").strip()
     note = request.POST.get("note", "")
     idem = (request.POST.get("idempotency_key") or "").strip() or str(
         uuid.uuid4().hex

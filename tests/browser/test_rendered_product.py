@@ -6,7 +6,7 @@ from playwright.sync_api import expect
 from apps.issuing.models import Issue
 from apps.operations.guards import maintenance_mode
 from tests.browser.conftest import staff_login, assert_no_internet
-from tests.browser.test_workflows import add_item
+from tests.browser.test_workflows import add_item, choose_person
 from tests.factories import make_item, make_missionary
 
 
@@ -30,8 +30,11 @@ def test_rendered_guide_examples_keyboard_and_reduced_motion(page, live_server, 
     add_item(page, item, '2')
     screenshot('03-issue-goods.png', full_page=True)
     page.once('dialog', lambda dialog: dialog.accept())
-    page.goto(f'{live_server.url}/inventory/{item.pk}/')
+    page.goto(f'{live_server.url}/inventory/')
+    page.locator(f'a[data-panel][href="/inventory/{item.pk}/stock/"]').click()
+    expect(page.frame_locator('.side-dialog iframe').locator('input[name=quantity]')).to_be_visible()
     screenshot('04-stock-detail.png', full_page=True)
+    page.locator('body > .side-dialog > button').click()
     page.goto(f'{live_server.url}/reports/?family=stock')
     screenshot('05-reports.png', full_page=True)
     # Actual keyboard focus and reduced-motion rendering, not source-string checks.
@@ -49,7 +52,7 @@ def test_maintenance_rejects_issue_without_losing_draft_or_replaying(page, live_
     person = make_missionary(staff)
     item = make_item(staff)
     page.goto(f'{live_server.url}/issue/')
-    page.select_option('#person-select', str(person.pk))
+    choose_person(page, person)
     add_item(page, item, '2')
     page.fill('#issue-note', 'Keep through maintenance')
     key = page.input_value('input[name=idempotency_key]')
@@ -99,7 +102,7 @@ def test_narrow_dark_workspace_has_no_page_overflow(mobile_page, live_server, ex
     person = make_missionary(staff, name='Synthetic narrow-screen missionary')
     item = make_item(staff, name='Synthetic narrow-screen supplies', opening_qty=12)
     mobile_page.goto(f'{live_server.url}/issue/')
-    mobile_page.select_option('#person-select', str(person.pk))
+    choose_person(mobile_page, person)
     add_item(mobile_page, item, '2')
     mobile_page.click('#menu-toggle')
     mobile_page.click('#themeBtn')
@@ -107,5 +110,5 @@ def test_narrow_dark_workspace_has_no_page_overflow(mobile_page, live_server, ex
     assert mobile_page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     mobile_page.evaluate('window.scrollTo(0, 0)')
     mobile_page.screenshot(path=str(evidence / 'narrow-dark-issue.png'), full_page=True)
-    expect(mobile_page.locator('#add-item')).to_be_visible()
+    expect(mobile_page.locator('#issue-submit')).to_be_visible()
     assert_no_internet(externals)
