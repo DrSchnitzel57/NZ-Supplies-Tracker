@@ -5,6 +5,7 @@ from django.views.decorators.http import require_GET
 
 from apps.accounts.decorators import no_activity_update
 from apps.accounts.views import session_refresh
+from apps.common.views import finder, search_page
 
 
 @no_activity_update
@@ -20,6 +21,8 @@ urlpatterns = [
     path("poll/", poll, name="poll"),
     path("api/poll/", poll, name="api-poll"),
     path("api/session/", require_GET(session_refresh), name="session-refresh"),
+    path("api/find/", finder, name="finder"),
+    path("search/", search_page, name="search"),
     path("", include("apps.operations.urls")),
     path("roster/", include("apps.roster.urls")),
     path("inventory/", include("apps.inventory.urls")),
