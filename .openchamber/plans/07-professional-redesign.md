@@ -2,12 +2,12 @@
 
 ## Steps
 - [x] 1. Lock capabilities/design.
-- [ ] 2. Rebuild shell/controls.
-- [ ] 3. Replace search/issuing.
-- [ ] 4. Complete records/panels/batches.
-- [ ] 5. Polish supporting screens.
-- [ ] 6. Validate and record evidence.
-- [ ] 7. Update docs/roadmap 07.
+- [x] 2. Rebuild shell/controls.
+- [x] 3. Replace search/issuing.
+- [x] 4. Complete records/panels/batches.
+- [x] 5. Polish supporting screens.
+- [x] 6. Validate and record evidence.
+- [x] 7. Update docs/roadmap 07.
 
 ## Goal and context
 One app, not a reskin: approved sidebar, global/local search, unified picker, catalogue/summary issuing, panels/pages and batches. Reftab practicality, Church restraint. Baseline: 228 Django/36 Chromium pass after declared PyMuPDF installation. Design/research: docs/ARCHITECTURE.md, section 07.
