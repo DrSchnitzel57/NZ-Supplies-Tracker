@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Reports — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Reports</h1><div class="sub">One report, with the same filters on screen and in every download.</div></div>
+<div class="page-head"><div><h1>Reports</h1><p class="sub">Choose a report and filter the records you need.</p></div></div>
 <form method="get" class="stack panel">
 <label for="report-family">Report</label><select name="family" id="report-family">{% for value, label in families %}<option value="{{ value }}" {% if value == family %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
 {% include "components/form_fields.html" %}
 <button type="submit" class="primary">Show report</button>
 </form>
-<p class="help">Dates select when goods were issued (New Zealand time). Current net excludes all undone issues, even when undone later; it is not period accounting. Available stock is stock <strong>now</strong>, not as-of a past date. Summaries use current names; history retains original snapshots.</p>
+<details class="report-meaning"><summary>How these figures are counted</summary><p class="help">Dates select when goods were issued (New Zealand time). Current net excludes all undone issues, even when undone later; it is not period accounting. Available stock is stock <strong>now</strong>, not as-of a past date. Summaries use current names; history retains original snapshots.</p></details>
 <h2>{{ report_title }}</h2>
+{% if summary %}<ul class="summary-bars" aria-label="All matching summary groups">{% for group in summary %}<li><span>{{ group.label }}</span><div aria-hidden="true"><i style="width:{{ group.width }}%"></i></div><strong>{{ group.value }}</strong></li>{% endfor %}</ul>{% endif %}
 {% if filters_valid %}<div class="toolbar">
 <a class="btn" data-report-csv href="/reports/family/{{ family }}/?{{ filters_query }}&amp;format=csv">Download CSV</a>
 <a class="btn" data-report-pdf href="/reports/family/{{ family }}/?{{ filters_query }}&amp;format=pdf">Download A4 PDF</a>
@@ -18,5 +19,5 @@
 {% for cells in report_rows %}<tr>{% for cell in cells %}<td>{{ cell|default_if_none:"" }}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="14">No matching records.</td></tr>{% endfor %}
 </tbody></table></div>
 {% include "components/pagination.html" %}
-{% if family == 'low-stock' %}<p class="help">Copy or download these rows for follow-up. <a href="mailto:?subject=Low%20stock%20order">Open your mail app</a>; this app sends no email.</p>{% endif %}
+{% if family == 'low-stock' and filters_valid %}<section class="panel"><h2>Low-stock follow-up</h2><p>All {{ page_obj.paginator.count }} matching items. This app sends no email.</p><label for="low-stock-message">Message<textarea id="low-stock-message" rows="6" readonly>{{ low_text }}</textarea></label><div class="toolbar"><button type="button" id="copy-low-stock">Copy list</button><a class="btn" href="{{ mail_url }}">Open your mail app</a></div><p id="copy-feedback" role="status"></p></section>{% endif %}
 {% endblock %}
