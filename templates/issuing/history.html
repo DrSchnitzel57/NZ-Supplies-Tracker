@@ -4,7 +4,7 @@
 <div class="page-head"><div><h1>History</h1><p class="sub">{{ page_obj.paginator.count }} matching issues</p></div><a class="btn primary" href="/issue/">Issue supplies</a></div>
 <form method="get" class="stack panel"><input type="hidden" name="filtered" value="1">{% include "components/form_fields.html" %}<button type="submit" class="primary">Filter history</button></form>
 <details><summary>About current and undone issues</summary><p class="help">Original records stay in history after an undo. Given-out totals exclude undone issues. Open a row for the original quantities, staff and correction reason.</p></details>
-<div class="tablewrap"><table>
+<div class="tablewrap"><table class="records-table">
 <thead><tr><th>When</th><th>Person</th><th>Items</th><th>Given by</th><th>Status</th><th></th></tr></thead>
 <tbody>
 {% for issue in issues %}

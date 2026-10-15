@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-head"><div><h1>{{ heading }}</h1><p class="sub">{{ item }}</p></div></div>
-<p>Available now: <strong>{{ item.on_hand }}</strong> {{ item.unit }}</p>
-<form method="post" action="/inventory/{{ item.pk }}/{{ action }}/" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
+<p>Available now: <strong data-available-for="{{ item.pk }}">{{ item.on_hand }}</strong> {{ item.unit }}</p>
+<form method="post" action="/inventory/{{ item.pk }}/{{ action }}/{% if request.GET.return_to %}?return_to={{ return_to|urlencode }}{% endif %}" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}{% include "components/form_fields.html" %}
 {% if action == 'correct-count' %}<p class="help">Enter the amount counted on the shelf. This records the difference, not an issue. If stock changes, reopen this form and count again.</p>{% endif %}
+{% if action == 'correct-count' %}<p class="help">Your count and reason stay here after a conflict; <a href="/inventory/{{ item.pk }}/" target="_blank" rel="noopener">review current stock in another tab</a>, then reopen this form to count again.</p>{% endif %}
 <button type="submit" class="primary">{{ heading }}</button>
-</form><p><a href="/inventory/{{ item.pk }}/">Back to item</a></p>
+</form><p><a href="/inventory/{{ item.pk }}/?return_to={{ return_to|urlencode }}">Back to item</a></p>
 {% endblock %}

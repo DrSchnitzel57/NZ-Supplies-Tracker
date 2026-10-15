@@ -1,6 +1,5 @@
 """07 search, filters and atomic reviewed batches; synthetic fixtures only."""
 import copy
-import uuid
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
@@ -97,10 +96,33 @@ class SearchAndLists(TestCase):
     def test_page_fallbacks_and_permissions(self):
         item = make_item(self.staff)
         for suffix in ('edit/', 'stock/', 'count/'):
-            self.assertEqual(self.client.get(f'/inventory/{item.pk}/{suffix}').status_code, 200)
+            response = self.client.get(f'/inventory/{item.pk}/{suffix}')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response['X-Frame-Options'], 'SAMEORIGIN')
         self.client.logout()
         self.assertEqual(self.client.get('/inventory/batch/').status_code, 302)
         self.assertEqual(self.client.get('/api/find/?q=synthetic').status_code, 401)
+
+    def test_low_stock_message_is_complete_not_page_limited(self):
+        from urllib.parse import unquote
+        for i in range(61):
+            make_item(self.staff, opening_qty=0, name=f'Synthetic low {i:02}')
+        response = self.client.get('/reports/?family=low-stock')
+        self.assertEqual(len(response.context['low_text'].splitlines()), 61)
+        self.assertEqual(response.context['page_obj'].paginator.count, 61)
+        self.assertIn('Synthetic low 60', response.context['low_text'])
+        self.assertIn(response.context['low_text'], unquote(response.context['mail_url']))
+
+    def test_list_return_accepts_only_the_local_list(self):
+        from django.test import RequestFactory
+        from apps.common.navigation import list_return
+        factory = RequestFactory()
+        for value in ('https://example.test/inventory/', '//example.test/inventory/',
+                      '/inventory/new/', '/inventory/\\evil', 'javascript:alert(1)'):
+            request = factory.get('/inventory/', {'return_to': value})
+            self.assertEqual(list_return(request, '/inventory/'), '/inventory/')
+        request = factory.get('/inventory/', {'return_to': '/inventory/?q=towel&page=2'})
+        self.assertEqual(list_return(request, '/inventory/'), '/inventory/?q=towel&page=2')
 
 
 class AtomicBatches(TransactionTestCase):
@@ -180,3 +202,28 @@ class AtomicBatches(TransactionTestCase):
         self.assertEqual(Item.objects.count(), 50)
         self.assertEqual(StockMovement.objects.count(), 50)
         self.assertEqual(AuditEvent.objects.filter(action='item.created').count(), 50)
+
+    def test_concurrent_overlapping_batches_never_partially_save(self):
+        from threading import Barrier
+        barrier = Barrier(2)
+        actor_id = self.staff.pk
+        def worker(index):
+            close_old_connections()
+            try:
+                actor = type(self.staff).objects.get(pk=actor_id)
+                rows = batch_rows()
+                rows[1]['name'] = f'Unique competitor {index}'
+                barrier.wait(timeout=20)
+                try:
+                    inventory.create_batch(actor=actor, rows=rows, idempotency_key=f'competitor-{index}')
+                    return 'saved'
+                except DomainError:
+                    return 'refused'
+            finally:
+                close_old_connections()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(worker, range(2)))
+        self.assertCountEqual(results, ['saved', 'refused'])
+        self.assertEqual(Item.objects.count(), 2)
+        self.assertEqual(StockMovement.objects.count(), 2)
+        self.assertEqual(AuditEvent.objects.filter(action='inventory.batch_created').count(), 1)

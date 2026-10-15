@@ -6,7 +6,7 @@ from django.contrib.sessions.models import Session
 
 from tests.browser.conftest import assert_no_internet, staff_login
 from tests.factories import make_item, make_missionary
-from tests.browser.test_workflows import add_item
+from tests.browser.test_workflows import add_item, choose_person
 
 
 def _last_activity(staff) -> float | None:
@@ -22,7 +22,7 @@ def test_poll_preserves_drafts_and_spares_idle_timer(page, live_server, external
     person = make_missionary(staff)
     item = make_item(staff, opening_qty=6)
     page.goto(f"{live_server.url}/issue/")
-    page.select_option("select[name=missionary_id]", str(person.pk))
+    choose_person(page, person)
     add_item(page, item, '2')
     page.fill("input[name=note]", "draft-note-keep")
     page.fill("input[name=qty-0]", "2")
