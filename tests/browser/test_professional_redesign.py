@@ -298,6 +298,9 @@ def test_batch_review_retained_errors_atomic_unknown_success_retry(page, live_se
     staff, _ = staff_login(page, live_server, 'batch07')
     page.goto(f'{live_server.url}/inventory/batch/')
     fill_batch_row(page, 0, 'Synthetic batch towel')
+    remove_box = page.locator('.batch-remove').bounding_box()
+    assert 44 <= remove_box['height'] <= 60 and remove_box['width'] < 200
+    assert page.locator('[name="form-0-name"]').bounding_box()['width'] >= 200
     page.click('#batch-add')
     fill_batch_row(page, 1, '  SYNTHETIC   BATCH TOWEL ')
     page.click('#batch-form button[type=submit]')
@@ -327,6 +330,24 @@ def test_batch_review_retained_errors_atomic_unknown_success_retry(page, live_se
     assert Item.objects.count() == 2
     assert StockMovement.objects.count() == 2
     assert AuditEvent.objects.filter(action='inventory.batch_created').count() == 1
+    assert_no_internet(externals)
+
+
+def test_mobile_batch_fields_and_actions_are_usable(mobile_page, live_server, externals):
+    staff, _ = staff_login(mobile_page, live_server, 'mobile-batch07')
+    mobile_page.goto(live_server.url + '/inventory/batch/')
+    fill_batch_row(mobile_page, 0, 'Synthetic mobile towel')
+    mobile_page.click('#batch-add')
+    fill_batch_row(mobile_page, 1, 'Synthetic mobile soap')
+    assert mobile_page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    assert mobile_page.locator('[name="form-1-name"]').bounding_box()['width'] >= 250
+    assert mobile_page.locator('.batch-remove').last.bounding_box()['height'] <= 60
+    mobile_page.click('#batch-form button[type=submit]')
+    expect(mobile_page.locator('main h1')).to_have_text('Review new items')
+    assert Item.objects.count() == 0
+    mobile_page.click('#batch-form button[type=submit]')
+    expect(mobile_page.locator('main h1')).to_have_text('Inventory')
+    assert Item.objects.count() == 2
     assert_no_internet(externals)
 
 
