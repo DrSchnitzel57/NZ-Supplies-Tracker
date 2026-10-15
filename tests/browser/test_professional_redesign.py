@@ -351,6 +351,21 @@ def test_mobile_batch_fields_and_actions_are_usable(mobile_page, live_server, ex
     assert_no_internet(externals)
 
 
+def test_mobile_connection_failure_is_visible_but_healthy_status_is_quiet(mobile_page, live_server, externals):
+    staff_login(mobile_page, live_server, 'mobile-status07')
+    mobile_page.route('**/api/dashboard/', lambda route: route.fulfill(status=503, body='Synthetic unavailable server'))
+    mobile_page.goto(live_server.url + '/inventory/')
+    expect(mobile_page.locator('#connection-status')).to_be_visible()
+    expect(mobile_page.locator('#connection-status')).to_contain_text('offline')
+    expect(mobile_page.locator('#last-refresh')).to_be_visible()
+    assert mobile_page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    mobile_page.unroute('**/api/dashboard/')
+    mobile_page.reload()
+    mobile_page.wait_for_function('document.getElementById("connection-status").textContent.includes("connected")')
+    expect(mobile_page.locator('#connection-status')).to_be_hidden()
+    assert_no_internet(externals)
+
+
 def test_populated_rendered_design_desktop_mobile_zoom_and_exports(page, live_server, externals):
     evidence = Path('.local/review/07')
     evidence.mkdir(parents=True, exist_ok=True)
