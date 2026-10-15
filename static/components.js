@@ -138,7 +138,7 @@
     var child = frame.contentWindow, doc = frame.contentDocument;
     doc.documentElement.classList.add("in-panel");
     var form = doc.querySelector("main form[data-safe-form]");
-    if (form && form.dataset.recoveryReady !== "1") {
+    if (!form || form.dataset.recoveryReady !== "1") {
       loading.textContent = "Task controls could not load. Open the full page to continue."; return;
     }
     frame.hidden = false;
