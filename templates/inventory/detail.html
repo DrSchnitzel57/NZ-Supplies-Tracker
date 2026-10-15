@@ -8,13 +8,13 @@
   <div class="kpi"><span class="rail"></span><div class="lab">Count corrections</div><div class="big tnum" data-corrections-for="{{ item.pk }}">{{ item.corrections_total }}</div><div class="note">Recounts &amp; fixes</div></div>
 </div>
 <p class="help">Available is the shelf count. “Given out” counts only current issues. If the shelf count is wrong, use “Correct stock count” with a reason — it records a correction, it does not invent or erase issues.</p>
-<p><a class="btn" href="/inventory/{{ item.pk }}/edit/">Edit details</a>
+<p><a class="btn" data-panel href="/inventory/{{ item.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit details</a><a class="btn" data-panel href="/inventory/{{ item.pk }}/stock/">Add stock</a><a class="btn" data-panel href="/inventory/{{ item.pk }}/count/">Correct stock count</a>
 {% if item.is_archived %}
 <form method="post" action="/inventory/{{ item.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>
 {% else %}
 <form method="post" action="/inventory/{{ item.pk }}/archive/" class="inline">{% csrf_token %}<button type="submit">Archive</button></form>
 {% endif %}
-<a class="btn" href="/inventory/">Back to inventory</a></p>
+<a class="btn" href="{{ return_to }}">Back to inventory</a></p>
 
 <div class="grid two">
 <div class="card"><div class="hd"><h2>Add stock</h2></div><div class="bd">

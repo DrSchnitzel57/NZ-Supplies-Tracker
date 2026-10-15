@@ -7,12 +7,17 @@ from django.db.models import Q, Sum
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from apps.accounts.decorators import staff_required
 from apps.common.errors import DomainError
 from apps.common.forms import AddStockForm, CorrectCountForm
 from apps.common.pagination import paginate
+from apps.common.search import items as search_items
+from apps.common.navigation import list_return
+from urllib.parse import urlencode
 from apps.inventory.forms import ItemForm, NewItemForm
+from apps.inventory.forms import BatchItemFormSet
 from apps.inventory import services as inv
 from apps.inventory.models import Item, StockMovement
 
@@ -48,7 +53,7 @@ def _summaries(items):
 
 @staff_required
 def item_list(request):
-    q = (request.GET.get("q") or "").strip()
+    q = (request.GET.get("q") or "").strip()[:160]
     category = (request.GET.get("category") or "").strip()
     size = (request.GET.get("size") or "").strip()
     low_only = request.GET.get("low") == "1"
@@ -56,23 +61,27 @@ def item_list(request):
     qs = Item.objects.all()
     if not show_archived:
         qs = qs.filter(is_archived=False)
-    if q:
-        qs = qs.filter(Q(name__icontains=q) | Q(category__icontains=q)
-                       | Q(size__icontains=q))
+    sort = request.GET.get("sort", "category")
+    ordering = {"category": ("category", "name", "size"), "name": ("name", "size"),
+                "-name": ("-name", "size"), "stock": ("on_hand", "name")}.get(sort, ("category", "name", "size"))
+    qs = search_items(qs, q, ordering)
     if category:
         qs = qs.filter(category__iexact=category)
-    if size:
+    if size == "__blank__":
+        qs = qs.filter(size="")
+    elif size:
         qs = qs.filter(size__icontains=size)
     if low_only:
         qs = qs.filter(on_hand__lte=Coalesce("low_threshold", 0))
     total = qs.count()
-    page, pagination = paginate(request, qs.order_by("category", "name", "size", "pk"))
+    page, pagination = paginate(request, qs)
     qs = _summaries(list(page))
+    choices = Item.objects.all() if show_archived else Item.objects.filter(is_archived=False)
     categories = list(
-        Item.objects.filter(is_archived=False)
+        choices
         .order_by("category")
         .values_list("category", flat=True)
-        .distinct()[:200]
+        .distinct()
     )
     return render(
         request,
@@ -82,9 +91,11 @@ def item_list(request):
             "q": q,
             "category": category,
             "size": size,
+            "sort": sort,
             "low_only": low_only,
             "show_archived": show_archived,
             "categories": categories,
+            "sizes": choices.order_by("size").values_list("size", flat=True).distinct(),
             "total": total,
             "shown": len(qs),
             **pagination,
@@ -127,6 +138,46 @@ def _new_uuid() -> str:
 
 
 @staff_required
+def item_batch(request):
+    formset = BatchItemFormSet(request.POST if request.method == "POST" else None)
+    key = request.POST.get("idempotency_key", "") if request.method == "POST" else "ui-batch-" + _new_uuid()
+    error, reviewed = "", False
+    if request.method == "POST" and formset.is_valid():
+        rows = [form.cleaned_data for form in formset if form.cleaned_data]
+        from apps.inventory.models import item_key
+        keys = [item_key(r["category"], r["name"], r["size"]) for r in rows]
+        if len(set(keys)) != len(keys):
+            error = "Two rows describe the same item. Change or remove the duplicate; nothing was saved."
+        elif request.POST.get("confirm") == "1":
+            try:
+                created = inv.create_batch(actor=request.user, rows=rows, idempotency_key=key)
+            except DomainError as exc:
+                error = str(exc)
+            else:
+                messages.success(request, f"Added {len(created)} items. Opening stock recorded for every item.")
+                return redirect("inventory-list")
+        elif Item.objects.filter(key__in=keys).exists():
+            error = "An item already exists, including archived inventory. Review the existing item instead."
+        else:
+            reviewed = True
+    return render(request, "inventory/batch.html", {"formset": formset, "batch_key": key,
+        "batch_error": error, "reviewed": reviewed},
+        status=400 if request.method == "POST" and not reviewed else 200)
+
+
+@staff_required
+@xframe_options_sameorigin
+def item_stock_form(request, pk, mode):
+    item = get_object_or_404(Item, pk=pk)
+    form = (AddStockForm(initial={"idempotency_key": "ui-rx-" + _new_uuid()}) if mode == "stock"
+            else CorrectCountForm(initial={"idempotency_key": "ui-ct-" + _new_uuid(),
+                 "expected_version": item.version, "counted_qty": item.on_hand}))
+    return render(request, "inventory/stock_form.html", {"item": item, "form": form,
+        "heading": "Add stock" if mode == "stock" else "Correct stock count",
+        "action": "add-stock" if mode == "stock" else "correct-count"})
+
+
+@staff_required
 def item_detail(request, pk):
     item = get_object_or_404(Item, pk=pk)
     return _render_detail(request, item)
@@ -151,6 +202,7 @@ def _render_detail(request, item, *, receive_form=None, correct_form=None, statu
         "inventory/detail.html",
         {
             "item": item,
+            "return_to": list_return(request, '/inventory/'),
             "movements": movements,
             "ledger_total": ledger_total,
             "receive_form": receive_form or AddStockForm(auto_id="receive_%s", initial={"idempotency_key": f"ui-rx-{_new_uuid()}"}),
@@ -163,6 +215,7 @@ def _render_detail(request, item, *, receive_form=None, correct_form=None, statu
 
 
 @staff_required
+@xframe_options_sameorigin
 def item_edit(request, pk):
     item = get_object_or_404(Item, pk=pk)
     form = ItemForm(request.POST if request.method == "POST" else None, instance=item)
@@ -174,7 +227,10 @@ def item_edit(request, pk):
             form.add_error(None, str(exc))
         else:
             messages.success(request, "Saved changes.")
-            return redirect("inventory-detail", pk=item.pk)
+            destination = f"/inventory/{item.pk}/"
+            if 'return_to' in request.GET:
+                destination += '?' + urlencode({'return_to': list_return(request, '/inventory/')})
+            return redirect(destination)
     return render(request, "inventory/form.html", {"mode": "edit", "item": item, "form": form},
                   status=400 if form.is_bound else 200)
 

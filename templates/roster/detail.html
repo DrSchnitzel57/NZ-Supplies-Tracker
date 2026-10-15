@@ -1,16 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ person.name }} — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><h1>{{ person.name }}</h1><div class="sub">ID {{ person.external_id }}{% if person.email %} · {{ person.email }}{% endif %} · {% if person.is_archived %}Archived{% else %}Active{% endif %}</div></div>
+<div class="page-head"><div><h1>{{ person.name }}</h1><p class="sub">{{ person.title_prefix }} · {{ person.external_id }} · {% if person.is_archived %}Archived{% else %}Active{% endif %}</p></div>{% if not person.is_archived %}<a class="btn primary" href="/issue/?missionary={{ person.pk }}">Issue supplies</a>{% endif %}</div>
 <div class="panel">
-<p style="margin:0"><a class="btn" href="/roster/{{ person.pk }}/edit/">Edit</a>
+<p style="margin:0"><a class="btn" href="/roster/{{ person.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit</a>
 {% if person.is_archived %}
 <form method="post" action="/roster/{{ person.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>
 {% else %}
 <form method="post" action="/roster/{{ person.pk }}/archive/" class="inline">{% csrf_token %}<button type="submit">Archive</button></form>
 {% endif %}
-<a class="btn" href="/roster/">Back to list</a></p>
-<p class="help">Goods received counts current issues only; undone issues stay in history. Archived people cannot receive new goods.</p>
+<a class="btn" href="{{ return_to }}">Back to list</a></p>
 </div>
 
 <div class="grid two">
@@ -22,7 +21,6 @@
 </div></section>
 <section class="card"><div class="hd"><h2>Goods received</h2></div><div class="bd">
 <p class="big tnum">{{ net_total }}</p><p>Units in current issues, excluding all undone issues.</p>
-{% if not person.is_archived %}<a class="btn primary" href="/issue/?missionary={{ person.pk }}">Issue goods to {{ person.name }}</a>{% endif %}
 </div></section></div>
 <details class="panel"><summary>Details</summary>
 <dl><dt>Title</dt><dd>{{ person.title_prefix|default:"Not recorded" }}</dd>
@@ -36,7 +34,7 @@
 <div class="section-title">Net received: {{ net_total }}</div>
 <div class="card flush"><div class="hd"><h2>History for this person</h2></div>
 {% if issues %}
-<div class="tablewrap" style="border:0;border-radius:0 0 14px 14px;box-shadow:none"><table>
+<div class="tablewrap"><table>
 <thead><tr><th>When</th><th>Items</th><th>Given by</th><th>Status</th><th></th></tr></thead>
 <tbody>
 {% for issue in issues %}
