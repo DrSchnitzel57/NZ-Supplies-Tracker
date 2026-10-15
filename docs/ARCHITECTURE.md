@@ -8,6 +8,15 @@ Replace browser-local persistence with a dependable LAN tool for approximately t
 
 ## Runtime and boundaries
 
+Milestone 07 implements the agreed professional redesign on the same foundation:
+Overview/sidebar/direct History, shared Unicode-aware finder/list matching,
+explicit recipient suggestions and catalogue/summary issuing, contextual short
+task panels with canonical pages, sorted/filtered records, atomic reviewed item
+batches and polished supporting screens/help. It supersedes milestone 06's UI
+structure and copy, not its data, authentication, ledger, import or recovery
+contracts. Final acceptance evidence is in `docs/REVIEW.md`; independent review
+and user-owned manual gates remain separate from implementation.
+
 ### Review history and current release hold
 
 Independent review of implemented milestones 01–04 at `04b2227` returned **FIX**. After declared dependency installation, 118 Django tests, 19 browser-contract tests (one skip) and 15 deployment-contract tests passed, but isolated runtime probes failed HTTPS/static delivery, stale/bundle integrity, maintenance ownership and WAL recovery. Milestone 05 subsequently remediated those findings; historical evidence and remaining manual gates are in `docs/REVIEW.md`. Milestone checkboxes indicate implementation, not release approval.
@@ -88,10 +97,10 @@ The product assessment at `548aad3` reran 195 Django, 17 browser and 21 deployme
 - Keep schema/data and ZIP compatibility; no broad database rewrite, invented issues or automatic seed import. No reconstruction of previously erased information is promised. Unparseable source dates/metadata remain available for the user's fidelity check. Fresh full-product review is required; old milestone-05 SHIP evidence is not approval of the redesigned product.
 - Manual gates remain user-owned: unaided staff trial, private-source fidelity, target-host networking/registry/reboot/restore. Certificate trust is deferred and host-local backups do not cover host loss. Neither the plan nor its documentation authorizes implementation, publishing, real-data import or rollout.
 
-## Professional experience redesign (milestone 07; planned)
+## Professional experience redesign (milestone 07; implemented)
 
 ### Approved brief and boundaries
-The user rejected milestone 06's appearance, navigation, search-plus-select controls and verbose machine-like copy. Preserve the original HTML's useful capabilities, not its layout. Reftab is a reference for practical, consistent controls without its complexity; ChurchofJesusChrist.org is a visual reference, not a navigation model. The user approved compact-sidebar concept B, global plus local search, the interactive issuing-control study, mixed side-panel/full-page editing and restoration of multi-item inventory creation. One finished-app milestone, not separately shipped phases. No implementation/publication is authorized by these docs.
+The user rejected milestone 06's appearance, navigation, search-plus-select controls and verbose machine-like copy. Preserve the original HTML's useful capabilities, not its layout. Reftab is a reference for practical, consistent controls without its complexity; ChurchofJesusChrist.org is a visual reference, not a navigation model. The user approved compact-sidebar concept B, global plus local search, the interactive issuing-control study, mixed side-panel/full-page editing and restoration of multi-item inventory creation. One finished-app milestone, not separately shipped phases. Implementation was explicitly requested through the agreed plan; these docs do not authorize publication or rollout.
 
 Retain Django/templates/small JavaScript, SQLite/Gunicorn/Caddy, roles, stock/security/recovery invariants and schema/ZIP compatibility. No stack rewrite, signatures, multi-intake, saved drafts, barcode tracking, SMTP, external services, invented analytics, demo-only facade or separate boss presentation package. The original negative-stock/direct-Out/reset shortcuts remain replaced by safe existing workflows. Never copy private source data into documentation/tests/images; implementation cannot depend on the ignored HTML or this chat.
 
@@ -130,6 +139,10 @@ Validate real populated synthetic 95-person/224-item and long-history screens at
 - [Church design](https://guide.churchofjesuschrist.org/4-2-visual-design-elements?lang=eng) and [symbol restrictions](https://guide.churchofjesuschrist.org/4-2-1-symbol?lang=eng): coherent restrained identity, not permission to copy protected assets.
 
 ## Decisions and why
+
+- **Canonical task frames inside native dialogs (07):** short inventory edits reuse bound Django pages and the same safe-form serializer, with validated list returns, dirty/pending-close guards and restored focus/scroll. Forms stay hidden until deferred recovery/completion handlers are ready; blocked expired-session loads retain a usable Cancel/full-page fallback. Only the task GET/edit views allow `SAMEORIGIN`; global framing protection stays `DENY`. Same-user recovery repairs both frame and parent-shell CSRF. Reject a competing client mutation path or putting long forms/imports/batches into universal modals.
+- **Portable audit-backed batch receipts (07):** a fingerprint, actor and created item IDs in an ordinary audit event provide exact deliberate retries inside the existing IMMEDIATE transaction. Each item still uses the canonical opening-ledger/audit service. Reject partial saves, changed-payload reuse and a new draft/schema/ZIP subsystem for this bounded 50-row operation.
+- **Unicode-folded local matching (07):** SQLite's default case-insensitive matching is ASCII-only; a connection-local deterministic fold function gives Māori-capable term/exact matching shared by lists and finders. Reject an external index, fuzzy substitutions or a data migration for this scale. Client catalogue ordering remains stable and explicit recipient UUID selection is required.
 
 - **Professional redesign, not another CSS reskin (07):** user rejected current controls/navigation/copy and approved a new issuing study. Preserve capabilities and tested invariants, reject keeping old page structure for familiarity or rewriting the backend for appearance.
 - **Rebuilt sidebar and global/local search (07):** user chose concept B over top navigation and both search scopes. Make History direct and issuing prominent; reject crowded utility links and search-plus-select duplication.
@@ -180,4 +193,4 @@ Validate real populated synthetic 95-person/224-item and long-history screens at
 
 ## Planning references
 
-See `docs/ROADMAP.md` and `.openchamber/plans/01-foundation.md` through `06-product-overhaul.md`. Milestones 01–06 describe implemented work. Milestone-06 automated acceptance and fresh rendered/export evidence are recorded in `docs/REVIEW.md`; manual staff/source/target-host gates remain pending. These documents do not authorize registry publication, real-data import or rollout.
+See `docs/ROADMAP.md` and `.openchamber/plans/01-foundation.md` through `07-professional-redesign.md`. Milestones 01–07 describe implemented work. Automated acceptance and fresh rendered/export evidence are recorded in `docs/REVIEW.md`; independent re-review and manual staff/source/target-host/final-visual gates remain separate. These documents do not authorize registry publication, real-data import or rollout.

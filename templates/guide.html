@@ -2,24 +2,24 @@
 {% block title %}Quick-start guide — MTC Supplies Tracker{% endblock %}
 {% block content %}
 <div class="page-head"><h1>Quick-start guide</h1><div class="sub">Four everyday tasks. All examples below are synthetic.</div></div>
-<p>You need only the browser link and your staff account. Use Home to see low stock; use Menu on a narrow screen to reach all sections and help.</p>
+<p>You need only the browser link and your staff account. Overview shows low stock. Menu opens every section on a small screen; Administration is available only to administrators.</p>
 <div class="grid two guide-grid">
 <section class="card"><div class="hd"><h2>1. Sign in</h2></div><div class="bd">
 <a href="/static/img/01-sign-in.png" target="_blank" rel="noopener"><img class="guide-img" src="/static/img/01-sign-in.png" alt="Synthetic sign-in screen: enter username and password"></a>
 <p>Ask an administrator for an account. A temporary password must be changed on first sign-in. Check your username at the top and sign out when leaving a shared computer.</p>
 </div></section>
-<section class="card"><div class="hd"><h2>2. Issue goods</h2></div><div class="bd">
+<section class="card"><div class="hd"><h2>2. Issue supplies</h2></div><div class="bd">
 <a href="/static/img/03-issue-goods.png" target="_blank" rel="noopener"><img class="guide-img" src="/static/img/03-issue-goods.png" alt="Synthetic workspace: selected missionary, catalogue and named item summary"></a>
-<p>Open <a href="/issue/">Issue goods</a>. Search then explicitly select a missionary. Choose a catalogue item and quantity, then <strong>Add to issue</strong>. Repeat as needed (up to 50 distinct items). Review the named summary, then <strong>Issue goods</strong>.</p>
+<p>Open <a href="/issue/">Issue supplies</a>. Type a name or ID and choose a suggestion (arrow keys and Enter also work). Check the selected name and ID. Use <strong>Add</strong> on catalogue rows, then adjust quantities or remove items in the summary (up to 50 distinct items). Review the name, items and units, then choose <strong>Issue supplies</strong>.</p>
 <p>If stock is short, nothing is issued until you confirm revised quantities. <strong>Back without issuing</strong> keeps your original draft. Changing the recipient clears items and the note only after confirmation.</p>
 </div></section>
 <section class="card"><div class="hd"><h2>3. Add stock or correct a count</h2></div><div class="bd">
-<a href="/static/img/04-stock-detail.png" target="_blank" rel="noopener"><img class="guide-img" src="/static/img/04-stock-detail.png" alt="Synthetic item profile: separate Add stock and Correct stock count forms"></a>
-<p>In <a href="/inventory/">Inventory</a>, open the item. Use <strong>Add stock</strong> for a delivery, with the quantity and reason. Use <strong>Correct stock count</strong> for the shelf count you actually counted, with a reason. These never invent issues.</p>
+<a href="/static/img/04-stock-detail.png" target="_blank" rel="noopener"><img class="guide-img" src="/static/img/04-stock-detail.png" alt="Synthetic Add stock panel opened from the inventory list"></a>
+<p>In <a href="/inventory/">Inventory</a>, use the row actions to open a short editing panel. <strong>Add stock</strong> records a delivery and reason. <strong>Correct stock count</strong> records your shelf count and reason, never an issue. Close returns to your filtered list; unsaved changes need confirmation. <strong>Add multiple items</strong> opens a separate page to review and save up to 50 new items together.</p>
 <p>A stale-count error keeps your input but does not refresh the version automatically. Review current stock in another tab, then reopen the item and count again.</p>
 </div></section>
 <section class="card"><div class="hd"><h2>4. Undo a mistake</h2></div><div class="bd">
-<p>Open <a href="/issue/history/">Issue goods → History</a>, filter or page to the issue, then open it. Give a reason and choose <strong>Undo this issue</strong>. All goods in that issue return to Available, once only. Original names, quantities and staff remain in history.</p>
+<p>Open <a href="/issue/history/">History</a>, filter or page to the issue, then open it. Give a reason and choose <strong>Undo this issue</strong>. All goods in that issue return to Available, once only. Original names, quantities and staff remain in history.</p>
 <p><a href="/reports/">Reports</a> shows one report at a time. Its CSV and A4 PDF include all matching records with the same filters. Current net excludes all undone issues; Available stock is stock now.</p>
 <a href="/static/img/05-reports.png" target="_blank" rel="noopener"><img class="guide-img" src="/static/img/05-reports.png" alt="Synthetic report with shared filters and CSV/PDF downloads"></a>
 </div></section></div>

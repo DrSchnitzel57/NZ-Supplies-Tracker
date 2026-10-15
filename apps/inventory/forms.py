@@ -2,6 +2,7 @@ from django import forms
 
 from apps.common.forms import COUNT_MAX
 from apps.inventory.models import Item
+import uuid
 
 
 class ItemForm(forms.ModelForm):
@@ -30,3 +31,17 @@ class NewItemForm(ItemForm):
         super().__init__(*args, **kwargs)
         # Keep the pre-existing creation API: omitted unit means "each".
         self.fields['unit'].required = False
+
+
+class BatchItemForm(NewItemForm):
+    row_key = forms.CharField(max_length=64, widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields.pop('expected_version')
+        self.fields.pop('idempotency_key')
+        self.initial.setdefault('row_key', uuid.uuid4().hex)
+
+
+BatchItemFormSet = forms.formset_factory(BatchItemForm, extra=0, min_num=1,
+    max_num=50, absolute_max=50, validate_min=True, validate_max=True)

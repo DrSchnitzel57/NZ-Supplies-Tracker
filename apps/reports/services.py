@@ -182,7 +182,7 @@ def report_pdf(family, include_archived=False, *, filters=None):
             data += [[Paragraph(escape(field.replace('_', ' ').title()), cell),
                      Paragraph(escape(str(row.get(field) if row.get(field) is not None else '')).replace('\n', '<br/>'), cell)] for field in fields]
             table = Table(data, colWidths=[doc.width * .2, doc.width * .8], repeatRows=1, hAlign='LEFT', splitByRow=1, splitInRow=1)
-            table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0b5850')),
+            table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#006184')),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, -1), .3, colors.lightgrey)]))
             story += [table, Spacer(1, 12)]
     else:
@@ -193,7 +193,7 @@ def report_pdf(family, include_archived=False, *, filters=None):
             data.append([Paragraph('No matching records.', cell)] + [''] * (len(visible) - 1))
         widths = [doc.width * .6] + [doc.width * .4 / (len(visible) - 1)] * (len(visible) - 1)
         table = Table(data, colWidths=widths, repeatRows=1, hAlign='LEFT', splitByRow=1, splitInRow=1)
-        table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0b5850')),
+        table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#006184')),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('GRID', (0, 0), (-1, -1), .3, colors.lightgrey),
             ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6)]))
         story.append(table)

@@ -8,33 +8,13 @@
   <div class="kpi"><span class="rail"></span><div class="lab">Count corrections</div><div class="big tnum" data-corrections-for="{{ item.pk }}">{{ item.corrections_total }}</div><div class="note">Recounts &amp; fixes</div></div>
 </div>
 <p class="help">Available is the shelf count. “Given out” counts only current issues. If the shelf count is wrong, use “Correct stock count” with a reason — it records a correction, it does not invent or erase issues.</p>
-<p><a class="btn" href="/inventory/{{ item.pk }}/edit/">Edit details</a>
+<p><a class="btn" data-panel href="/inventory/{{ item.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit details</a><a class="btn" data-panel href="/inventory/{{ item.pk }}/stock/">Add stock</a><a class="btn" data-panel href="/inventory/{{ item.pk }}/count/">Correct stock count</a>
 {% if item.is_archived %}
 <form method="post" action="/inventory/{{ item.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>
 {% else %}
 <form method="post" action="/inventory/{{ item.pk }}/archive/" class="inline">{% csrf_token %}<button type="submit">Archive</button></form>
 {% endif %}
-<a class="btn" href="/inventory/">Back to inventory</a></p>
-
-<div class="grid two">
-<div class="card"><div class="hd"><h2>Add stock</h2></div><div class="bd">
-<form method="post" action="/inventory/{{ item.pk }}/add-stock/" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
-{% csrf_token %}
-{% include "components/form_fields.html" with form=receive_form %}
-<p><button type="submit" class="primary">Add stock</button></p>
-</form>
-</div></div>
-
-<div class="card"><div class="hd"><h2>Correct stock count</h2></div><div class="bd">
-<p class="help">Count what is actually on the shelf and enter it here. The difference is recorded as a correction with your reason. If someone else changed stock after you opened this page, you will be asked to refresh first.</p>
-<form method="post" action="/inventory/{{ item.pk }}/correct-count/" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
-{% csrf_token %}
-{% include "components/form_fields.html" with form=correct_form %}
-<p class="help">A stale count is not refreshed automatically. Your count and reason stay here; <a href="/inventory/{{ item.pk }}/" target="_blank" rel="noopener">review current stock in another tab</a>, then reopen this page to count again.</p>
-<p><button type="submit">Correct stock count</button></p>
-</form>
-</div></div>
-</div>
+<a class="btn" href="{{ return_to }}">Back to inventory</a></p>
 
 <div class="section-title">Recent stock changes</div>
 <div class="tablewrap"><table>

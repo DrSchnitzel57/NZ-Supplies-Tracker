@@ -1,14 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{% if mode == "create" %}Add a person{% else %}Edit {{ person.name }}{% endif %} — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><h1>{% if mode == "create" %}Add a person{% else %}Edit person{% endif %}</h1><div class="sub">Roster record · renames never rewrite past issue history</div></div>
-<p class="help">Names and IDs are used on issue records. Changing them here never rewrites past history — old records keep their original snapshot.</p>
+<div class="page-head"><div><h1>{% if mode == "create" %}Add a missionary{% else %}Edit missionary{% endif %}</h1><p class="sub">{% if person %}{{ person.name }} · {{ person.external_id }}{% else %}Missionary details{% endif %}</p></div></div>
 <div class="card"><div class="bd">
 <form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" %}
 <p class="help">Clear an optional field here to remove its value. Imports preserve blank fields. A conflicting edit keeps your input; reopen the current record and review before retrying.</p>
-<p><button type="submit" class="primary">{% if mode == "create" %}Add person{% else %}Save changes{% endif %}</button> <a class="btn" href="/roster/">Back to list</a></p>
+<p><button type="submit" class="primary">{% if mode == "create" %}Add missionary{% else %}Save changes{% endif %}</button> <a class="btn" href="{{ return_to|default:'/roster/' }}">Cancel</a></p>
 </form>
 </div></div>
 {% endblock %}

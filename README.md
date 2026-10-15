@@ -186,7 +186,7 @@ may appear while typing; this is normal. Expect `Created administrator`.
 Running the command again resets that account's password and signs it out.
 
 Sign in in the browser as `tracker-admin` with that temporary password. The
-application asks you to choose a new password before proceeding to Home.
+application asks you to choose a new password before proceeding to Overview.
 
 Before real use, complete the [sample test](#try-a-complete-workflow) with invented
 data. Do not later mix trial records into a real roster: arrange a separate empty
@@ -262,7 +262,7 @@ release version. The local-certificate warning described above may appear;
 `127.0.0.1` refers only to your own computer.
 
 Then open **https://127.0.0.1:18443/**. Sign in as `demo-admin` and change the
-temporary password when asked. Home should show an empty roster/inventory.
+temporary password when asked. Overview should show an empty roster/inventory.
 Follow the sample below to try the app.
 
 Stop the trial without deleting its records:
@@ -285,17 +285,18 @@ want to retain the trial. Do not share this trial address with other computers.
 
 Use these **invented** examples on an empty trial/evaluation installation:
 
-1. **Missionaries → Add a person:** enter External ID `DEMO-001` and Full name
+1. **Missionaries → Add a missionary:** enter External ID `DEMO-001` and Full name
    `Demo Missionary`. Leave optional fields blank and save.
 2. **Inventory → Add an item:** enter Category `Demo hygiene`, Item name
    `Demo soap`, Unit `each`, Opening quantity `10`, Low-stock alert level `2`
    and Reason `Demo opening stock`. Save; **Available** should be **10**.
-3. **Issue goods:** search and explicitly choose `Demo Missionary`. Select
-   `Demo soap`, enter quantity `2`, choose **Add to issue**, review the named
-   summary and choose **Issue goods**. Inventory should now show **8** available.
-4. Open that inventory item. Under **Add stock**, enter quantity `3` and reason
+3. **Issue supplies:** search and choose the `Demo Missionary` suggestion. Use
+   **Add** on the `Demo soap` catalogue row, set quantity `2` in the summary,
+   review the named recipient and choose **Issue supplies**. Inventory should now
+   show **8** available.
+4. Open **Add stock** from that item's row or profile. In the panel, enter quantity `3` and reason
    `Demo delivery`. Submit; Available should be **11**.
-5. **Issue goods → History:** open the issue from step 3. Give reason
+5. **History:** open the issue from step 3. Give reason
    `Demo undo test` and choose **Undo this issue**. Available should be **13**;
    the issue remains in history marked **Undone**.
 6. **Reports:** select **Available stock now** and choose **Show report**. Download

@@ -169,7 +169,7 @@ class ProductSafetyTests(TestCase):
         response = self.client.post(f'/inventory/{item.pk}/add-stock/', {
             'quantity': 'bad', 'reason': 'Keep delivery context', 'idempotency_key': 'keep-rx'})
         self.assertEqual(response.status_code, 400)
-        form = response.context['receive_form']
+        form = response.context['form']
         self.assertEqual(form['quantity'].value(), 'bad')
         self.assertEqual(form['reason'].value(), 'Keep delivery context')
         self.assertEqual(form['idempotency_key'].value(), 'keep-rx')

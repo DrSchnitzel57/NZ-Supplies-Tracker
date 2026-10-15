@@ -29,6 +29,8 @@
     if (w) w.hidden = !show;
   }
 
+  function clearFinderResults() { window.dispatchEvent(new Event("finder-expired")); }
+
   function refreshLiveCounts(data) {
     if (!data) return;
     document.querySelectorAll("[data-live-low]").forEach(function (node) {
@@ -86,6 +88,7 @@
     try {
       var dash = await fetch("/api/dashboard/", { credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
       if (dash.status === 401 || dash.status === 403) {
+        clearFinderResults();
         setStatus("sign-in needed", "warn");
         showSessionWarning(true);
         return;
@@ -94,6 +97,7 @@
       var dj = await dash.json();
       var stock = await fetch("/api/stock/", { credentials: "same-origin", headers: { "X-Requested-With": "fetch" } });
       if (stock.status === 401 || stock.status === 403) {
+        clearFinderResults();
         setStatus("sign-in needed", "warn");
         showSessionWarning(true);
         return;
@@ -131,6 +135,12 @@
     });
   }
 
+  function scrollableTables() {
+    document.querySelectorAll(".tablewrap").forEach(function(node) {
+      node.tabIndex = 0; node.setAttribute("role", "region"); node.setAttribute("aria-label", "Scrollable records");
+    });
+  }
+
   var EXPIRY_WARN_SECONDS = 5 * 60;
   var safeFormOwner = null;
   var uncertainSafeWrite = false;
@@ -139,6 +149,11 @@
   // shell (especially Sign out) as well as the submitted form's payload.
   window.refreshShellCsrf = function (token) {
     document.querySelectorAll('form input[name="csrfmiddlewaretoken"]').forEach(function (field) { field.value = token; });
+    // A recovered short-task frame shares the parent's cookie, so repair the
+    // original list shell too (notably Sign out) without replaying any form.
+    if (window.parent !== window) {
+      try { if (window.parent.refreshShellCsrf) window.parent.refreshShellCsrf(token); } catch (error) {}
+    }
   };
 
   window.addEventListener("beforeunload", function (event) {
@@ -151,7 +166,7 @@
       form.dataset.recoveryReady = "1";
       var pending = null;
       var busy = false;
-      var status = document.createElement("p"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite"); form.prepend(status);
+      var status = document.createElement("p"); status.className = "form-status"; status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite"); form.prepend(status);
       function freeze(value) {
         form.querySelectorAll("input:not([type=hidden]), select, textarea").forEach(function (field) { field.disabled = value; });
       }
@@ -166,14 +181,18 @@
           return;
         }
         safeFormOwner = form;
+        window.safeWritePending = true;
+        window.panelPending = true;
         busy = true;
         var button = form.querySelector("button[type=submit]"); button.disabled = true;
         var data = pending || new FormData(form);
         try {
           var identity = await fetch("/api/session/", {cache: "no-store", credentials: "same-origin"});
-          if (!identity.ok) { status.textContent = "Sign in as the same staff member in another tab, then retry here. Your input is retained; nothing was sent."; return; }
+          if (!identity.ok) { status.textContent = pending
+            ? "Sign in as the same staff member in another tab. The original request may already be saved; success is not confirmed. Retry that same request here deliberately."
+            : "Sign in as the same staff member in another tab, then retry here. Your input is retained; nothing was sent."; return; }
           var security = await identity.json();
-          if (security.user_id !== form.dataset.draftUser) { status.textContent = "This form belongs to a different account. Sign in as the original staff member; nothing was sent."; return; }
+          if (security.user_id !== form.dataset.draftUser) { status.textContent = "This form belongs to a different account. Sign in as the original staff member. " + (pending ? "The original request may already be saved; success is not confirmed." : "Nothing was sent."); return; }
           window.refreshShellCsrf(security.csrf_token);
           data.set("csrfmiddlewaretoken", security.csrf_token);
           var reply, text;
@@ -184,7 +203,7 @@
             pending = data; uncertainSafeWrite = true; freeze(true); status.textContent = "No reply — success is not confirmed. Retry this same request deliberately, or review the current record in another tab. Nothing is queued."; return;
           }
           if (reply.status >= 500) { pending = data; uncertainSafeWrite = true; freeze(true); status.textContent = "Server error — success is not confirmed. Retry deliberately or review the current record in another tab."; return; }
-          if (reply.status === 403) { status.textContent = "Security token changed. Your input is retained; retry here to refresh it safely."; return; }
+          if (reply.status === 403) { status.textContent = "Security token changed. Your input is retained; retry here to refresh it safely." + (pending ? " The original request may already be saved; success is not confirmed." : ""); return; }
           if (reply.redirected && new URL(reply.url).pathname.startsWith("/accounts/login/")) { status.textContent = "Sign in in another tab as the original staff member, then retry here."; return; }
           if (reply.redirected && new URL(reply.url).pathname === "/admin-area/reauth/") {
             status.textContent = "Confirm your password in another tab, then retry this retained form. ";
@@ -192,7 +211,7 @@
           }
           var result = new DOMParser().parseFromString(text, "text/html");
           var main = result.getElementById("main");
-          if (!main) { status.textContent = "Unexpected reply. Your input is retained; review the record before retrying."; return; }
+          if (!main) { pending = data; uncertainSafeWrite = true; freeze(true); status.textContent = "Unexpected reply — success is not confirmed. Retry the original request deliberately or review the record in another tab."; return; }
           pending = null;
           uncertainSafeWrite = false;
           document.getElementById("main").replaceChildren.apply(document.getElementById("main"), Array.from(main.childNodes).map(function (node) { return document.importNode(node, true); }));
@@ -200,13 +219,19 @@
           // destinations. Keep its existing URL for reload and relative links.
           if (reply.ok && reply.redirected) history.replaceState(null, "", reply.url);
           document.title = result.title;
-          safeForms(); preventDoubleSubmit();
+          safeForms(); preventDoubleSubmit(); scrollableTables();
+          window.dispatchEvent(new CustomEvent("safe-form-complete", {detail: {saved: reply.ok && reply.redirected,
+            message: result.querySelector(".messages")?.textContent.trim() || "Saved changes."}}));
           var errors = document.querySelector(".form-errors, .messages");
           if (errors) { errors.tabIndex = -1; errors.focus(); }
-        } catch (error) { status.textContent = "Cannot check sign-in while disconnected. Nothing was sent; your input is retained."; }
+        } catch (error) { status.textContent = pending
+          ? "Cannot check sign-in. The original request may already be saved; success is not confirmed. Keep this tab open and retry deliberately."
+          : "Cannot check sign-in while disconnected. Nothing was sent; your input is retained."; }
         finally {
           busy = false; button.disabled = false;
           if (!pending && safeFormOwner === form) safeFormOwner = null;
+          window.panelPending = !!pending;
+          window.safeWritePending = !!pending;
         }
       });
     });
@@ -234,24 +259,43 @@
     var menu = el("menu-toggle");
     if (menu) {
       document.documentElement.classList.add("js-menu");
+      function closeMenu() {
+        document.documentElement.classList.remove("menu-open"); menu.setAttribute("aria-expanded", "false");
+        document.querySelector(".main").inert = false; menu.focus();
+      }
       menu.addEventListener("click", function () {
         var open = document.documentElement.classList.toggle("menu-open");
         menu.setAttribute("aria-expanded", String(open));
-        if (open) el("navigation").querySelector("a").focus();
+        document.querySelector(".main").inert = open;
+        if (open) el("menu-close").focus();
       });
+      el("menu-close").addEventListener("click", closeMenu);
       document.addEventListener("keydown", function (event) {
         if (event.key === "Escape" && document.documentElement.classList.contains("menu-open")) {
-          document.documentElement.classList.remove("menu-open"); menu.setAttribute("aria-expanded", "false"); menu.focus();
+          closeMenu();
+        } else if (event.key === "Tab" && document.documentElement.classList.contains("menu-open")) {
+          var focusable = Array.from(el("navigation").querySelectorAll("a,button,summary")).filter(function(node) {return node.getClientRects().length;});
+          var first = focusable[0], last = focusable[focusable.length-1];
+          if (event.shiftKey && document.activeElement === first) {event.preventDefault();last.focus();}
+          if (!event.shiftKey && document.activeElement === last) {event.preventDefault();first.focus();}
         }
       });
     }
     document.querySelectorAll(".navlink").forEach(function (link) {
       if (link.pathname === location.pathname) link.setAttribute("aria-current", "page");
     });
+    var authApp = document.querySelector('.auth-app');
+    if (authApp && el('themeBtn')) authApp.querySelector('.top').append(el('themeBtn'));
     initTheme();
     preventDoubleSubmit();
     safeForms();
-    pollOnce();
-    setInterval(pollOnce, POLL_MS);
+    scrollableTables();
+    // Sign-in/password setup has no live operational state. Do not manufacture
+    // an expiry/draft warning from the expected unauthenticated API response.
+    if (document.body.dataset.live === '1') {
+      pollOnce();
+      setInterval(pollOnce, POLL_MS);
+    }
   });
+  window.addEventListener("content-refreshed", function() {safeForms(); preventDoubleSubmit(); scrollableTables();});
 })();
