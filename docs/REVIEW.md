@@ -470,7 +470,7 @@ remain the absent collected-static directory and ReportLab deprecation.
 **Pending:** independent re-review and all user-owned staff/source/actual-host
 manual gates described above. Certificate trust remains deferred and host-local
 backups still do not protect against host/disk loss.
-# Milestone 07 — implementation evidence (in progress)
+# Milestone 07 — professional redesign implementation evidence
 
 This section is implementation-side evidence, not independent approval. Synthetic
 data only; private source fidelity, staff trial, target host/restore/network and
@@ -500,5 +500,105 @@ short contextual copy. No Church assets, remote UI dependencies or schema change
 Panels intentionally reuse full bound pages in same-origin dialogs, retaining the
 tested write/recovery path rather than implementing a competing client mutation.
 
-Validation and rendered evidence will be recorded below after execution. **Not
-yet accepted; no SHIP claim while implementation or validation is incomplete.**
+## Behavioural and rendered evidence
+
+`tests/test_professional_redesign.py` covers Unicode/cross-field matching,
+exact-ID priority, bounded active-only lookup, no idle renewal, expiry, sorted
+pagination and blank filters, safe list-return URLs, complete low-stock messages,
+review-before-save, 50/51 bounds, duplicates including archives, rollback after
+the first row, maintenance, changed-payload/other-actor retries and competing
+batches. These extend, not replace, the stock/auth/import/ledger regressions.
+
+`tests/browser/test_professional_redesign.py` uses real Chromium with internet
+hosts blocked. It checks delayed out-of-order finder replies, explicit keyboard
+identity selection, grouped global results and failures, actual clipboard/mail
+content, panel dirty cancellation/focus, vertical and horizontal list return,
+same-user panel recovery and parent-shell CSRF repair, blocked competing tasks
+during an uncertain save, deferred-script readiness before exposing a panel,
+safe cancellation of frame-blocked expired-session loads, quiet signed-out
+screens without false draft-expiry warnings, and deliberate batch/receipt retries after the server
+commits but its reply is lost. Existing selector-based tests now exercise the
+new controls; the old uncertain-write and action-URL regressions still assert
+no competing POST, exactly one movement, retained original key/input, and usable
+parent GET pagination after a rejected panel action.
+
+The populated rendering test creates **95 synthetic people, 224 items and 210
+issues**, including low/out-of-stock cases, long labels and Māori macrons. It
+captures Overview, roster, grouped Inventory, the fifth history page, category
+reports and issuing at **1440/1280/390px, light and dark**. It checks page overflow,
+200% CSS zoom with actual non-overlapping stacked catalogue/summary geometry,
+and reduced motion. This is a CSS-zoom stress test, not a claim of automated
+browser-zoom or accessibility certification. Existing tests also exercise real
+keyboard focus, narrow navigation and primary-button contrast ≥4.5:1.
+
+Implementation inspection of the resulting screens found and fixed oversized
+filter checkboxes, unnecessarily stretched empty attention panels, zoom overlap
+and full-page screenshot sticky-header offsets. A repeated mobile run also
+exposed a panel-readiness race: task forms now remain hidden until deferred
+recovery and parent-completion handlers are ready. A controlled delayed-script
+probe and three mobile repetitions cover it. Signed-out pages no longer poll
+operational APIs or show the resulting false draft-expiry warning. Batch fieldsets
+now use full-width three-column fields on desktop and a single column on mobile,
+with explicit compact-action geometry checks; this fixes a stretched Remove row
+control caught in the actual error capture. Narrow screens keep failure/expiry
+warnings visible; a connection failure also shows the last-refresh indicator.
+Healthy connection chatter stays quiet.
+Final inspection checks long
+labels wrapping, aligned availability, visible recipient identity/summary and
+short-task error/retry messages; it is not the user's final visual acceptance.
+The in-app guide's four committed images in `static/img/` are refreshed from
+synthetic real-browser flows, including the actual Add stock panel.
+
+Reproduce the populated matrix and failure captures with
+`.venv/bin/python -m pytest tests/browser/test_professional_redesign.py`.
+Generated evidence is intentionally ignored at `.local/review/07/` (not an
+implementation dependency): `{width}-{theme}-{screen}.png`, `200-percent-zoom.png`,
+`search-error.png`, `panel-{dirty,uncertain}.png`, `batch-{duplicate,uncertain}.png`
+and `issue-{shortage,offline,expired}.png`. Stock (224 rows), roster (95 people)
+and history (210 issues) exports are rendered by the checked subprocess
+`tests/pdf_probe.py`: every page has embedded Noto Sans, Māori text, A4 geometry
+and word boxes within 25pt of the page edges. Actual first-page raster images
+are retained alongside the PDFs; summary PDFs retain portrait A4 and wide records
+use labeled landscape A4 blocks. Existing suites cover all nine report families,
+complete formula-safe CSV, source preservation, import approval and current-net
+versus historical-snapshot semantics.
+
+## Execution status
+
+Application code is committed at `4613c43`, with the synthetic guide/trial update
+at `65c4435`. **Automated acceptance: PASS.** Final checks ran serially: 241
+Django tests, 53 internet-blocked Chromium cases (no skips) and 21 real isolated
+Compose/TLS/recovery tests pass. No unresolved implementation blockers were
+found in these checks or the rendered inspection described above. This is not
+independent review or rollout approval. An earlier overlapped Django/deployment invocation was invalid: pytest-django initializes
+the same file-backed test database even for the container suite. Its lock/missing
+table errors are runner contamination, not acceptance evidence. All three suites
+must be serial; `AGENTS.md` now states this explicitly. The initial 120-second
+test timeout was also insufficient; full suites use a longer runner timeout.
+
+| Acceptance command / behaviour | Result |
+|---|---|
+| `.venv/bin/python manage.py test --noinput` | PASS — 241 tests |
+| `.venv/bin/python -m pytest tests/browser` | PASS — 53 real Chromium cases, no skips; internet hosts blocked |
+| `.venv/bin/python -m pytest tests/deployment` | PASS — 21 real isolated Compose/TLS/recovery tests |
+| `.venv/bin/python manage.py check` | PASS — no issues |
+| `.venv/bin/python manage.py makemigrations --check --dry-run` | PASS — no changes detected |
+| `docker compose -f compose.test.yaml config --quiet` | PASS — exit 0 |
+| `docker build -t supplies-tracker:test .` | PASS — final application/assets built |
+| `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh` | PASS — exit 0 |
+| `git diff --check` | PASS — exit 0 |
+| Capability/design and populated render/PDF/error coverage | PASS — recorded above; no unresolved implementation blockers; manual gates separate |
+
+Non-blocking warnings remain the absent development `staticfiles/` directory
+(the image collects static assets) and ReportLab's Python 3.13 deprecation warning.
+
+## Separate re-review and manual gates — not performed
+
+- Independent review of milestone 07, including the preserved regression intent.
+- Representative staff trial without coaching, and the user's final visual acceptance.
+- Private-source fidelity against the operator's original data; no private HTML or real data was used here.
+- Target-host LAN/TLS/networking, versioned image download, reboot/update and recovery/restore checks.
+
+Certificate trust setup remains deferred. Host-local backups do not protect
+against host/disk loss. Automated acceptance does not authorize publishing,
+real-data initialization or rollout.
