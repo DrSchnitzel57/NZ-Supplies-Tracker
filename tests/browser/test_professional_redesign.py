@@ -1,5 +1,6 @@
 """07 behavioural UI coverage and populated rendered evidence, internet blocked."""
 from pathlib import Path
+import pytest
 
 from playwright.sync_api import expect
 
@@ -17,6 +18,21 @@ def capture(page, name):
     evidence = Path('.local/review/07')
     evidence.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(evidence / name), full_page=True)
+
+
+def test_sign_in_has_no_false_draft_expiry_or_operational_poll(page, live_server, externals):
+    api_requests = []
+    page.on('request', lambda request: api_requests.append(request.url) if '/api/' in request.url else None)
+    page.goto(live_server.url + '/accounts/login/')
+    expect(page.locator('.auth-app')).to_be_visible()
+    expect(page.locator('#navigation')).to_be_hidden()
+    expect(page.locator('#session-warning')).to_be_hidden()
+    expect(page.locator('#connection-status')).to_be_hidden()
+    expect(page.locator('.top #themeBtn')).to_be_visible()
+    page.click('#themeBtn')
+    assert page.locator('html').get_attribute('data-theme') == 'dark'
+    assert api_requests == []
+    assert_no_internet(externals)
 
 
 def test_finder_rejects_out_of_order_results_and_keeps_identity_explicit(page, live_server, externals):
@@ -152,7 +168,8 @@ def test_panel_uncertain_receipt_cannot_close_or_duplicate(page, live_server, ex
     assert_no_internet(externals)
 
 
-def test_mobile_panel_preserves_horizontal_list_position(mobile_page, live_server, externals):
+@pytest.mark.parametrize('_attempt', range(3))
+def test_mobile_panel_preserves_horizontal_list_position(mobile_page, live_server, externals, _attempt):
     staff, _ = staff_login(mobile_page, live_server, 'mobile-panel07')
     item = make_item(staff, category='Mobile', name='Synthetic mobile supply')
     mobile_page.goto(live_server.url + '/inventory/?q=mobile')
@@ -193,6 +210,46 @@ def test_panel_same_user_recovery_repairs_parent_shell_csrf(page, live_server, e
     page.wait_for_url('**/accounts/login/')
     item.refresh_from_db()
     assert item.on_hand == 12
+    assert_no_internet(externals)
+
+
+def test_panel_hides_form_until_recovery_and_completion_handlers_are_ready(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, 'panel-ready07')
+    item = make_item(staff)
+    page.goto(live_server.url + '/inventory/')
+    held = []
+    page.route('**/static/issuing.js', lambda route: held.append(route))
+    with page.expect_request('**/static/issuing.js'):
+        page.locator(f'a[data-panel][href="/inventory/{item.pk}/stock/"]').click()
+    panel = page.frame_locator('.side-dialog iframe')
+    expect(panel.locator('input[name=quantity]')).to_have_count(1)
+    expect(page.locator('body > .side-dialog iframe')).to_be_hidden()
+    held[0].continue_()
+    expect(panel.locator('input[name=quantity]')).to_be_visible()
+    expect(panel.locator('main form')).to_have_attribute('data-recovery-ready', '1')
+    expect(panel.locator('.page-back')).to_be_hidden()
+    panel.locator('input[name=quantity]').fill('2')
+    panel.locator('input[name=reason]').fill('Synthetic fast interaction')
+    panel.locator('main button[type=submit]').click()
+    expect(page.locator('body > .side-dialog')).not_to_be_visible()
+    item.refresh_from_db()
+    assert item.on_hand == 12
+    assert_no_internet(externals)
+
+
+def test_expired_panel_load_has_safe_fallback_and_can_close(page, live_server, externals):
+    staff, _ = staff_login(page, live_server, 'panel-expiry07')
+    item = make_item(staff)
+    page.goto(live_server.url + '/inventory/')
+    other = page.context.new_page()
+    other.goto(live_server.url + '/')
+    other.click("form[action='/accounts/logout/'] button")
+    page.locator(f'a[data-panel][href="/inventory/{item.pk}/stock/"]').click()
+    expect(page.locator('body > .side-dialog > p')).to_contain_text('Unable to open this panel')
+    expect(page.locator('body > .side-dialog > a')).to_have_attribute('target', '_blank')
+    page.locator('body > .side-dialog > button').click()
+    expect(page.locator('body > .side-dialog')).not_to_be_visible()
+    assert StockMovement.objects.filter(item=item, kind=StockMovement.RECEIPT).count() == 0
     assert_no_internet(externals)
 
 

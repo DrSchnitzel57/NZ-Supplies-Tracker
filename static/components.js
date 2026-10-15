@@ -95,24 +95,35 @@
   var loading = document.createElement("p"); loading.setAttribute("role", "status");
   var fallback = document.createElement("a"); fallback.textContent = "Open full page"; fallback.target = "_blank"; fallback.rel = "noopener";
   var frame = document.createElement("iframe"); frame.title = "Edit inventory";
+  frame.hidden = true;
   dialog.append(closeButton, fallback, loading, frame); document.body.append(dialog);
   var opener, originalUrl;
+  function panelState() {
+    try { return {dirty: !!frame.contentWindow.panelDirty, pending: !!frame.contentWindow.panelPending}; }
+    catch (error) { return {dirty: false, pending: false}; } // Blocked sign-in frame: no task form loaded.
+  }
   window.addEventListener("beforeunload", function(event) {
-    if (dialog.open && (frame.contentWindow.panelDirty || frame.contentWindow.panelPending)) { event.preventDefault(); event.returnValue = ""; }
+    var state = panelState();
+    if (dialog.open && (state.dirty || state.pending)) { event.preventDefault(); event.returnValue = ""; }
   });
   function closePanel(event) {
     if (event) event.preventDefault();
     var child = frame.contentWindow;
-    if (child.panelPending) { child.alert("Resolve the pending request before closing. Success is not confirmed."); return; }
-    if (child.panelDirty && !window.confirm("Discard unsaved changes?")) return;
+    var state = panelState();
+    if (state.pending) { child.alert("Resolve the pending request before closing. Success is not confirmed."); return; }
+    if (state.dirty && !window.confirm("Discard unsaved changes?")) return;
     dialog.close(); frame.src = "about:blank"; if (opener) opener.focus();
   }
   closeButton.addEventListener("click", closePanel); dialog.addEventListener("cancel", closePanel);
   document.addEventListener("click", function (event) {
     var link = event.target.closest("a[data-panel]"); if (!link || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (window.safeWritePending || (dialog.open && frame.contentWindow.panelPending)) { event.preventDefault(); window.alert("Resolve the pending request before opening another form."); return; }
+    if (window.safeWritePending || (dialog.open && panelState().pending)) { event.preventDefault(); window.alert("Resolve the pending request before opening another form."); return; }
     if (dialog.open) { event.preventDefault(); return; }
     event.preventDefault(); opener = link; originalUrl = location.href;
+    // Do not expose a form before its deferred recovery handlers and the parent
+    // completion listener are ready. A fast native POST could otherwise leave
+    // the task frame on the globally frame-protected detail page.
+    frame.hidden = true;
     loading.textContent = "Loading…"; fallback.href = link.href;
     if (location.pathname === "/inventory/") {
       var fallbackUrl = new URL(link.href); fallbackUrl.searchParams.set("return_to", location.pathname + location.search); fallback.href = fallbackUrl.href;
@@ -127,6 +138,10 @@
     var child = frame.contentWindow, doc = frame.contentDocument;
     doc.documentElement.classList.add("in-panel");
     var form = doc.querySelector("main form[data-safe-form]");
+    if (form && form.dataset.recoveryReady !== "1") {
+      loading.textContent = "Task controls could not load. Open the full page to continue."; return;
+    }
+    frame.hidden = false;
     if (form) {
       doc.addEventListener("input", function () { child.panelDirty = true; });
       form.querySelector("input:not([type=hidden]),select,textarea")?.focus();

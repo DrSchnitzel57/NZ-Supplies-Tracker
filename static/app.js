@@ -284,12 +284,18 @@
     document.querySelectorAll(".navlink").forEach(function (link) {
       if (link.pathname === location.pathname) link.setAttribute("aria-current", "page");
     });
+    var authApp = document.querySelector('.auth-app');
+    if (authApp && el('themeBtn')) authApp.querySelector('.top').append(el('themeBtn'));
     initTheme();
     preventDoubleSubmit();
     safeForms();
     scrollableTables();
-    pollOnce();
-    setInterval(pollOnce, POLL_MS);
+    // Sign-in/password setup has no live operational state. Do not manufacture
+    // an expiry/draft warning from the expected unauthenticated API response.
+    if (document.body.dataset.live === '1') {
+      pollOnce();
+      setInterval(pollOnce, POLL_MS);
+    }
   });
   window.addEventListener("content-refreshed", function() {safeForms(); preventDoubleSubmit(); scrollableTables();});
 })();
