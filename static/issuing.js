@@ -5,9 +5,8 @@
   if (!form) return;
   var person = document.getElementById("person-select");
   var search = document.getElementById("person-filter");
-  var catalogue = document.getElementById("catalogue-select");
+  var catalogue = document.getElementById("catalogue-rows");
   var itemSearch = document.getElementById("item-filter");
-  var qty = document.getElementById("catalogue-qty");
   var list = document.getElementById("issue-rows");
   var note = document.getElementById("issue-note");
   var feedback = document.getElementById("issue-feedback");
@@ -16,10 +15,10 @@
   var dirty = list.children.length > 0 || !!note.value;
   var sending = false;
   var uncertain = null;
-  // Catalogue controls are an enhancement, not extra issue lines on submission.
-  catalogue.removeAttribute("name");
-  qty.removeAttribute("name");
-  document.getElementById("add-item").hidden = false;
+  var selectedName = document.getElementById("selected-name");
+  var selectedId = document.getElementById("selected-id");
+  var picker = document.getElementById("recipient-picker");
+  var identityCard = document.getElementById("selected-person");
 
   function say(text) { feedback.textContent = text; }
   function rows() { return Array.from(list.querySelectorAll(".issue-row")); }
@@ -28,20 +27,12 @@
       row.querySelector("input[type=hidden]").name = "item-" + i;
       row.querySelector("input[type=number]").name = "qty-" + i;
     });
-    document.getElementById("draft-count").textContent = rows().length + " of 50 distinct items";
+    var units = rows().reduce(function(total, row) { return total + Number(row.querySelector("input[type=number]").value || 0); }, 0);
+    document.getElementById("draft-count").textContent = rows().length + " of 50 distinct items · " + units + " units";
     document.getElementById("recipient-summary").textContent = chosen
-      ? "Issue to: " + person.options[person.selectedIndex].textContent
-      : "Choose the recipient above. Nothing can be issued without a recipient.";
-  }
-  function filter(select, input, count, noun) {
-    var q = input.value.trim().toLowerCase();
-    var matches = 0;
-    Array.from(select.options).forEach(function (option) {
-      option.hidden = !!option.value && !option.textContent.toLowerCase().includes(q);
-      if (option.value && !option.hidden) matches++;
-    });
-    document.getElementById(count).textContent = matches + " matching " + noun;
-    return Array.from(select.options).filter(function (o) { return o.value && !o.hidden; });
+      ? "For " + selectedName.textContent + " (" + selectedId.textContent + ")"
+      : "Choose a recipient to continue.";
+    document.getElementById("issue-submit").textContent = chosen ? "Issue supplies to " + selectedName.textContent : "Issue supplies";
   }
   function confirmRecipient(next) {
     if (next === chosen) return true;
@@ -55,69 +46,60 @@
     renumber();
     return true;
   }
-  search.addEventListener("input", function () {
-    // Never submit an old UUID whose selected label no longer matches search.
-    if (chosen && !person.options[person.selectedIndex].textContent.toLowerCase().includes(search.value.trim().toLowerCase())) {
-      if (!confirmRecipient("")) { search.value = person.options[person.selectedIndex].textContent; }
-      else person.value = "";
-    }
-    filter(person, search, "person-count", "missionaries");
-    person.size = search.value ? 6 : 1;
+  document.getElementById("person-finder").addEventListener("finder-select", function(event) {
+    var result = event.detail;
+    if (!confirmRecipient(result.id)) return;
+    person.value = result.id; selectedName.textContent = result.label; selectedId.textContent = result.detail;
+    picker.hidden = true; identityCard.hidden = false; renumber(); document.getElementById("change-person").focus();
   });
-  search.addEventListener("keydown", function (event) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      var matches = filter(person, search, "person-count", "missionaries");
-      if (matches.length && confirmRecipient(matches[0].value)) {
-        person.value = chosen; person.size = 1; renumber();
-      }
-    } else if (event.key === "ArrowDown") { event.preventDefault(); person.focus(); }
+  document.getElementById("change-person").addEventListener("click", function() {
+    if (!confirmRecipient("")) return;
+    person.value = ""; picker.hidden = false; identityCard.hidden = true;
+    document.getElementById("person-finder").dispatchEvent(new Event("finder-clear")); search.focus();
   });
-  person.addEventListener("change", function () {
-    if (confirmRecipient(person.value)) { person.size = 1; search.value = ""; filter(person, search, "person-count", "missionaries"); }
-    renumber();
-  });
-  itemSearch.addEventListener("input", function () {
-    var matches = filter(catalogue, itemSearch, "item-count", "items");
-    if (catalogue.selectedOptions[0] && catalogue.selectedOptions[0].hidden) catalogue.value = "";
-    if (!matches.length) catalogue.value = "";
-  });
-  itemSearch.addEventListener("keydown", function (event) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      var matches = filter(catalogue, itemSearch, "item-count", "items");
-      if (matches.length) { catalogue.value = matches[0].value; catalogue.focus(); }
-    }
-  });
-  function addItem() {
-    if (!catalogue.value || !qty.checkValidity()) { say("Choose an item and a positive whole quantity."); return; }
-    var amount = Number(qty.value);
-    var existing = rows().find(function (r) { return r.dataset.item === catalogue.value; });
+  var catalogueRows = Array.from(catalogue.querySelectorAll(".catalogue-row"));
+  function filterCatalogue() {
+    var terms = itemSearch.value.trim().toLowerCase().slice(0,160).split(/\s+/).slice(0,8);
+    var matching = catalogueRows.filter(function(row) {
+      row.hidden = !terms.every(function(term) { return row.dataset.label.toLowerCase().includes(term); }); return !row.hidden;
+    });
+    matching.sort(function(a,b) {
+      var query = itemSearch.value.trim().toLowerCase();
+      return Number(b.querySelector("strong").textContent.toLowerCase() === query) - Number(a.querySelector("strong").textContent.toLowerCase() === query);
+    }).forEach(function(row) { catalogue.append(row); });
+    document.getElementById("item-count").textContent = matching.length + " matching items";
+    document.getElementById("catalogue-empty").hidden = !!matching.length;
+  }
+  itemSearch.addEventListener("input", filterCatalogue);
+  itemSearch.addEventListener("keydown", function(event) { if (event.key === "Enter") event.preventDefault(); });
+  function addItem(source) {
+    var itemId = source.dataset.item, labelText = source.dataset.label;
+    var amount = 1;
+    var existing = rows().find(function (r) { return r.dataset.item === itemId; });
     if (existing) {
       var input = existing.querySelector("input[type=number]");
       input.value = Number(input.value || 0) + amount;
       input.focus();
     } else {
       if (rows().length >= 50) { say("An issue can contain at most 50 distinct items."); return; }
-      var option = catalogue.selectedOptions[0];
-      var row = document.createElement("div"); row.className = "issue-row"; row.dataset.item = catalogue.value;
-      var id = document.createElement("input"); id.type = "hidden"; id.value = catalogue.value;
-      var label = document.createElement("span"); label.className = "line-label"; label.textContent = option.dataset.label;
+      var row = document.createElement("div"); row.className = "issue-row"; row.dataset.item = itemId;
+      var id = document.createElement("input"); id.type = "hidden"; id.value = itemId;
+      var label = document.createElement("span"); label.className = "line-label"; label.textContent = labelText;
       var quantityLabel = document.createElement("label"); quantityLabel.textContent = "Quantity ";
       var quantity = document.createElement("input"); quantity.type = "number"; quantity.min = "1";
       quantity.max = "999999999"; quantity.required = true; quantity.value = amount;
       quantityLabel.append(quantity);
       var remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-row";
-      remove.textContent = "Remove"; remove.setAttribute("aria-label", "Remove " + option.dataset.label);
+      remove.textContent = "Remove"; remove.setAttribute("aria-label", "Remove " + labelText);
       row.append(id, label, quantityLabel, remove); list.append(row);
     }
     dirty = true; renumber(); say("Added to the list. Review the recipient and quantities before issuing.");
   }
-  document.getElementById("add-item").addEventListener("click", addItem);
+  catalogue.addEventListener("click", function(event) { if (event.target.closest(".catalogue-add")) addItem(event.target.closest(".catalogue-row")); });
   list.addEventListener("click", function (event) {
     if (event.target.classList.contains("remove-row")) { event.target.closest(".issue-row").remove(); dirty = true; renumber(); }
   });
-  form.addEventListener("input", function () { dirty = true; });
+  form.addEventListener("input", function () { dirty = true; renumber(); });
 
   function freeze(value) {
     form.querySelectorAll("input:not([type=hidden]), select, button[type=button]").forEach(function (control) { control.disabled = value; });
@@ -125,6 +107,7 @@
   async function submit(source, event) {
     event.preventDefault();
     if (sending) return;
+    if (source === form && !chosen) { say("Choose a missionary from the suggestions first."); search.focus(); return; }
     if (source === form && !rows().length) { say("Add at least one item to the issue."); return; }
     sending = true;
     var button = source.querySelector("button[type=submit]");
@@ -155,7 +138,9 @@
         say("Server error — success is not confirmed. Retry this same request deliberately, or check History in another tab."); return;
       }
       if (response.ok && response.headers.get("Content-Type").includes("application/json")) {
-        var saved = JSON.parse(html);
+        var saved;
+        try { saved = JSON.parse(html); if (!saved.redirect_url || !saved.redirect_url.startsWith("/issue/")) throw new Error("Missing result"); }
+        catch (error) { uncertain = payload; freeze(true); say("Unexpected reply — success is not confirmed. Retry the original request deliberately, or check History in another tab."); return; }
         dirty = false; uncertain = null; window.location.assign(saved.redirect_url); return;
       }
       var result = new DOMParser().parseFromString(html, "text/html");
@@ -165,6 +150,7 @@
       if (response.ok && response.redirected) {
         dirty = false; uncertain = null; window.location.assign(response.url); return;
       }
+      if (!result.querySelector("main")) { uncertain = payload; freeze(true); say("Unexpected reply — success is not confirmed. Retry the original request deliberately, or check History in another tab."); return; }
       uncertain = null; freeze(false);
       var shortage = result.querySelector("form[action='/issue/confirm/']");
       if (shortage) {
@@ -176,7 +162,7 @@
         confirmation.removeAttribute("data-once");
         confirmation.addEventListener("submit", function (e) {
           if (e.submitter && e.submitter.classList.contains("back-draft")) {
-            e.preventDefault(); review.hidden = true; form.hidden = false; person.focus();
+            e.preventDefault(); review.hidden = true; form.hidden = false; document.getElementById("change-person").focus();
           } else submit(confirmation, e);
         });
         form.hidden = true; review.hidden = false; heading.tabIndex = -1; heading.focus();
@@ -194,12 +180,11 @@
   form.addEventListener("submit", function (e) { submit(form, e); });
   window.addEventListener("beforeunload", function (e) { if (dirty || uncertain) { e.preventDefault(); e.returnValue = ""; } });
   window.updateIssueAvailability = function (availability) {
-    Array.from(catalogue.options).forEach(function (option) {
-      var stock = availability[option.value];
-      if (stock) option.textContent = option.dataset.label + " — Available: " + stock.available + (stock.low ? " (low)" : "");
+    catalogueRows.forEach(function (row) {
+      var stock = availability[row.dataset.item];
+      if (stock) row.querySelector("[data-catalogue-stock]").textContent = stock.available;
     });
   };
-  filter(person, search, "person-count", "missionaries");
-  filter(catalogue, itemSearch, "item-count", "items");
+  filterCatalogue();
   renumber();
 })();

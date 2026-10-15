@@ -82,6 +82,7 @@ def _form_context(draft_key=None, draft_lines=None, missionary_id="", note=""):
         "draft_key": draft_key or str(uuid.uuid4().hex),
         "draft_lines": draft_lines,
         "missionary_id": missionary_id,
+        "selected_person": next((p for p in missionaries if str(p.pk) == str(missionary_id)), None),
         "note": note,
     }
 
@@ -125,7 +126,7 @@ def issue_main(request):
 @require_http_methods(["POST"])
 def issue_quick(request):
     """Single-line issue from a missionary profile; same shared service."""
-    missionary_id = (request.POST.get("missionary_id") or "").strip()
+    missionary_id = (request.POST.get("missionary_id") or request.POST.get("fallback_missionary_id") or "").strip()
     try:
         person = Missionary.objects.get(pk=missionary_id) if missionary_id else None
     except (Missionary.DoesNotExist, ValueError, TypeError, DjangoValidationError):
@@ -137,7 +138,7 @@ def issue_quick(request):
 
 
 def _handle_issue_post(request, *, return_to, template, quick_person=None):
-    missionary_id = (request.POST.get("missionary_id") or "").strip()
+    missionary_id = (request.POST.get("missionary_id") or request.POST.get("fallback_missionary_id") or "").strip()
     note = request.POST.get("note", "")
     idem = (request.POST.get("idempotency_key") or "").strip() or str(
         uuid.uuid4().hex
