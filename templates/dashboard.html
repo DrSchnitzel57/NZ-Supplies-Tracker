@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Home — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Home</h1><div class="sub">Shared supplies and recent work.</div></div>
-<div class="toolbar quick-actions"><a class="btn primary" href="/issue/">Issue goods</a><a class="btn" href="/inventory/">Find an item to add stock</a><a class="btn" href="/guide/">Quick-start guide</a></div>
+<div class="page-head"><div><h1>Overview</h1><p class="sub">Supplies and recent activity</p></div><a class="btn primary" href="/issue/">Issue supplies</a></div>
 <div class="grid kpis">
 <a class="kpi good" href="/roster/"><div class="lab">Active missionaries</div><div class="big tnum" data-live-people>{{ counts.people }}</div></a>
 <a class="kpi" href="/inventory/"><div class="lab">Active items</div><div class="big tnum" data-live-items>{{ counts.items }}</div></a>
