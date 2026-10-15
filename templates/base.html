@@ -8,9 +8,9 @@
 <link rel="stylesheet" href="/static/app.css">
 <script>try{var t=localStorage.getItem("mtc-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
 </head>
-<body>
+<body data-live="{% if user.is_authenticated and not user.must_change_password %}1{% else %}0{% endif %}">
 <a class="skip" href="#main">Skip to main content</a>
-<div class="app">
+<div class="app{% if not user.is_authenticated or user.must_change_password %} auth-app{% endif %}">
 <aside class="side" id="navigation" aria-label="Navigation">
 <button type="button" id="menu-close">Close menu</button>
 <a class="brand" href="/"><span class="mark" aria-hidden="true">M</span><span><span class="t1">MTC Supplies</span><br><span class="t2">New Zealand MTC</span></span></a>

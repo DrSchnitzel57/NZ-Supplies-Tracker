@@ -7,5 +7,5 @@
 {% if action == 'correct-count' %}<p class="help">Enter the amount counted on the shelf. This records the difference, not an issue. If stock changes, reopen this form and count again.</p>{% endif %}
 {% if action == 'correct-count' %}<p class="help">Your count and reason stay here after a conflict; <a href="/inventory/{{ item.pk }}/" target="_blank" rel="noopener">review current stock in another tab</a>, then reopen this form to count again.</p>{% endif %}
 <button type="submit" class="primary">{{ heading }}</button>
-</form><p><a href="/inventory/{{ item.pk }}/?return_to={{ return_to|urlencode }}">Back to item</a></p>
+</form><p class="page-back"><a href="/inventory/{{ item.pk }}/?return_to={{ return_to|urlencode }}">Back to item</a></p>
 {% endblock %}
