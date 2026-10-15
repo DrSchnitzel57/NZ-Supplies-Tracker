@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head"><div><h1>{% if reviewed %}Review new items{% else %}Add multiple items{% endif %}</h1><p class="sub">Up to 50 items. All items save together, or none do.</p></div><a href="/inventory/">Back to inventory</a></div>
+{% if batch_error %}<p class="form-errors" role="alert">{{ batch_error }}</p>{% endif %}
+{{ formset.non_form_errors }}
+<form method="post" id="batch-form" class="stack" {% if reviewed %}data-safe-form data-draft-user="{{ user.pk }}"{% endif %}>
+{% csrf_token %}<input type="hidden" name="idempotency_key" value="{{ batch_key }}">{{ formset.management_form }}
+{% if reviewed %}<input type="hidden" name="confirm" value="1"><p class="notice">Review all {{ formset|length }} items below. Saving creates each item and records its opening stock. Existing or duplicate items are rejected.</p>{% endif %}
+<div id="batch-rows">{% for form in formset %}<fieldset class="batch-row"><legend>Item {{ forloop.counter }}</legend>{% include "components/form_fields.html" %}{% if not reviewed %}<button type="button" class="batch-remove">Remove row</button>{% endif %}</fieldset>{% endfor %}</div>
+{% if not reviewed %}<button type="button" id="batch-add">Add another item</button><template id="batch-empty"><fieldset class="batch-row"><legend>New item</legend>{% include "components/form_fields.html" with form=formset.empty_form %}<button type="button" class="batch-remove">Remove row</button></fieldset></template>{% endif %}
+<button type="submit" class="primary">{% if reviewed %}Save all items{% else %}Review items{% endif %}</button>
+<p class="help">This draft lives in the open tab only. Nothing is queued or saved until you choose Save all items. Category, name and size identify an item, ignoring case and extra spaces.</p>
+</form>{% endblock %}

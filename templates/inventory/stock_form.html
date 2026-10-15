@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head"><div><h1>{{ heading }}</h1><p class="sub">{{ item }}</p></div></div>
+<p>Available now: <strong>{{ item.on_hand }}</strong> {{ item.unit }}</p>
+<form method="post" action="/inventory/{{ item.pk }}/{{ action }}/" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
+{% csrf_token %}{% include "components/form_fields.html" %}
+{% if action == 'correct-count' %}<p class="help">Enter the amount counted on the shelf. This records the difference, not an issue. If stock changes, reopen this form and count again.</p>{% endif %}
+<button type="submit" class="primary">{{ heading }}</button>
+</form><p><a href="/inventory/{{ item.pk }}/">Back to item</a></p>
+{% endblock %}
