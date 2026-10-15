@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}User accounts — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Accounts</h1><p class="sub">Administration / Staff access</p></div></div>
-<p class="help">Staff must change a temporary password on first sign-in. Deactivating an account signs it out everywhere.</p>
+<div class="page-head"><h1>User accounts</h1><div class="sub">Administrator-only · temporary passwords must change on first sign-in</div></div>
+<p class="help">Administrator-only. New accounts get a temporary password and must change it on first sign-in. Deactivating signs them out everywhere.</p>
 {% if not fresh %}<p class="help"><a href="/admin-area/reauth/?next=/accounts/users/">Confirm your password before changing accounts</a>. Expired confirmation returns here; enter the temporary password again and resubmit. Passwords are never kept after an error.</p>{% endif %}
 <div class="card"><div class="hd"><h2>Create an account</h2></div><div class="bd">
 <form method="post" action="/accounts/users/create/" class="stack">

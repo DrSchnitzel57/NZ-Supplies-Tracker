@@ -170,65 +170,6 @@ def receive_stock(*, actor, item_id, quantity: int, reason: str, idempotency_key
     return transact(_work)
 
 
-def create_batch(*, actor, rows, idempotency_key):
-    """Create 1–50 reviewed items atomically; audit stores the retry fingerprint.
-
-    Reuse existing ledger creation inside the outer IMMEDIATE transaction. No
-    schema/ZIP change: the batch receipt is an ordinary portable audit event.
-    """
-    import hashlib
-    import json
-    from apps.audit.models import AuditEvent
-    from apps.inventory.forms import NewItemForm
-
-    permissions.require_staff(actor)
-    if not isinstance(rows, list) or not 1 <= len(rows) <= 50:
-        raise ValidationError("Add between 1 and 50 items; nothing was saved.")
-    if not idempotency_key or len(idempotency_key) > 128:
-        raise ValidationError("A valid batch retry key is required.")
-    cleaned, keys, row_keys = [], set(), set()
-    for index, row in enumerate(rows, 1):
-        form = NewItemForm(row)
-        if not form.is_valid():
-            raise ValidationError(f"Item {index}: {form.errors.as_text()}")
-        values = form.cleaned_data.copy()
-        row_key = row.get("row_key", "")
-        if not row_key or len(row_key) > 64 or row_key in row_keys:
-            raise ValidationError("Each batch row needs its own stable key.")
-        row_keys.add(row_key)
-        values.pop("expected_version", None)
-        values.pop("idempotency_key", None)
-        values["unit"] = values.get("unit") or "each"
-        key = item_key(values["category"], values["name"], values["size"])
-        if key in keys:
-            raise ValidationError(f"Item {index} duplicates another batch row.")
-        keys.add(key)
-        cleaned.append({**values, "row_key": row_key})
-    fingerprint = hashlib.sha256(json.dumps(cleaned, sort_keys=True).encode()).hexdigest()
-    receipt_key = hashlib.sha256(("batch:" + idempotency_key).encode()).hexdigest()
-
-    def _work():
-        assert_writes_allowed()
-        receipt = AuditEvent.objects.filter(action="inventory.batch_created", target_id=receipt_key).first()
-        if receipt:
-            if receipt.detail.get("fingerprint") != fingerprint or receipt.actor_id != actor.pk:
-                raise ValidationError("This retry key belongs to a different batch. Nothing was saved.")
-            return list(Item.objects.filter(pk__in=receipt.detail["items"]).order_by("category", "name", "size", "pk"))
-        if Item.objects.filter(key__in=keys).exists():
-            raise ValidationError("An item already exists, including archived inventory. Nothing was saved.")
-        created = []
-        for row in cleaned:
-            values = row.copy()
-            row_key = values.pop("row_key")
-            movement_key = "batch-" + hashlib.sha256((receipt_key + row_key).encode()).hexdigest()
-            created.append(create_item(actor=actor, idempotency_key=movement_key, **values))
-        AuditEvent.objects.create(actor=actor, action="inventory.batch_created", target_type="batch",
-            target_id=receipt_key, detail={"fingerprint": fingerprint, "items": [str(i.pk) for i in created]})
-        return created
-
-    return transact(_work)
-
-
 def adjust_count(
     *,
     actor,

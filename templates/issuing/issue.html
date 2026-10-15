@@ -1,43 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Issue goods — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Issue supplies</h1><p class="sub">Choose a recipient, then add supplies to their list.</p></div><a href="/issue/history/">View history</a></div>
+<div class="page-head"><h1>Issue goods</h1><div class="sub">Choose a missionary, add items, then review the named summary.</div></div>
+{% include "issuing/tabs.html" %}
+<p class="help">Up to 50 distinct items per issue. Repeated items combine. Drafts last only in this open tab; reload or close discards them. Nothing is queued or sent automatically.</p>
 <div id="issue-feedback" role="status" aria-live="polite"></div>
 <div id="shortage-review" hidden></div>
 <form method="post" class="stack" id="issue-form" autocomplete="off" data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 <input type="hidden" name="draft_user_id" value="{{ user.pk }}">
 <input type="hidden" name="idempotency_key" value="{{ draft_key }}">
-<section class="recipient-area">
-<div id="recipient-picker" {% if selected_person %}hidden{% endif %}>
-<div class="combobox" data-finder="people" id="person-finder">
+<section class="card"><div class="hd"><h2>1. Missionary</h2></div><div class="bd stack">
 <label for="person-filter">Find a missionary by name or ID</label>
-<input type="search" id="person-filter" autocomplete="off" placeholder="Name or missionary ID" maxlength="160" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="person-results">
-<div class="suggestions" id="person-results" role="listbox" hidden></div><span class="finder-status mini" id="person-count" role="status"></span>
-</div></div>
-<input type="hidden" name="missionary_id" id="person-select" value="{{ missionary_id }}">
-<div id="selected-person" class="selected-person" {% if not selected_person %}hidden{% endif %}><div><strong id="selected-name">{{ selected_person.name }}</strong><span id="selected-id">{{ selected_person.external_id }}</span></div><button type="button" id="change-person">Change</button></div>
-<noscript><label>Missionary<select name="fallback_missionary_id" required>
+<input type="search" id="person-filter" autocomplete="off" placeholder="Search missionaries" aria-controls="person-select">
+<span id="person-count" class="mini" role="status"></span>
+<label for="person-select">Selected missionary</label>
+<select name="missionary_id" id="person-select" required>
 <option value="">— Choose a missionary —</option>
 {% for person in missionaries %}<option value="{{ person.pk }}" {% if person.pk|stringformat:"s" == missionary_id %}selected{% endif %}>{{ person.name }} ({{ person.external_id }})</option>{% endfor %}
-</select></label></noscript>
-</section>
-<div class="issuing-workspace">
-<section aria-label="Supply catalogue">
-<div class="catalogue-head"><h2>Catalogue</h2><span class="mini" id="item-count" role="status">{{ items|length }} items</span></div>
+</select>
+<p class="help">Typing searches only; choose a visible result explicitly. Changing the recipient clears items and the note after confirmation.</p>
+</div></section>
+<div class="grid two">
+<section class="card"><div class="hd"><h2>2. Item catalogue</h2></div><div class="bd stack">
 <label for="item-filter">Search item, category or size</label>
-<input type="search" id="item-filter" autocomplete="off" placeholder="Search catalogue" maxlength="160" aria-controls="catalogue-rows">
-<div class="catalogue-rows" id="catalogue-rows">
-{% for item in items %}<div class="catalogue-row" data-item="{{ item.pk }}" data-label="{{ item }}"><div><strong>{{ item.name }}</strong><small>{{ item.category }} · {{ item.size|default:"No size" }}</small></div><div class="available"><strong data-catalogue-stock="{{ item.pk }}">{{ item.on_hand }}</strong><small>available</small></div><button type="button" class="catalogue-add" aria-label="Add {{ item }}">Add</button></div>{% empty %}<p class="help">No active supplies. <a href="/inventory/new/">Add an item</a>.</p>{% endfor %}
-</div><p id="catalogue-empty" class="help" hidden>No matching supplies.</p>
-<noscript><label>Item<select id="catalogue-select" name="item_id">
+<input type="search" id="item-filter" autocomplete="off" placeholder="Search catalogue" aria-controls="catalogue-select">
+<span id="item-count" class="mini" role="status"></span>
+<label for="catalogue-select">Item</label>
+<select id="catalogue-select" name="item_id" size="8">
 <option value="">— Choose an item —</option>
 {% for item in items %}<option value="{{ item.pk }}" data-label="{{ item }}" data-available="{{ item.on_hand }}">{{ item }} — Available: {{ item.on_hand }}</option>{% endfor %}
-</select></label>
+</select>
 <label for="catalogue-qty">Quantity to add</label><input type="number" name="quantity" id="catalogue-qty" min="1" max="999999999" value="1">
-<p>Choose one catalogue item per submission. JavaScript enables multi-item issuing.</p></noscript>
-</section>
-<section class="issue-summary stack"><h2>Issue summary</h2>
+<button type="button" id="add-item" class="primary" hidden>Add to issue</button>
+<noscript><p>Add one catalogue item on submission, or change the quantities below. JavaScript enables a searchable multi-item workspace and open-tab error recovery.</p></noscript>
+</div></section>
+<section class="card"><div class="hd"><h2>3. Review this issue</h2></div><div class="bd stack">
 <p id="recipient-summary" class="summary">Choose the recipient above.</p>
 <div id="issue-rows">
 {% for row in draft_lines %}<div class="issue-row" data-item="{{ row.item_id }}">
@@ -47,12 +45,10 @@
 <button type="button" class="remove-row" aria-label="Remove {{ row.label }}">Remove</button>
 </div>{% endfor %}
 </div>
-<p class="empty-draft">Add supplies from the catalogue.</p>
 <p id="draft-count" class="mini"></p>
 <label for="issue-note">Note (optional)</label><input id="issue-note" name="note" value="{{ note }}" maxlength="4000">
-<button type="submit" class="primary" id="issue-submit">Issue supplies</button>
-<p class="mini">Up to 50 distinct items. This draft stays in this tab only; closing or reloading discards it.</p>
-</section></div>
+<button type="submit" class="primary">Issue goods</button>
+</div></section></div>
 </form>
-<details><summary>Shortages and corrections</summary><p>A shortage needs your confirmation before anything is issued. To correct a saved issue, open History and choose Undo this issue with a reason.</p></details>
+<p class="help">A shortage never issues anything until you explicitly confirm revised quantities. Stock is checked again on the server. Made a mistake later? Open History and choose Undo this issue with a reason.</p>
 {% endblock %}

@@ -1,8 +1,8 @@
 <div class="grid two">
 <section class="card"><div class="hd"><h2>Needs attention</h2><a class="btn" href="/inventory/?low=1">View all low stock</a></div><div class="bd">
-{% if low_items %}<ul class="result-list">{% for item in low_items|slice:':8' %}<li><a href="/inventory/{{ item.pk }}/">{{ item }}</a><span>{{ item.on_hand }} available · {% if item.on_hand == 0 %}Out of stock{% else %}Low stock{% endif %}</span></li>{% endfor %}</ul>{% else %}<p>No items at or below their alert level.</p>{% endif %}<a href="/reports/?family=low-stock">Copy or email a low-stock list</a>
+{% if low_items %}<ul>{% for item in low_items|slice:':8' %}<li><a href="/inventory/{{ item.pk }}/">{{ item }}</a> · {{ item.on_hand }} available {% if item.on_hand == 0 %}(out of stock){% else %}(low){% endif %}</li>{% endfor %}</ul>{% else %}<p>No items at or below their alert level.</p>{% endif %}
 </div></section>
 <section class="card"><div class="hd"><h2>Recent issues</h2><a class="btn" href="/issue/history/">Full history</a></div><div class="bd">
-{% if recent %}<ul class="result-list">{% for issue in recent|slice:':8' %}<li><a href="/issue/{{ issue.pk }}/">{{ issue.missionary_name }}</a><span>{{ issue.issued_at }} · {% if issue.status == 'REVERSED' %}Undone{% else %}Current{% endif %}<br>{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></li>{% endfor %}</ul>{% else %}<p>No issues yet. <a href="/issue/">Issue supplies</a> to begin.</p>{% endif %}
+{% if recent %}<ul>{% for issue in recent|slice:':8' %}<li><a href="/issue/{{ issue.pk }}/">{{ issue.missionary_name }}</a> · {{ issue.issued_at }} · {% if issue.status == 'REVERSED' %}Undone{% else %}Current{% endif %}<br>{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</li>{% endfor %}</ul>{% else %}<p>No issues yet. <a href="/issue/">Issue goods</a> to begin.</p>{% endif %}
 </div></section>
 </div>

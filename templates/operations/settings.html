@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}System settings — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Settings</h1><p class="sub">Administration / Notices and stock alerts</p></div></div>
+<div class="page-head"><h1>System settings</h1><div class="sub">Administrator-only · no secrets stored here</div></div>
+<p class="help">Administrator-only. No secrets are stored here.</p>
 <div class="card"><div class="bd">
 <form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}

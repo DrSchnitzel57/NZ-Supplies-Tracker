@@ -5,7 +5,6 @@ from __future__ import annotations
 from django.shortcuts import render
 from django.http import HttpResponseBadRequest
 from urllib.parse import urlencode
-from urllib.parse import quote
 
 from apps.accounts.decorators import admin_required, staff_required
 from apps.accounts.reauth import reauth_required
@@ -26,19 +25,11 @@ def report_home(request):
     page, pagination = paginate(request, rows)
     query = urlencode({key: '1' if value is True else getattr(value, 'pk', value)
                        for key, value in form.cleaned_data.items() if value}) if valid else ''
-    summary = []
-    if valid and family in ('category', 'intake'):
-        label, number = ('category', 'given_out_net') if family == 'category' else ('arrival_status', 'people')
-        maximum = max((row[number] for row in rows), default=1) or 1
-        summary = [{'label': row[label], 'value': row[number], 'width': round(row[number] / maximum * 100)} for row in rows]
-    low_text = '\n'.join(f"{row['item']}: {row['available']} available; alert at {row['alert_level']}" for row in rows) if valid and family == 'low-stock' else ''
     return render(request, 'reports/home.html', {
         'family': family, 'families': REPORT_CHOICES, 'form': form, 'report_title': title,
         'headings': ['Given out (net)' if field == 'given_out_net' else field.replace('_', ' ').capitalize() for field in fields],
         'report_rows': [[row.get(field, '') for field in fields] for row in page],
-        'filters_query': query, 'filters_valid': valid, 'summary': summary, 'low_text': low_text,
-        'mail_url': 'mailto:?subject=Low%20stock%20follow-up&body=' + quote(low_text),
-        **pagination}, status=200 if valid else 400)
+        'filters_query': query, 'filters_valid': valid, **pagination}, status=200 if valid else 400)
 
 
 @staff_required

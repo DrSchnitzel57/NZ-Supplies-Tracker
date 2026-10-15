@@ -69,7 +69,7 @@ class PlainLanguageTests(TestCase):
         for url in ["/", "/issue/", "/inventory/", "/reports/"]:
             response = self.client.get(url)
             content = response.content.decode()
-            self.assertIn("Issue supplies", content, url)
+            self.assertIn("Issue goods", content, url)
         inv_item = make_item(self.staff, opening_qty=5)
         response = self.client.get(f"/inventory/{inv_item.pk}/")
         content = response.content.decode()
@@ -102,14 +102,14 @@ class PlainLanguageTests(TestCase):
             self.assertIn("help", content.lower(), url)
         response = self.client.get("/guide/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Issue supplies", response.content.decode())
+        self.assertIn("Issue goods", response.content.decode())
 
     def test_quick_start_doc_exists_with_synthetic_illustrations(self):
         from pathlib import Path
         doc = Path("docs/QUICK_START.md")
         self.assertTrue(doc.exists())
         text = doc.read_text()
-        for needle in ["Sign in", "Issue supplies", "Add stock", "Undo", "Available"]:
+        for needle in ["Sign in", "Issue goods", "Add stock", "Undo", "Available"]:
             self.assertIn(needle, text)
         self.assertIn("Synthetic", text)
 

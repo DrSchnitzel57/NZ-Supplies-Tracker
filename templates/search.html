@@ -1,9 +1,0 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="page-head"><h1>Search results</h1><p class="sub">{{ q }}</p></div>
-<div class="grid two">
-<section class="panel"><h2>Missionaries · {{ people_total }}</h2><ul class="result-list">
-{% for p in people %}<li><a href="/roster/{{ p.pk }}/">{{ p.name }}</a><span>{{ p.external_id }}</span></li>{% empty %}<li>No missionaries found.</li>{% endfor %}</ul><a href="/roster/?q={{ q|urlencode }}">All matching missionaries</a></section>
-<section class="panel"><h2>Inventory · {{ items_total }}</h2><ul class="result-list">
-{% for i in items %}<li><a href="/inventory/{{ i.pk }}/">{{ i }}</a><span>{{ i.on_hand }} available</span></li>{% empty %}<li>No items found.</li>{% endfor %}</ul><a href="/inventory/?q={{ q|urlencode }}">All matching items</a></section>
-</div>{% endblock %}

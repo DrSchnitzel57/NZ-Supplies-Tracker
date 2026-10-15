@@ -1,21 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Missionaries — MTC Supplies Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Missionaries</h1><p class="sub">{{ total }} matching people · {{ shown }} on this page</p></div><div class="row-actions"><a class="btn" href="/transfers/roster/">Import</a><a class="btn primary" href="/roster/new/">Add a missionary</a></div></div>
+<div class="page-head"><h1>Missionaries</h1><div class="sub">Intake roster &amp; goods received · {{ shown }} of {{ total }} shown</div></div>
+<p class="help">Find a person to see their profile and issue goods to them. Archived people stay in history but cannot receive new goods. Search by name, ID or email. <a href="/guide/">Quick-start guide</a>.</p>
 <form method="get" class="toolbar" role="search">
   <label>Search<input type="search" name="q" value="{{ q }}" placeholder="Name, ID or email"></label>
-  <label>Title<select name="title"><option value="">All titles</option>{% for t in titles %}<option value="{{ t|default:'__blank__' }}" {% if title == t or title == '__blank__' and not t %}selected{% endif %}>{{ t|default:"Not recorded" }}</option>{% endfor %}</select></label>
-  <label>Arrival<select name="arrival"><option value="">All arrival states</option>{% for a in arrivals %}<option value="{{ a|default:'__blank__' }}" {% if arrival == a or arrival == '__blank__' and not a %}selected{% endif %}>{{ a|default:"Not recorded" }}</option>{% endfor %}</select></label>
-  <label>Sort<select name="sort"><option value="name">Name A–Z</option><option value="-name" {% if sort == '-name' %}selected{% endif %}>Name Z–A</option><option value="id" {% if sort == 'id' %}selected{% endif %}>Missionary ID</option><option value="arrival" {% if sort == 'arrival' %}selected{% endif %}>Arrival date</option></select></label>
   <label class="check"><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
   <button type="submit" class="primary">Search</button>
+  <a class="btn" href="/roster/new/">Add a person</a>
+  <a class="btn" href="/transfers/roster/">Import missionaries</a>
 </form>
-<div class="tablewrap"><table class="records-table">
-<thead><tr><th>Name</th><th>ID</th><th>Mission / language</th><th>Arrival</th><th>Status</th><th></th></tr></thead>
+<div class="tablewrap"><table>
+<thead><tr><th>Name</th><th>ID</th><th>Status</th></tr></thead>
 <tbody>
 {% for m in missionaries %}
-<tr><td data-label="Name"><a href="/roster/{{ m.pk }}/?return_to={{ request.get_full_path|urlencode }}">{{ m.name }}</a><small class="mini">{{ m.title_prefix }}</small></td><td data-label="ID">{{ m.external_id }}</td><td>{{ m.mission|default:"—" }}<br><small>{{ m.language }}</small></td><td>{{ m.arrival_status|default:"Not recorded" }}</td><td data-label="Status">{% if m.is_archived %}<span class="tag">Archived</span>{% else %}<span class="dot">Active</span>{% endif %}</td><td>{% if not m.is_archived %}<a href="/issue/?missionary={{ m.pk }}">Issue supplies</a>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="6">No people found. Try a different search or filter.</td></tr>
+<tr><td data-label="Name"><a href="/roster/{{ m.pk }}/">{{ m.name }}</a></td><td data-label="ID"><span class="tag">{{ m.external_id }}</span></td><td data-label="Status">{% if m.is_archived %}<span class="tag">Archived</span>{% else %}<span class="dot">Active</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="3">No people found.</td></tr>
 {% endfor %}
 </tbody>
 </table></div>

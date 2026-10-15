@@ -4,7 +4,7 @@ from playwright.sync_api import expect
 
 from apps.issuing.models import Issue
 from tests.browser.conftest import staff_login, admin_login, assert_no_internet
-from tests.browser.test_workflows import add_item, choose_person
+from tests.browser.test_workflows import add_item
 from tests.factories import make_item, make_missionary, make_staff
 
 
@@ -15,15 +15,10 @@ def test_typing_never_reuses_a_hidden_recipient(page, live_server, externals):
     page.goto(f'{live_server.url}/issue/')
     page.fill('#person-filter', 'Alpha')
     assert page.input_value('#person-select') == ''
-    expect(page.locator('#person-results [role=option]')).to_have_count(1)
-    page.press('#person-filter', 'ArrowDown')
     page.press('#person-filter', 'Enter')
     assert page.input_value('#person-select') == str(first.pk)
-    page.click('#change-person')
     page.fill('#person-filter', 'Beta')
     assert page.input_value('#person-select') == ''
-    expect(page.locator('#person-results [role=option]')).to_have_count(1)
-    page.press('#person-filter', 'ArrowDown')
     page.press('#person-filter', 'Enter')
     assert page.input_value('#person-select') == str(second.pk)
     expect(page.locator('#recipient-summary')).to_contain_text('Synthetic Beta')
@@ -36,16 +31,15 @@ def test_recipient_change_confirm_clears_items_and_note(page, live_server, exter
     second = make_missionary(staff)
     item = make_item(staff)
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, first)
+    page.select_option('#person-select', str(first.pk))
     add_item(page, item)
     page.fill('#issue-note', 'Keep until confirmed')
     page.once('dialog', lambda dialog: dialog.dismiss())
-    page.click('#change-person')
+    page.select_option('#person-select', str(second.pk))
     assert page.input_value('#person-select') == str(first.pk)
     assert page.locator('.issue-row').count() == 1
     page.once('dialog', lambda dialog: dialog.accept())
-    page.click('#change-person')
-    choose_person(page, second)
+    page.select_option('#person-select', str(second.pk))
     assert page.locator('.issue-row').count() == 0
     assert page.input_value('#issue-note') == ''
     assert_no_internet(externals)
@@ -56,7 +50,7 @@ def test_shortage_back_retains_original_open_tab_draft(page, live_server, extern
     person = make_missionary(staff)
     item = make_item(staff, opening_qty=2)
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, person)
+    page.select_option('#person-select', str(person.pk))
     add_item(page, item, '8')
     page.fill('#issue-note', 'Original requested note')
     key = page.input_value('input[name=idempotency_key]')
@@ -76,7 +70,7 @@ def test_other_tab_login_repairs_csrf_but_never_inherits_identity(page, live_ser
     person = make_missionary(staff)
     item = make_item(staff)
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, person)
+    page.select_option('#person-select', str(person.pk))
     add_item(page, item, '2')
     page.fill('#issue-note', 'Recovered original')
     other = page.context.new_page()
@@ -98,7 +92,7 @@ def test_different_user_login_leaves_draft_unsent(page, live_server, externals):
     person = make_missionary(staff)
     item = make_item(staff)
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, person)
+    page.select_option('#person-select', str(person.pk))
     add_item(page, item)
     other_user, password = make_staff()
     other = page.context.new_page()
@@ -118,7 +112,6 @@ def test_different_user_login_leaves_draft_unsent(page, live_server, externals):
 def test_complete_narrow_menu_and_dark_button_contrast(mobile_page, live_server, externals):
     admin, _ = admin_login(mobile_page, live_server, 'menu')
     mobile_page.click('#menu-toggle')
-    mobile_page.click('.admin-nav summary')
     for path in ('/guide/', '/accounts/users/', '/admin-area/settings/', '/transfers/bundle/', '/admin-area/reset/'):
         expect(mobile_page.locator(f'#navigation a[href="{path}"]')).to_be_visible()
     mobile_page.click('#themeBtn')
@@ -145,7 +138,7 @@ def test_offline_submission_keeps_original_draft_without_replay(page, live_serve
     person = make_missionary(staff)
     item = make_item(staff)
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, person)
+    page.select_option('#person-select', str(person.pk))
     add_item(page, item, '2')
     page.fill('#issue-note', 'No offline queue')
     page.context.set_offline(True)
@@ -168,7 +161,7 @@ def test_uncertain_success_deliberate_retry_uses_original_key_once(page, live_se
     person = make_missionary(staff)
     item = make_item(staff)
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, person)
+    page.select_option('#person-select', str(person.pk))
     add_item(page, item, '2')
 
     def lose_reply(route):
@@ -197,7 +190,7 @@ def test_leave_warning_reload_discards_and_no_personal_browser_storage(page, liv
     person = make_missionary(staff)
     item = make_item(staff)
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, person)
+    page.select_option('#person-select', str(person.pk))
     add_item(page, item)
     page.fill('#issue-note', 'Temporary tab data')
     assert page.evaluate('Object.keys(localStorage).filter(k => k !== "mtc-theme")') == []
@@ -220,12 +213,15 @@ def test_source_scale_keyboard_50_item_workspace_limit(page, live_server, extern
     items = [make_item(staff, opening_qty=3, category='Synthetic supplies', name=f'Item {i:03}') for i in range(224)]
     person = Missionary.objects.get(external_id='SYN-094')
     page.goto(f'{live_server.url}/issue/')
-    choose_person(page, person)
+    page.fill('#person-filter', person.name)
+    page.press('#person-filter', 'Enter')
     assert page.input_value('#person-select') == str(person.pk)
     page.fill('#item-filter', 'Item 223')
-    expect(page.locator('.catalogue-row:visible')).to_have_count(1)
-    page.press('#item-filter', 'Tab')
-    page.keyboard.press('Enter')
+    page.press('#item-filter', 'Enter')
+    assert page.input_value('#catalogue-select') == str(items[-1].pk)
+    page.press('#catalogue-select', 'Tab')
+    page.press('#catalogue-qty', 'Tab')
+    page.press('#add-item', 'Enter')
     page.fill('#item-filter', '')
     for item in items[:49]:
         add_item(page, item)
@@ -243,7 +239,7 @@ def test_live_stock_does_not_rewrite_count_version_or_focused_draft(page, live_s
     from apps.inventory import services as inventory
     staff, _ = staff_login(page, live_server, 'live-count')
     item = make_item(staff, opening_qty=2)
-    page.goto(f'{live_server.url}/inventory/{item.pk}/count/')
+    page.goto(f'{live_server.url}/inventory/{item.pk}/')
     count = page.locator('input[name=counted_qty]')
     count.fill('4')
     page.fill('#correct_reason', 'Original recount')

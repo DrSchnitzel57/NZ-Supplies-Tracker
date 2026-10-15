@@ -2,8 +2,7 @@
 {% block title %}{% if kind == "roster" %}Missionary import{% else %}Inventory import{% endif %} — MTC Supplies Tracker{% endblock %}
 {% block content %}
 <div class="page-head"><h1>{% if kind == "roster" %}Missionary import{% else %}Inventory import{% endif %}</h1><div class="sub">Preview first · nothing is applied until you approve</div></div>
-<p>Choose a CSV or XLSX file, up to 2 MB and 2000 rows. You will review every change before applying it.</p>
-<details><summary>File format and matching</summary><p class="help">The first worksheet uses its first row as headers. Macro workbooks (.xlsm/.xls/.xlsb) are rejected and formulas are never evaluated. {% if kind == "roster" %}Matches people by external ID.{% else %}Matches items by category/name/size. A Remaining value — or Stock minus Out — becomes a reasoned count correction; Out never invents issues.{% endif %}</p></details>
+<p class="help">Upload a <strong>.csv</strong> or plain <strong>.xlsx</strong> file (first worksheet, first row headers, 2 MB / 2000 rows max). Macro workbooks (.xlsm/.xls/.xlsb) are rejected and formulas are never evaluated. {% if kind == "roster" %}Matches people by external ID.{% else %}Matches items by category/name/size. A Remaining value — or Stock minus Out — becomes a reasoned count correction; Out never invents issues.{% endif %} You will review a preview before anything is applied.</p>
 <div class="card"><div class="bd">
 <form method="post" enctype="multipart/form-data" class="stack">
 {% csrf_token %}
@@ -18,8 +17,8 @@
 </div></div>
 <p class="help">Accepted headers: {% if kind == "roster" %}external_id (id, missionary id), name (full name), email, reason.{% else %}category, name (item), size, remaining/stock, out, alert level, reason.{% endif %} Full list is in <code>docs/DATA_FORMAT.md</code>.</p>
 <div class="card"><div class="hd"><h2>Recent previews</h2></div><div class="bd">
-<ul class="result-list">
-{% for p in previews %}<li><a href="/transfers/preview/{{ p.token }}/">{{ p.created_at }} · {{ p.rows|length }} rows</a><span>{% if p.mode == 'replace' %}Replace active list{% else %}Add or update{% endif %}</span></li>{% empty %}<li>No previews yet.</li>{% endfor %}
+<ul style="margin:0;padding-left:1.2rem">
+{% for p in previews %}<li><a href="/transfers/preview/{{ p.token }}/">{{ p.token }}</a> — {{ p.mode }} ({{ p.rows|length }} rows)</li>{% empty %}<li>No previews yet.</li>{% endfor %}
 </ul>
 </div></div>
 {% endblock %}
