@@ -12,24 +12,26 @@
 <a class="skip" href="#main">Skip to main content</a>
 <div class="app">
 <aside class="side" id="navigation" aria-label="Navigation">
-<a class="brand" href="/"><span class="mark" aria-hidden="true">M</span><span><span class="t1">MTC Supplies Tracker</span><br><span class="t2">Shared supplies · local network</span></span></a>
+<button type="button" id="menu-close">Close menu</button>
+<a class="brand" href="/"><span class="mark" aria-hidden="true">M</span><span><span class="t1">MTC Supplies</span><br><span class="t2">New Zealand MTC</span></span></a>
 {% if user.is_authenticated %}
 <nav class="nav" aria-label="Main navigation">
-<a class="navlink" href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Home</a>
-<a class="navlink primary-action" href="/issue/" {% if request.path|slice:':7' == '/issue/' %}aria-current="page"{% endif %}>Issue goods</a>
-<a class="navlink" href="/inventory/" {% if request.path|slice:':11' == '/inventory/' or request.path == '/transfers/inventory/' %}aria-current="page"{% endif %}>Inventory</a>
-<a class="navlink" href="/roster/" {% if request.path|slice:':8' == '/roster/' or request.path == '/transfers/roster/' %}aria-current="page"{% endif %}>Missionaries</a>
-<a class="navlink" href="/reports/" {% if request.path|slice:':9' == '/reports/' %}aria-current="page"{% endif %}>Reports</a>
+<a class="navlink primary-action" href="/issue/">{% include "components/icon.html" with name="plus" %}Issue supplies</a>
+<a class="navlink" href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="overview" %}Overview</a>
+<a class="navlink" href="/roster/" {% if request.path|slice:':8' == '/roster/' or request.path == '/transfers/roster/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="people" %}Missionaries</a>
+<a class="navlink" href="/inventory/" {% if request.path|slice:':11' == '/inventory/' or request.path == '/transfers/inventory/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="inventory" %}Inventory</a>
+<a class="navlink" href="/issue/history/">{% include "components/icon.html" with name="history" %}History</a>
+<a class="navlink" href="/reports/" {% if request.path|slice:':9' == '/reports/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="reports" %}Reports</a>
 </nav>
 <nav class="nav" aria-label="Help and administration">
-<div class="nav-sec">Help</div>
-<a class="navlink" href="/guide/" {% if request.path == '/guide/' %}aria-current="page"{% endif %}>Quick-start guide</a>
+<a class="navlink" href="/guide/" {% if request.path == '/guide/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="help" %}Help</a>
 {% if user.is_superuser %}
-<div class="nav-sec">Administration</div>
+<details class="admin-nav"><summary>Administration</summary>
 <a class="navlink" href="/accounts/users/">Accounts</a>
 <a class="navlink" href="/admin-area/settings/">Settings</a>
 <a class="navlink" href="/transfers/bundle/">Migration and full bundles</a>
 <a class="navlink" href="/admin-area/reset/">Protected reset</a>
+</details>
 {% endif %}
 </nav>
 {% endif %}
@@ -39,6 +41,9 @@
 <header class="top topbar">
 <button type="button" id="menu-toggle" aria-controls="navigation" aria-expanded="false">Menu</button>
 <a class="brand-mini" href="/">MTC Supplies</a>
+{% if user.is_authenticated %}<form class="header-finder" method="get" action="/search/" role="search">
+<div class="combobox" data-finder="all"><label class="sr-only" for="global-search">Find missionaries or supplies</label><input type="search" id="global-search" name="q" placeholder="Find missionaries or supplies…" maxlength="160" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="global-results"><div class="suggestions" id="global-results" role="listbox" hidden></div><span class="finder-status sr-only" role="status"></span></div>
+<button type="submit" aria-label="Search all records">{% include "components/icon.html" with name="search" %}</button></form>{% endif %}
 <div class="top-context"><span class="pill neutral" id="connection-status" role="status" aria-live="polite">Connection: checking…</span><span class="mini" id="last-refresh">Last refresh: not yet</span></div>
 <div class="spacer"></div>
 <div class="userbar">{% if user.is_authenticated %}<span>Signed in as <strong>{{ user.username }}</strong></span><form method="post" action="/accounts/logout/" class="inline">{% csrf_token %}<button type="submit">Sign out</button></form>{% else %}<a href="/accounts/login/">Sign in</a>{% endif %}</div>
@@ -52,5 +57,6 @@
 <footer class="foot"><a href="/guide/">Quick-start guide</a> · Shared live stock; drafts stay in this open tab only.</footer>
 </div></div>
 <script src="/static/app.js" defer></script>
+<script src="/static/components.js" defer></script>
 <script src="/static/issuing.js" defer></script>
 </body></html>

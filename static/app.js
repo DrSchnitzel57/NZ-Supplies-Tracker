@@ -166,6 +166,8 @@
           return;
         }
         safeFormOwner = form;
+        window.safeWritePending = true;
+        window.panelPending = true;
         busy = true;
         var button = form.querySelector("button[type=submit]"); button.disabled = true;
         var data = pending || new FormData(form);
@@ -192,7 +194,7 @@
           }
           var result = new DOMParser().parseFromString(text, "text/html");
           var main = result.getElementById("main");
-          if (!main) { status.textContent = "Unexpected reply. Your input is retained; review the record before retrying."; return; }
+          if (!main) { pending = data; uncertainSafeWrite = true; freeze(true); status.textContent = "Unexpected reply — success is not confirmed. Retry the original request deliberately or review the record in another tab."; return; }
           pending = null;
           uncertainSafeWrite = false;
           document.getElementById("main").replaceChildren.apply(document.getElementById("main"), Array.from(main.childNodes).map(function (node) { return document.importNode(node, true); }));
@@ -201,12 +203,15 @@
           if (reply.ok && reply.redirected) history.replaceState(null, "", reply.url);
           document.title = result.title;
           safeForms(); preventDoubleSubmit();
+          window.dispatchEvent(new CustomEvent("safe-form-complete", {detail: {saved: reply.ok && reply.redirected}}));
           var errors = document.querySelector(".form-errors, .messages");
           if (errors) { errors.tabIndex = -1; errors.focus(); }
         } catch (error) { status.textContent = "Cannot check sign-in while disconnected. Nothing was sent; your input is retained."; }
         finally {
           busy = false; button.disabled = false;
           if (!pending && safeFormOwner === form) safeFormOwner = null;
+          window.panelPending = !!pending;
+          window.safeWritePending = !!pending;
         }
       });
     });
@@ -234,14 +239,25 @@
     var menu = el("menu-toggle");
     if (menu) {
       document.documentElement.classList.add("js-menu");
+      function closeMenu() {
+        document.documentElement.classList.remove("menu-open"); menu.setAttribute("aria-expanded", "false");
+        document.querySelector(".main").inert = false; menu.focus();
+      }
       menu.addEventListener("click", function () {
         var open = document.documentElement.classList.toggle("menu-open");
         menu.setAttribute("aria-expanded", String(open));
-        if (open) el("navigation").querySelector("a").focus();
+        document.querySelector(".main").inert = open;
+        if (open) el("menu-close").focus();
       });
+      el("menu-close").addEventListener("click", closeMenu);
       document.addEventListener("keydown", function (event) {
         if (event.key === "Escape" && document.documentElement.classList.contains("menu-open")) {
-          document.documentElement.classList.remove("menu-open"); menu.setAttribute("aria-expanded", "false"); menu.focus();
+          closeMenu();
+        } else if (event.key === "Tab" && document.documentElement.classList.contains("menu-open")) {
+          var focusable = Array.from(el("navigation").querySelectorAll("a,button,summary")).filter(function(node) {return node.getClientRects().length;});
+          var first = focusable[0], last = focusable[focusable.length-1];
+          if (event.shiftKey && document.activeElement === first) {event.preventDefault();last.focus();}
+          if (!event.shiftKey && document.activeElement === last) {event.preventDefault();first.focus();}
         }
       });
     }
