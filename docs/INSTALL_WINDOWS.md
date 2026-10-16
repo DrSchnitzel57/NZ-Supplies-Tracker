@@ -55,7 +55,15 @@ folder; that is deliberate (it holds the database and the secret key).
    or Chrome.
 2. Sign in with the administrator name and temporary password, then choose a
    new password.
-3. Create accounts for the staff in the admin area.
+3. Create accounts for the staff under **Administration → Staff accounts**.
+   Fill in **Name shown to others** (for example "Sister Walker"); it is what
+   appears in history and reports.
+
+**Trying it out first?** On a trial install that has no real data yet,
+`C:\MTCSupplies\mtc load_demo_data --username admin` fills it with invented
+missionaries, stock and three weeks of history. It refuses to run once any
+real data exists. Uninstall with `-DeleteData` (or use **Protected reset**)
+before loading the real roster.
 
 ## Bring in the original tracker's data
 

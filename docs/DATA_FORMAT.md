@@ -1,11 +1,11 @@
-# Data interchange format (bundle v1)
+# Data interchange format (bundle v2)
 
 Standard full-data interchange is a versioned ZIP archive. Bundles are
 **migration interchange, not exact database backups**: they carry complete
 operational relationships for review and migration. Database backups remain
 the exact recovery source.
 
-## Bundle layout (version 1)
+## Bundle layout (version 2)
 
 ```
 manifest.json
@@ -23,7 +23,7 @@ audits.csv
 ```json
 {
   "format": "mtc-bundle",
-  "version": 1,
+  "version": 2,
   "created_at": "2026-10-09T00:00:00+00:00",
   "source": "export:username",
   "counts": {"roster": 1, "items": 1, "issues": 1},
@@ -32,7 +32,10 @@ audits.csv
 }
 ```
 
-Only `version: 1` is written. A legacy `version: 0` bundle (same format,
+Only `version: 2` is written. Version 2 added one roster column,
+`departure_date` (the day a missionary leaves the MTC for their mission).
+Version 1 bundles are still read: their `roster.csv` header is accepted
+without that column, which is imported as blank. A legacy `version: 0` bundle (same format,
 all seven tables with current headers but no checksums/counts) is migrated
 explicitly: checksums and counts are computed, every validation below still
 applies, and the migration is recorded as `migrated_from_version: 0` in the
@@ -67,7 +70,7 @@ Booleans are `true`/`false`. Integers are plain whole numbers.
 
 - `settings.csv`: `key,value` — site settings (for example `site_notice`,
   `default_low_threshold`). No accounts, passwords or sessions.
-- `roster.csv`: `id,external_id,name,email,title_prefix,arrival_status,stake,mission,language,arrival_date,release_date,personal_email,intake_metadata,is_archived,archived_at,version`
+- `roster.csv`: `id,external_id,name,email,title_prefix,arrival_status,stake,mission,language,arrival_date,departure_date,release_date,personal_email,intake_metadata,is_archived,archived_at,version`
   - `title_prefix` is `Elder`/`Sister`; `intake_metadata` is a JSON object of
     preserved source fields the schema does not name.
 - `items.csv`: `id,category,name,size,unit,on_hand,low_threshold,is_archived,archived_at,version,source_remaining,source_corrected`
@@ -124,9 +127,14 @@ are case-insensitive with the following aliases:
 
 - Roster: `external_id` (`externalId`, `extId`, `id`, `missionary id`, `full`
   variants); `name` (`fullName`, `full_name`, `missionary name`);
-  `email` (`e-mail`, `email address`); `title_prefix`, `arrival_status`,
-  `stake`, `mission`, `language`, `arrival_date`, `release_date`,
-  `personal_email`; `reason` (`note`, `comment`).
+  `email` (`e-mail`, `email address`, `missionary email`); `title_prefix`
+  (`title`, `type`, `mtype`, `elder/sister`); `arrival_status` (`status`,
+  `arrived`, `in-house`); `stake` (`home stake`); `mission` (`assigned
+  mission`); `language` (`training language`, `tLanguage`); `arrival_date`
+  (`arrival`, `MTC arrival`); `departure_date` (`departure`, `MTC
+  departure`, `leaves MTC`, `mission arrival`); `release_date` (`mission
+  release`); `personal_email`; `reason` (`note`, `comment`). These cover the
+  column names the original HTML tracker uses in its own exports.
 - Inventory: `category` (`cat`, `group`); `name` (`itemName`, `item_name`,
   `product`, `title`); `size` (`variant`); `remaining` (`remain`, `onHand`,
   `onhand`, `available`, `qty`, `quantity`, `count`); `stock` (`stock`);
@@ -154,7 +162,12 @@ instead of deleting them.
 
 Missing columns and blank optional cells preserve existing values in **both**
 add/update and replacement modes; new optional values remain empty. Clear a
-field explicitly in its Edit details form. New arrival/release dates are saved.
+field explicitly in its Edit details form. New arrival/departure/release dates are saved.
+
+Arrival status is normalised wherever it comes from (form, spreadsheet,
+bundle or seed): `True`/`yes`/`arrived`/`In-house` become **arrived**,
+`False`/`no`/`expected`/`Awaiting` become **expected**, blank stays blank and
+any other text is kept as written.
 Previews now record uploaded field presence. Legacy previews without that
 contract must be re-uploaded; the application cannot reconstruct erased data.
 
@@ -179,14 +192,16 @@ licensed Noto Sans, wraps long cells and repeats summary-table headers.
 ## Seed conversion
 
 `seed_bundle --source HTML --output ZIP` parses the embedded `SEED` JSON
-without executing the HTML and writes a standard v1 bundle. Supported
+without executing the HTML and writes a standard v2 bundle. Supported
 source shapes: an object with roster-like keys (`missionaries`, `people`,
 `roster`) and item-like keys (`items`, `inventory`), each a list; roster
 entries accept `external_id/id/extId` + `name/fullName` + `email`, plus
 `Elder`/`Sister` name prefixes (split into `title_prefix`), the exact source
 keys `type` → title, `arrived` → arrival status, `homeStake` → stake,
-`mission` , `tLanguage` → language, `missionArrival`/`missionRelease` →
-arrival/release dates, `personalEmail` and any
+`mission` , `tLanguage` → language, `arrivalDate` → MTC arrival date,
+`missionArrival` → MTC **departure** date (the day they arrive in their
+mission is the day they leave the MTC), `missionRelease` → release date,
+`personalEmail` and any
 other fields (preserved verbatim in `intake_metadata`, carried through
 bundles/models/forms/import/export); items accept
 `category/cat` + `name/item` + `size` + quantity keys (`remaining`,

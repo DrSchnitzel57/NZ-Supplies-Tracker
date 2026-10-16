@@ -1,8 +1,64 @@
 # Supplies tracker architecture
 
+## At a glance
+
+- **One server, many browsers.** Django 5.2 LTS on Python 3.13 with SQLite
+  (WAL) on the host's local disk. Server-rendered templates and three small
+  JavaScript files; no build step, no CDN, fonts bundled.
+- **Ledger, not totals.** Every stock change is a `StockMovement` written
+  atomically with an idempotency key; stock can never go negative; issues are
+  undone with a reason, never deleted.
+- **Three ways to host it.** Native Windows (Waitress + Caddy + Task
+  Scheduler, `deploy/windows`), Docker Compose (Gunicorn + Caddy) and a
+  single-replica Kubernetes example. All use Caddy `tls internal` on the LAN.
+- **Safe operations.** Verified backups with manifests, owned maintenance
+  windows for updates/restores, automatic rollback on a failed update.
+- **Portable data.** A versioned ZIP/CSV bundle (now v2) for full moves, row
+  imports with previews, and a converter for the original HTML tracker.
+
+The sections below record how the design got here, milestone by milestone,
+and the reasons behind each decision.
+
+## Finishing overhaul (milestone 08; implemented)
+
+Prompted by using the app with a realistic, full-size roster rather than test
+fixtures. Plan: `.openchamber/plans/08-finish-overhaul.md`.
+
+- **Data fidelity.** The source `missionArrival` field is the day a missionary
+  leaves the MTC; it is now stored as `departure_date` instead of being
+  misread as the MTC arrival date. Arrival status is normalised
+  (`True`/`In-house` → arrived, `False`/`Awaiting` → expected). The prototype's
+  own export headers are accepted as import aliases. Bundle v2 adds the
+  column and still reads v1.
+- **Names as staff say them.** `display_name` ("Sister Halvorsen", "Elder &
+  Sister Ostrander" for couples, ALL-CAPS tidied) everywhere a person is
+  chosen or listed; full names on profiles and exports. Staff accounts gain an
+  optional display name for history and reports.
+- **Overview that answers "what needs doing".** Who is in the MTC, who leaves
+  in 14 days (and whether they have received anything), this week's activity,
+  and a reorder list that separates *running low*, *ran out* and *never
+  stocked*.
+- **Faster issuing.** Recipient card with MTC dates and everything already
+  received; catalogue grouped by item with one button per size in natural
+  order, category chips, out-of-stock hidden by default.
+- **Fixes found by real use.** Filters that applied themselves when a search
+  was submitted; sizes sorted alphabetically (10 before 6); sizes missing from
+  issue summaries; raw IDs in stock history; US date formats; the Django admin
+  login bypassing the app's throttling (admin site removed).
+- **Visual system.** Inter (OFL, bundled) with a calmer token set, light and
+  dark, compact mobile card layout for long tables.
+- **Demo data.** `load_demo_data` builds an invented, realistic dataset for
+  training and screenshots and refuses to touch a non-empty database.
+
+Decisions: keep the schema change minimal (one nullable date, one optional
+display name) and backward compatible with every existing import path;
+remove rather than harden the Django admin because every task it offered
+already has a guarded screen; derive display names at read time instead of
+storing them so imports and edits cannot drift.
+
 ## Status and goal
 
-Milestone 01 (foundation and data invariants) is implemented and tested: Django scaffold, local identity, stable records, ledger with atomic mutations, maintenance guards and synthetic suites (`tests.foundation`, `tests.auth`, `tests.ledger`, `tests.concurrency`). Milestone 02 (daily staff workflows) is implemented and tested: server-rendered dashboard/roster/inventory/issuing/reports screens on the milestone 01 services, one shared issuing service for main-screen and profile entrypoints, shortage review with rechecked confirm, whole-issue undo with kept history, read-only 15-second polling that never extends sessions, one-page quick-start (`docs/QUICK_START.md`) and synthetic suites (`tests.workflows`, `tests/browser/`). Milestone 03 (transfers, reports and administrator safeguards) is implemented and tested: versioned ZIP/CSV interchange (`docs/DATA_FORMAT.md`, `apps/transfers`), ignored local seed conversion (`seed_bundle`), validated spreadsheet previews with stale-token and replacement guards, staff CSV/PDF report families with net issuance (`apps/reports`, bundled PDF rendering), administrator account UI/system settings and protected empty reset with verified backup (`tests.transfers`, `tests.seed_conversion`, `tests.reports`, `tests.admin_safety`, `tests/browser/test_transfers_reports.py`, `test_admin.py`). Milestone 04 (deployment, recovery and releases) is implemented and tested: pinned Dockerfile/Compose/Caddy on a fixed LAN address, production settings with secret/config validation and bounded uploads/throttling, `/healthz`+`/readyz` without PII, SQLite backup-API backups with 30-day retention and protected pre-update recovery backup, maintenance-guarded restore with integrity/schema checks, `scripts/update.sh`/`restore.sh`/`daily_backup.sh`, gated private GHCR workflows, `docs/OPERATIONS.md`, `compose.test.yaml` with synthetic settings, and synthetic suites (`tests.deployment_security`, `tests/deployment/`, `tests/browser/test_offline.py`, ten-client stock contention). The repository also contains the standalone HTML prototype and `READ ME.txt`; all four milestones are implemented pending manual host/network/registry checks. Milestone 05 (review remediation and validation) is implemented and tested: owned exclusive maintenance windows with nesting and audited crash takeover; atomic manifest-recorded backups with verified-only recovery protection; exact per-record import revisions checked transactionally with owned single-use previews; full bundle schema/type/checksum/ledger validation with explicit v0 migration; lossless spreadsheet-safe encoding and bounded uploads; source-field-preserving seed conversion; stock/category/intake report families with untruncated exports; DB-backed shared login/reauth throttling with password-bound confirmations; JSON poll auth with server-driven expiry; dynamic issue rows with search and idempotent retries; pinned production image (WhiteNoise static) with Caddy default_sni for IP clients; safe update/restore scripts (restore-then-migrate-readiness-reopen); real Chromium flows with blocked internet and real isolated Compose TLS drills (`tests.review_regressions`, rewritten `tests/browser/`, `tests/deployment/`). Fresh whole-codebase review evidence lives in `docs/REVIEW.md`; rollout still waits on the manual gates listed there.
+Milestone 01 (foundation and data invariants) is implemented and tested: Django scaffold, local identity, stable records, ledger with atomic mutations, maintenance guards and synthetic suites (`tests.foundation`, `tests.auth`, `tests.ledger`, `tests.concurrency`). Milestone 02 (daily staff workflows) is implemented and tested: server-rendered dashboard/roster/inventory/issuing/reports screens on the milestone 01 services, one shared issuing service for main-screen and profile entrypoints, shortage review with rechecked confirm, whole-issue undo with kept history, read-only 15-second polling that never extends sessions, one-page quick-start (`docs/QUICK_START.md`) and synthetic suites (`tests.workflows`, `tests/browser/`). Milestone 03 (transfers, reports and administrator safeguards) is implemented and tested: versioned ZIP/CSV interchange (`docs/DATA_FORMAT.md`, `apps/transfers`), ignored local seed conversion (`seed_bundle`), validated spreadsheet previews with stale-token and replacement guards, staff CSV/PDF report families with net issuance (`apps/reports`, bundled PDF rendering), administrator account UI/system settings and protected empty reset with verified backup (`tests.transfers`, `tests.seed_conversion`, `tests.reports`, `tests.admin_safety`, `tests/browser/test_transfers_reports.py`, `test_admin.py`). Milestone 04 (deployment, recovery and releases) is implemented and tested: pinned Dockerfile/Compose/Caddy on a fixed LAN address, production settings with secret/config validation and bounded uploads/throttling, `/healthz`+`/readyz` without PII, SQLite backup-API backups with 30-day retention and protected pre-update recovery backup, maintenance-guarded restore with integrity/schema checks, `scripts/update.sh`/`restore.sh`/`daily_backup.sh`, gated private GHCR workflows, `docs/OPERATIONS.md`, `compose.test.yaml` with synthetic settings, and synthetic suites (`tests.deployment_security`, `tests/deployment/`, `tests/browser/test_offline.py`, ten-client stock contention). The repository also contains the standalone HTML prototype and `READ ME.txt`; all four milestones are implemented pending manual host/network/registry checks. Milestone 05 (review remediation and validation) is implemented and tested: owned exclusive maintenance windows with nesting and audited crash takeover; atomic manifest-recorded backups with verified-only recovery protection; exact per-record import revisions checked transactionally with owned single-use previews; full bundle schema/type/checksum/ledger validation with explicit v0 migration; lossless spreadsheet-safe encoding and bounded uploads; source-field-preserving seed conversion; stock/category/intake report families with untruncated exports; DB-backed shared login/reauth throttling with password-bound confirmations; JSON poll auth with server-driven expiry; dynamic issue rows with search and idempotent retries; pinned production image (WhiteNoise static) with Caddy default_sni for IP clients; safe update/restore scripts (restore-then-migrate-readiness-reopen); real Chromium flows with blocked internet and real isolated Compose TLS drills (`tests.review_regressions`, rewritten `tests/browser/`, `tests/deployment/`). Fresh whole-codebase review evidence lives in `docs/history/REVIEW.md`; rollout still waits on the manual gates listed there.
 
 Replace browser-local persistence with a dependable LAN tool for approximately ten simultaneous staff until the Power App arrives. Preserve dashboard, roster, inventory, issuing, low-stock alerts, imports and reports. Use one active roster, not a multi-intake system. The original HTML remains a functional reference and approved initial data source, not production frontend code.
 
@@ -14,19 +70,19 @@ explicit recipient suggestions and catalogue/summary issuing, contextual short
 task panels with canonical pages, sorted/filtered records, atomic reviewed item
 batches and polished supporting screens/help. It supersedes milestone 06's UI
 structure and copy, not its data, authentication, ledger, import or recovery
-contracts. Final acceptance evidence is in `docs/REVIEW.md`; independent review
+contracts. Final acceptance evidence is in `docs/history/REVIEW.md`; independent review
 and user-owned manual gates remain separate from implementation.
 
 ### Review history and current release hold
 
-Independent review of implemented milestones 01–04 at `04b2227` returned **FIX**. After declared dependency installation, 118 Django tests, 19 browser-contract tests (one skip) and 15 deployment-contract tests passed, but isolated runtime probes failed HTTPS/static delivery, stale/bundle integrity, maintenance ownership and WAL recovery. Milestone 05 subsequently remediated those findings; historical evidence and remaining manual gates are in `docs/REVIEW.md`. Milestone checkboxes indicate implementation, not release approval.
+Independent review of implemented milestones 01–04 at `04b2227` returned **FIX**. After declared dependency installation, 118 Django tests, 19 browser-contract tests (one skip) and 15 deployment-contract tests passed, but isolated runtime probes failed HTTPS/static delivery, stale/bundle integrity, maintenance ownership and WAL recovery. Milestone 05 subsequently remediated those findings; historical evidence and remaining manual gates are in `docs/history/REVIEW.md`. Milestone checkboxes indicate implementation, not release approval.
 
 Remediation preserves the chosen architecture and original functionality: restore all source roster fields/reorder levels, validate consistent lossless history, coordinate owner-controlled maintenance and offline recovery, enforce shared throttling/privileged reauthentication, and prove real browser/Compose behavior. Certificate trust configuration remains deferred; LAN HTTPS is required.
 
-The product assessment at `548aad3` reran 195 Django, 17 browser and 21 deployment tests successfully, but additional synthetic probes returned **FIX** for data preservation, recipient selection, maintenance/settings, authentication recovery, reports and usability. The user agreed one new milestone, `.openchamber/plans/06-product-overhaul.md`, rather than four separate deliverables. Milestone 06 is implemented at `138ae8b`: 224 Django, 33 internet-blocked Chromium and 21 real deployment tests pass. Fresh implementation-side product review in `docs/REVIEW.md` records SHIP for automated acceptance, not independent review or rollout approval. Real imports/rollout still wait on the user-owned manual gates. Tracked plans/review evidence are self-contained; ignored HTML and audit artifacts are not implementation dependencies.
+The product assessment at `548aad3` reran 195 Django, 17 browser and 21 deployment tests successfully, but additional synthetic probes returned **FIX** for data preservation, recipient selection, maintenance/settings, authentication recovery, reports and usability. The user agreed one new milestone, `.openchamber/plans/06-product-overhaul.md`, rather than four separate deliverables. Milestone 06 is implemented at `138ae8b`: 224 Django, 33 internet-blocked Chromium and 21 real deployment tests pass. Fresh implementation-side product review in `docs/history/REVIEW.md` records SHIP for automated acceptance, not independent review or rollout approval. Real imports/rollout still wait on the user-owned manual gates. Tracked plans/review evidence are self-contained; ignored HTML and audit artifacts are not implementation dependencies.
 
 - Django 5.2 LTS, Python 3.13, server-rendered templates, small JavaScript enhancements, Gunicorn and SQLite. Pin supported patch versions and dependencies during implementation.
-- Independent review of `60d4c9f` subsequently returned FIX for six additional identity/recovery issues. All six were reproduced and fixed at `465475b`; fresh full acceptance passes 228 Django/36 internet-blocked Chromium/21 deployment tests. See `docs/REVIEW.md` for the dated remediation evidence. Independent re-review and user-owned manual gates remain pending.
+- Independent review of `60d4c9f` subsequently returned FIX for six additional identity/recovery issues. All six were reproduced and fixed at `465475b`; fresh full acceptance passes 228 Django/36 internet-blocked Chromium/21 deployment tests. See `docs/history/REVIEW.md` for the dated remediation evidence. Independent re-review and user-owned manual gates remain pending.
 - `config/` owns settings, URLs and deployment entrypoints. `apps/` separates accounts, roster, inventory, issuing, transfers, reports, audit and operations. Templates/static assets are local; `tests/` uses synthetic data only.
 - Business services own mutations; views, importers and commands invoke the same services. Database constraints and atomic transactions enforce invariants independently of UI validation.
 - One application host, one local-disk SQLite database; no live database on OneDrive/network storage. Configure WAL, bounded busy timeout and immediate write transactions. Do not rely on SQLite row-level `select_for_update`; prove concurrent writes using separate connections/processes.
@@ -193,4 +249,4 @@ Validate real populated synthetic 95-person/224-item and long-history screens at
 
 ## Planning references
 
-See `docs/ROADMAP.md` and `.openchamber/plans/01-foundation.md` through `07-professional-redesign.md`. Milestones 01–07 describe implemented work. Automated acceptance and fresh rendered/export evidence are recorded in `docs/REVIEW.md`; independent re-review and manual staff/source/target-host/final-visual gates remain separate. These documents do not authorize registry publication, real-data import or rollout.
+See `docs/history/ROADMAP.md` and `.openchamber/plans/01-foundation.md` through `08-finish-overhaul.md`. Milestones 01–08 describe implemented work. Automated acceptance and fresh rendered/export evidence are recorded in `docs/history/REVIEW.md`; independent re-review and manual staff/source/target-host/final-visual gates remain separate. These documents do not authorize registry publication, real-data import or rollout.
