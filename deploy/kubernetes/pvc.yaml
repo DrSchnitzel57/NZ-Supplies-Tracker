@@ -9,7 +9,9 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  # storageClassName: local-path
+  # k3s/k3d's built-in node-local storage. Note: deleting a k3d cluster
+  # deletes this volume too - keep copies of backups outside the cluster.
+  storageClassName: local-path
   resources:
     requests:
       storage: 5Gi

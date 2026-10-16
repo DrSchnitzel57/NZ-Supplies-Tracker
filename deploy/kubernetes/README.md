@@ -22,8 +22,16 @@ any `ReadWriteMany` share: SQLite locking is not safe there. Use block storage
 | `pvc.yaml` | 5 GiB `ReadWriteOnce` volume for the database and its backups |
 | `deployment.yaml` | The image, uid 10001 + `fsGroup`, probes on `/readyz/` and `/healthz/` |
 | `service.yaml` | ClusterIP service on port 80 -> 8000 |
-| `ingress.yaml` | TLS ends at the ingress (no Caddy needed); 16 MB upload limit |
+| `ingress.yaml` | TLS ends at the ingress (no Caddy needed); Traefik class, nginx notes inside |
 | `kustomization.yaml` | Everything except the example Secret |
+
+Written for a small k3s/k3d cluster (Traefik ingress, `local-path`
+storage); other clusters need only the ingress class and storage class
+changed. The app must be served at the root of its own host name (or its own
+port): a path prefix such as `/supplies` is not supported without app
+changes. Images from a local registry work the same way, e.g.
+`k3d-registry.localhost:5000/supplies-tracker:X.Y.Z` (pin the tag; never
+`:latest` with `rollout restart`).
 
 ## Install
 
@@ -73,7 +81,7 @@ any `ReadWriteMany` share: SQLite locking is not safe there. Use block storage
   `Host: localhost` (the kubelet would otherwise send the pod IP and get 400).
 - `DJANGO_CSRF_TRUSTED_ORIGINS` must be exactly `https://<host>` (plus
   `:port` if not 443), or every form post fails CSRF.
-- The ingress must forward `X-Forwarded-Proto: https` (ingress-nginx does).
+- The ingress must forward `X-Forwarded-Proto: https` (Traefik and ingress-nginx do).
   Django trusts that header for HTTPS redirects and secure cookies; the
   probes send it themselves because they bypass the ingress.
 
