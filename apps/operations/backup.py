@@ -528,11 +528,16 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
                 pass
         _fsync_dir(dst.parent)
     finally:
-        try:
-            if tmp.exists():
-                tmp.unlink()
-        except OSError:
-            pass
+        # The staged copy inherits WAL mode from the source, so verifying it
+        # read-only leaves <tmp>-wal/-shm behind; after the swap they belong
+        # to no database (SQLite pairs sidecars by file name).
+        for leftover in (tmp, Path(str(tmp) + "-wal"), Path(str(tmp) + "-shm"),
+                         Path(str(tmp) + "-journal")):
+            try:
+                if leftover.exists():
+                    leftover.unlink()
+            except OSError:
+                pass
     _close_django_connections()
     _restrict(dst)
     verify_sqlite_backup(dst)

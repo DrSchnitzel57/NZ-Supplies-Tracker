@@ -105,6 +105,8 @@ class WindowsBackupBranchTests(TransactionTestCase):
             self.assertFalse([p for p in os.listdir(dest.parent) if ".tmp-" in p])
 
             make_missionary(admin)  # newer work the backup lacks
+            live_dir = backup_mod.live_db_path().parent
+            staged_before = {p for p in os.listdir(live_dir) if ".tmp-" in p}
             token = guards.enter_maintenance(owner="test", reason="windows restore")
             try:
                 restored = backup_mod.restore_sqlite(
@@ -114,6 +116,9 @@ class WindowsBackupBranchTests(TransactionTestCase):
                 guards.exit_maintenance(token)
             self.assertEqual(list(Missionary.objects.values_list("pk", flat=True)),
                              [person.pk])
+            # No staging files (or their WAL/SHM sidecars) are left behind.
+            staged_after = {p for p in os.listdir(live_dir) if ".tmp-" in p}
+            self.assertEqual(staged_after - staged_before, set())
 
     def test_posix_still_refuses_loose_permissions(self):
         from apps.operations import backup as backup_mod
