@@ -31,11 +31,14 @@
       row.querySelector("input[type=number]").name = "qty-" + i;
     });
     var units = rows().reduce(function(total, row) { return total + Number(row.querySelector("input[type=number]").value || 0); }, 0);
-    document.getElementById("draft-count").textContent = rows().length + " of 50 distinct items · " + units + " units";
+    document.getElementById("draft-count").textContent = rows().length
+      ? rows().length + (rows().length === 1 ? " item" : " different items") + " · " + units + (units === 1 ? " unit" : " units") + " (up to 50 items per issue)"
+      : "";
     document.getElementById("recipient-summary").textContent = chosen
       ? "For " + selectedName.textContent + " (" + selectedId.textContent + ")"
-      : "Choose a recipient to continue.";
+      : "Choose who is receiving supplies.";
     document.getElementById("issue-submit").textContent = chosen ? "Issue supplies to " + selectedName.textContent : "Issue supplies";
+    if (typeof markInList === "function") markInList();
   }
   function confirmRecipient(next) {
     if (next === chosen) return true;
@@ -49,11 +52,54 @@
     renumber();
     return true;
   }
+  // Recipient card: who they are and what they already have, so staff can
+  // spot "already received shoes" before adding a second pair.
+  var summaryTicket = 0;
+  function initialsOf(text) {
+    return (text || "").split(/[\s,]+/).filter(function (w) { return /^[A-Za-zÀ-ž]/.test(w); })
+      .slice(0, 2).map(function (w) { return w[0]; }).join("").toUpperCase();
+  }
+  function chip(text, tone) {
+    var node = document.createElement("span"); node.className = "chip " + (tone || "plain"); node.textContent = text; return node;
+  }
+  async function loadSummary(url) {
+    var facts = document.getElementById("selected-facts"), already = document.getElementById("selected-already");
+    if (!url || !facts || !already) return;
+    var ticket = ++summaryTicket;
+    already.textContent = "Checking what they have already received…";
+    try {
+      var reply = await fetch(url, {credentials: "same-origin", cache: "no-store"});
+      if (!reply.ok) throw new Error("summary " + reply.status);
+      var data = await reply.json();
+      if (ticket !== summaryTicket) return;
+      facts.replaceChildren();
+      if (data.full_name && data.full_name !== selectedName.textContent) facts.append(chip(data.full_name));
+      if (data.mission) facts.append(chip(data.mission));
+      if (data.departure) facts.append(chip(data.departure, "info"));
+      if (data.arrival && data.arrival !== "Arrived") facts.append(chip(data.arrival, "warn"));
+      already.replaceChildren();
+      var title = document.createElement("strong");
+      if (!data.received.length) { title.textContent = "Nothing received yet."; already.append(title); return; }
+      title.textContent = "Already received (" + data.received_units + "):";
+      var list = document.createElement("ul");
+      data.received.slice(0, 18).forEach(function (row) {
+        var li = document.createElement("li"); li.textContent = row.label + " × " + row.units; list.append(li);
+      });
+      if (data.received.length > 18) { var more = document.createElement("li"); more.textContent = "+" + (data.received.length - 18) + " more"; list.append(more); }
+      already.append(title, list);
+    } catch (error) {
+      if (ticket === summaryTicket) already.textContent = "";
+    }
+  }
   document.getElementById("person-finder").addEventListener("finder-select", function(event) {
     var result = event.detail;
     if (!confirmRecipient(result.id)) return;
     person.value = result.id; selectedName.textContent = result.label; selectedId.textContent = result.detail;
+    var initials = document.getElementById("selected-initials"); if (initials) initials.textContent = initialsOf(result.label);
+    identityCard.dataset.summaryUrl = "/roster/" + result.id + "/summary/";
+    document.getElementById("selected-facts").replaceChildren();
     picker.hidden = true; identityCard.hidden = false; renumber(); document.getElementById("change-person").focus();
+    loadSummary(identityCard.dataset.summaryUrl);
   });
   document.getElementById("change-person").addEventListener("click", function() {
     if (!confirmRecipient("")) return;
@@ -61,19 +107,56 @@
     document.getElementById("person-finder").dispatchEvent(new Event("finder-clear")); search.focus();
   });
   var catalogueRows = Array.from(catalogue.querySelectorAll(".catalogue-row"));
+  var groupHeads = Array.from(catalogue.querySelectorAll(".catalogue-group"));
+  var showOut = document.getElementById("show-out");
+  var chips = Array.from(document.querySelectorAll(".cat-chips [data-category]"));
+  var category = "";
   function filterCatalogue() {
-    var terms = itemSearch.value.trim().toLowerCase().slice(0,160).split(/\s+/).slice(0,8);
-    var matching = catalogueRows.filter(function(row) {
-      row.hidden = !terms.every(function(term) { return row.dataset.label.toLowerCase().includes(term); }); return !row.hidden;
+    var terms = itemSearch.value.trim().toLowerCase().slice(0,160).split(/\s+/).filter(Boolean).slice(0,8);
+    var includeOut = (showOut && showOut.checked) || terms.length > 0;
+    var shown = 0;
+    catalogueRows.forEach(function(row) {
+      var text = ((row.dataset.search || "") + " " + (row.dataset.label || "")).toLowerCase();
+      var match = terms.every(function(term) { return text.includes(term); })
+        && (!category || row.dataset.category === category)
+        && (includeOut || row.dataset.inStock === "1");
+      row.hidden = !match;
+      row.querySelectorAll(".size-btn").forEach(function(btn) {
+        btn.hidden = !includeOut && btn.dataset.inStock !== "1";
+      });
+      if (match) shown += 1;
     });
-    matching.sort(function(a,b) {
-      var query = itemSearch.value.trim().toLowerCase();
-      return Number(b.querySelector("strong").textContent.toLowerCase() === query) - Number(a.querySelector("strong").textContent.toLowerCase() === query);
-    }).forEach(function(row) { catalogue.append(row); });
-    document.getElementById("item-count").textContent = matching.length + " matching items";
-    document.getElementById("catalogue-empty").hidden = !!matching.length;
+    chips.forEach(function(button) {
+      button.hidden = !!button.dataset.category && !includeOut && button.dataset.inStock !== "1" && category !== button.dataset.category;
+    });
+    groupHeads.forEach(function(head) {
+      head.hidden = !catalogueRows.some(function(row) { return !row.hidden && row.dataset.category === head.dataset.category; });
+    });
+    document.getElementById("item-count").textContent = shown + (shown === 1 ? " matching item" : " matching items");
+    document.getElementById("catalogue-empty").hidden = !!shown;
   }
-  itemSearch.addEventListener("input", filterCatalogue);
+  chips.forEach(function(button) {
+    button.addEventListener("click", function() {
+      category = button.dataset.category;
+      chips.forEach(function(other) { other.setAttribute("aria-pressed", String(other === button)); });
+      filterCatalogue();
+    });
+  });
+  if (showOut) showOut.addEventListener("change", filterCatalogue);
+  function markInList() {
+    var chosenIds = rows().map(function(r) { return r.dataset.item; });
+    catalogue.querySelectorAll(".catalogue-add").forEach(function(btn) {
+      btn.classList.toggle("in-list", chosenIds.indexOf(btn.dataset.item) !== -1);
+    });
+  }
+  itemSearch.addEventListener("input", function() {
+    // Typing searches every category; the chips are for browsing.
+    if (category && itemSearch.value.trim()) {
+      category = "";
+      chips.forEach(function(other) { other.setAttribute("aria-pressed", String(other.dataset.category === "")); });
+    }
+    filterCatalogue();
+  });
   itemSearch.addEventListener("keydown", function(event) { if (event.key === "Enter") event.preventDefault(); });
   function addItem(source) {
     var itemId = source.dataset.item, labelText = source.dataset.label;
@@ -98,7 +181,10 @@
     }
     dirty = true; renumber(); say("Added to issue.");
   }
-  catalogue.addEventListener("click", function(event) { if (event.target.closest(".catalogue-add")) addItem(event.target.closest(".catalogue-row")); });
+  catalogue.addEventListener("click", function(event) {
+    var button = event.target.closest(".catalogue-add");
+    if (button) addItem(button.dataset.item ? button : button.closest(".catalogue-row"));
+  });
   list.addEventListener("click", function (event) {
     if (event.target.classList.contains("remove-row")) { event.target.closest(".issue-row").remove(); dirty = true; renumber(); }
   });
@@ -194,4 +280,5 @@
   };
   filterCatalogue();
   renumber();
+  if (chosen && identityCard.dataset.summaryUrl) loadSummary(identityCard.dataset.summaryUrl);
 })();

@@ -15,6 +15,7 @@
     var s = el("connection-status");
     if (!s) return;
     s.textContent = "Connection: " + text;
+    s.title = tone === "ok" ? "Live — numbers refresh every 15 seconds" : "Connection: " + text;
     s.classList.remove("ok", "warn", "crit", "neutral");
     s.classList.add(tone || "neutral");
   }
@@ -45,6 +46,9 @@
     document.querySelectorAll("[data-live-today]").forEach(function (node) {
       if (typeof data.issues_today !== "undefined") node.textContent = data.issues_today;
     });
+    document.querySelectorAll("[data-live-attention]").forEach(function (node) {
+      if (typeof data.running_low !== "undefined") node.textContent = data.running_low + (data.ran_out || 0);
+    });
     var attention = el("home-attention");
     if (attention && data.attention_html && !attention.contains(document.activeElement)) attention.innerHTML = data.attention_html;
   }
@@ -55,7 +59,14 @@
     data.items.forEach(function (it) { availability[it.id] = it; });
     document.querySelectorAll("[data-stock-status]").forEach(function (node) {
       var info = availability[node.dataset.stockStatus];
-      if (info) node.textContent = info.available === 0 ? "Out of stock" : info.low ? "Low stock" : "Available";
+      if (info) {
+        node.textContent = info.available === 0 ? "Out of stock" : info.low ? "Low stock" : "Available";
+        if (node.classList.contains("chip")) {
+          node.classList.toggle("crit", info.available === 0);
+          node.classList.toggle("warn", info.available !== 0 && !!info.low);
+          node.classList.toggle("ok", !info.low);
+        }
+      }
     });
     document.querySelectorAll("[data-net-for]").forEach(function (node) {
       var info = availability[node.dataset.netFor]; if (info) node.textContent = info.net_given;

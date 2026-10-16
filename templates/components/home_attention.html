@@ -1,8 +1,16 @@
 <div class="grid two">
-<section class="card"><div class="hd"><h2>Needs attention</h2><a class="btn" href="/inventory/?low=1">View all low stock</a></div><div class="bd">
-{% if low_items %}<ul class="result-list">{% for item in low_items|slice:':8' %}<li><a href="/inventory/{{ item.pk }}/">{{ item }}</a><span>{{ item.on_hand }} available · {% if item.on_hand == 0 %}Out of stock{% else %}Low stock{% endif %}</span></li>{% endfor %}</ul>{% else %}<p>No items at or below their alert level.</p>{% endif %}<a href="/reports/?family=low-stock">Copy or email a low-stock list</a>
-</div></section>
-<section class="card"><div class="hd"><h2>Recent issues</h2><a class="btn" href="/issue/history/">Full history</a></div><div class="bd">
-{% if recent %}<ul class="result-list">{% for issue in recent|slice:':8' %}<li><a href="/issue/{{ issue.pk }}/">{{ issue.missionary_name }}</a><span>{{ issue.issued_at }} · {% if issue.status == 'REVERSED' %}Undone{% else %}Current{% endif %}<br>{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></li>{% endfor %}</ul>{% else %}<p>No issues yet. <a href="/issue/">Issue supplies</a> to begin.</p>{% endif %}
-</div></section>
+<section class="card"><div class="hd"><div><h2>Needs reordering</h2></div><a href="/inventory/?stock=attention">See all in Inventory</a></div>
+{% if running_low or ran_out %}
+<ul class="result-list">
+{% for item in running_low %}<li><div class="grow"><a href="/inventory/{{ item.pk }}/">{{ item.name }}{% if item.size %} ({{ item.size }}){% endif %}</a><span>{{ item.category }} · alert at {{ item.low_threshold }}</span></div><div class="end"><strong class="tnum">{{ item.on_hand }}</strong><span class="chip warn">Running low</span></div></li>{% endfor %}
+{% for item in ran_out %}<li><div class="grow"><a href="/inventory/{{ item.pk }}/">{{ item.name }}{% if item.size %} ({{ item.size }}){% endif %}</a><span>{{ item.category }}{% if item.last_out %} · last given {{ item.last_out|when }}{% endif %}</span></div><div class="end"><strong class="tnum">0</strong><span class="chip crit">Ran out</span></div></li>{% endfor %}
+</ul>
+<div class="ft"><a href="/reports/?family=low-stock">Copy or email the reorder list</a>{% if running_low_total > running_low|length %} · {{ running_low_total }} items running low in total{% endif %}</div>
+{% else %}<div class="empty"><strong>Nothing to reorder</strong>Every stocked item is above its alert level.</div>{% endif %}
+</section>
+<section class="card"><div class="hd"><h2>Leaving in the next {{ leaving_window }} days</h2><a href="/roster/?leaving={{ leaving_window }}&amp;sort=leaving">See all</a></div>
+{% if leaving %}<ul class="result-list">{% for person in leaving %}<li><div class="grow"><a href="/roster/{{ person.pk }}/">{{ person.display_name }}</a><span>{{ person.mission|default:"Mission not recorded" }}</span></div><div class="end"><span>{{ person.departure_date|day }} · {{ person.departure_date|relative_day }}</span>{% if person.received %}<span>{{ person.received }} item{{ person.received|plural }} received</span>{% else %}<span class="chip warn">Nothing received yet</span>{% endif %}</div></li>{% endfor %}</ul>
+{% if leaving_total > leaving|length %}<div class="ft">{{ leaving_total }} missionaries leave in the next {{ leaving_window }} days.</div>{% endif %}
+{% else %}<div class="empty"><strong>No departures soon</strong>Nobody on the roster leaves in the next {{ leaving_window }} days.</div>{% endif %}
+</section>
 </div>
