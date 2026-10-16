@@ -12,14 +12,15 @@ from apps.common.errors import ValidationError
 User = get_user_model()
 
 
-def create_user(*, actor, username: str, password: str, is_admin: bool = False):
+def create_user(*, actor, username: str, password: str, is_admin: bool = False,
+                display_name: str = ""):
     """Admin-only provisioning. New accounts must change the temp password."""
     permissions.require_admin(actor)
     permissions.validate_new_user(username=username, password=password)
     username = username.strip()
     if User.objects.filter(username=username).exists():
         raise ValidationError("username already exists")
-    user = User(username=username)
+    user = User(username=username, display_name=(display_name or "").strip()[:80])
     user.set_password(password)
     user.must_change_password = True
     user.password_changed_at = None
@@ -154,3 +155,18 @@ def invalidate_sessions(user) -> int:
             session.delete()
             count += 1
     return count
+
+
+def set_display_name(*, actor, user_id, display_name: str):
+    """Admin-only: the name shown to colleagues ("Sister Langkilde")."""
+    permissions.require_admin(actor)
+    user = User.objects.get(pk=user_id)
+    user.display_name = (display_name or "").strip()[:80]
+    user.save(update_fields=["display_name"])
+    from apps.audit.models import AuditEvent
+
+    AuditEvent.objects.create(
+        actor=actor, action="user.display_name", target_type="user",
+        target_id=str(user.pk), detail={"username": user.username,
+                                        "display_name": user.display_name})
+    return user

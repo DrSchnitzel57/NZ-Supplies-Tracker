@@ -1247,7 +1247,11 @@ class SeedFidelityTests(TestCase):
         person = roster[0]
         self.assertEqual(person["arrival_status"], "arrived")
         self.assertEqual(person["stake"], "North Stake")
-        self.assertEqual(person["arrival_date"], "2025-01-05")
+        # missionArrival is the day they reach the field = the day they leave
+        # the MTC. It used to be folded into arrival_date and then lost
+        # whenever the source also had arrivalDate (the real file always does).
+        self.assertEqual(person["arrival_date"], "")
+        self.assertEqual(person["departure_date"], "2025-01-05")
         self.assertEqual(person["release_date"], "2026-01-05")
         self.assertEqual(person["language"], "Spanish")
         self.assertEqual(person["title_prefix"], "Sister")
@@ -1360,12 +1364,14 @@ class SeedFidelityTests(TestCase):
 
         roster, _, _ = normalize_seed({
             "missionaries": [{"id": "D-1", "name": "Dated Person",
-                              "missionArrival": "not-a-date"}],
+                              "arrivalDate": "not-a-date", "missionArrival": "soon"}],
             "items": [],
         })
         self.assertEqual(roster[0]["arrival_date"], "")
         self.assertEqual(roster[0]["intake_metadata"].get("arrival_date_raw"),
                          "not-a-date")
+        self.assertEqual(roster[0]["departure_date"], "")
+        self.assertEqual(roster[0]["intake_metadata"].get("departure_date_raw"), "soon")
 
 
 class LedgerChainTests(TestCase):

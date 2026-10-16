@@ -9,7 +9,9 @@ import json
 import zipfile
 from datetime import datetime, timezone
 
-BUNDLE_VERSION = 1
+BUNDLE_VERSION = 2
+#: Versions this code reads. v1 lacked roster departure_date (filled blank).
+READABLE_VERSIONS = (1, 2)
 BUNDLE_FORMAT = "mtc-bundle"
 TABLE_FILES = [
     "settings.csv",
@@ -21,11 +23,18 @@ TABLE_FILES = [
     "audits.csv",
 ]
 
+ROSTER_FIELDS_V1 = ["id", "external_id", "name", "email", "title_prefix",
+                    "arrival_status", "stake", "mission", "language",
+                    "arrival_date", "release_date", "personal_email",
+                    "intake_metadata",
+                    "is_archived", "archived_at", "version"]
 ROSTER_FIELDS = ["id", "external_id", "name", "email", "title_prefix",
                  "arrival_status", "stake", "mission", "language",
-                 "arrival_date", "release_date", "personal_email",
+                 "arrival_date", "departure_date", "release_date", "personal_email",
                  "intake_metadata",
                  "is_archived", "archived_at", "version"]
+#: Older exact headers still accepted on import (missing columns read as blank).
+LEGACY_HEADERS = {"roster.csv": [ROSTER_FIELDS_V1]}
 ITEM_FIELDS = ["id", "category", "name", "size", "unit", "on_hand", "low_threshold",
                "is_archived", "archived_at", "version", "source_remaining", "source_corrected"]
 ISSUE_FIELDS = ["id", "missionary_id", "missionary_name", "missionary_external_id",
@@ -168,7 +177,7 @@ def parse_bundle(data: bytes) -> dict:
         if manifest.get("format") != BUNDLE_FORMAT:
             raise BundleError("unknown bundle format")
         version = manifest.get("version")
-        if version != BUNDLE_VERSION:
+        if version not in READABLE_VERSIONS:
             migrated = _migrate_legacy(zf, names, manifest, version)
             if migrated is not None:
                 return migrated
@@ -228,6 +237,10 @@ def _read_csv(name: str, raw: bytes) -> list[dict]:
     if reader.fieldnames is None:
         raise BundleError(f"{name} has no header row")
     actual = [(h or "") for h in reader.fieldnames]
+    if actual != expected and actual in LEGACY_HEADERS.get(name, []):
+        # An older exact layout: read it, then present the current columns
+        # (new columns blank) so every later step sees one shape.
+        expected = actual
     if actual != expected:
         raise BundleError(
             f"{name} has an unexpected header; "
@@ -238,7 +251,10 @@ def _read_csv(name: str, raw: bytes) -> list[dict]:
             raise BundleError(f"{name} row {n} is malformed")
         if None in row:
             raise BundleError(f"{name} row {n} has too many columns")
-        rows.append({k: safe_decode(v) for k, v in row.items()})
+        decoded = {k: safe_decode(v) for k, v in row.items()}
+        for field in TABLE_HEADERS[name]:
+            decoded.setdefault(field, "")
+        rows.append(decoded)
         if len(rows) > MAX_CSV_ROWS:
             raise BundleError(f"{name} exceeds the row limit")
     return rows

@@ -74,8 +74,8 @@ def user_create(request):
         return _user_screen(request, form=form, status=400)
     messages.success(
         request,
-        f"Created {'administrator' if user.is_superuser else 'staff'} account {user.username}. "
-        "They must change the temporary password on first sign-in.")
+        f"Created {'an administrator' if user.is_superuser else 'a staff'} account for {user.shown_name} "
+        f"(username {user.username}). They will choose their own password when they first sign in.")
     return redirect("accounts-users")
 
 
@@ -122,4 +122,18 @@ def user_reactivate(request, pk):
         messages.error(request, f"Could not reactivate: {exc}")
         return redirect("accounts-users")
     messages.success(request, f"Reactivated {user.username}.")
+    return redirect("accounts-users")
+
+
+@admin_required
+@reauth_required
+@require_http_methods(["POST"])
+def user_display_name(request, pk):
+    try:
+        user = lifecycle.set_display_name(actor=request.user, user_id=pk,
+                                          display_name=request.POST.get("display_name", ""))
+    except (DomainError, get_user_model().DoesNotExist) as exc:
+        messages.error(request, f"Could not change the name: {exc}")
+        return redirect("accounts-users")
+    messages.success(request, f"{user.username} now shows as “{user.shown_name}”.")
     return redirect("accounts-users")

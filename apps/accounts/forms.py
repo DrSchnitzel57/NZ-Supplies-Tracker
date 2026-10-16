@@ -32,7 +32,11 @@ class ForcedPasswordChangeForm(PasswordChangeForm):
 
 
 class AdminUserForm(forms.Form):
+    display_name = forms.CharField(max_length=80, required=False, label='Name shown to others',
+                                   help_text='How colleagues will see them in History, e.g. “Sister Langkilde”.',
+                                   widget=forms.TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Sister Langkilde'}))
     username = forms.CharField(max_length=150, validators=User._meta.get_field('username').validators,
-                               widget=forms.TextInput(attrs={'autocomplete': 'off'}))
+                               help_text='Used to sign in. Letters, numbers and . @ + - _ only.',
+                               widget=forms.TextInput(attrs={'autocomplete': 'off', 'placeholder': 'sister.langkilde'}))
     password = forms.CharField(label='Temporary password', strip=False, widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}))
-    is_admin = forms.BooleanField(required=False, label='Administrator')
+    is_admin = forms.BooleanField(required=False, label='Administrator (can manage accounts, settings and full imports)')
