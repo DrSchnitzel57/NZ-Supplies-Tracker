@@ -1,19 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Full reset — MTC Supplies Tracker{% endblock %}
+{% block title %}Protected reset — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Destructive area: full reset</h1><div class="sub">Clears operational data · keeps accounts and settings</div></div>
-<div class="banner crit" role="alert"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><h2>This permanently clears all missionaries, items, issues, movements, audits and import previews.</h2><p>Accounts and system settings are kept, plus one reset marker. A verified backup is taken first — if the backup fails, nothing is deleted.</p></div></div>
-<p>Current data: <strong>{{ counts.people }}</strong> people · <strong>{{ counts.items }}</strong> items · <strong>{{ counts.issues }}</strong> issues.</p>
+<div class="page-head"><div><span class="eyebrow">Administration</span><h1>Protected reset</h1><p class="sub">Empties the app for a fresh start. Accounts and settings are kept.</p></div></div>
+<div class="banner crit" role="alert"><span class="ic">{% include "components/icon.html" with name="alert" %}</span><div><h2>This permanently clears every missionary, item, issue, stock change, audit entry and import preview.</h2><p>Accounts and settings are kept, plus a note that a reset happened. A verified backup is taken first — if the backup fails, nothing is deleted.</p></div></div>
+<div class="card" style="max-width:640px"><div class="bd stack">
+<p style="margin:0">Currently stored: <strong>{{ counts.people }}</strong> missionaries · <strong>{{ counts.items }}</strong> items · <strong>{{ counts.issues }}</strong> issues.</p>
 {% if not fresh %}<p class="error" role="alert">Confirm your password first: <a href="/admin-area/reauth/?next=/admin-area/reset/">Confirm identity</a>.</p>{% endif %}
-<div class="card"><div class="bd">
 <form method="post" class="stack">
 {% csrf_token %}
 <input type="hidden" name="expected_people" value="{{ counts.people }}">
 <input type="hidden" name="expected_items" value="{{ counts.items }}">
 <input type="hidden" name="expected_issues" value="{{ counts.issues }}">
 <label>Type <strong>RESET</strong> to confirm <input name="confirmation" autocomplete="off" required></label>
-<p><button type="submit" class="danger" {% if not fresh %}disabled{% endif %}>Clear all operational data</button></p>
+<div class="form-actions"><button type="submit" class="danger" {% if not fresh %}disabled{% endif %}>Clear all operational data</button></div>
 </form>
 </div></div>
-<p class="help">This lives only here — never in ordinary troubleshooting screens.</p>
+<p class="help">Only administrators can see this page. It is never needed for everyday problems — ask for help first.</p>
 {% endblock %}

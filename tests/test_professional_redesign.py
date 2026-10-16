@@ -108,7 +108,8 @@ class SearchAndLists(TestCase):
         for i in range(61):
             make_item(self.staff, opening_qty=0, name=f'Synthetic low {i:02}')
         response = self.client.get('/reports/?family=low-stock')
-        self.assertEqual(len(response.context['low_text'].splitlines()), 61)
+        bullets = [line for line in response.context['low_text'].splitlines() if line.startswith('• ')]
+        self.assertEqual(len(bullets), 61)
         self.assertEqual(response.context['page_obj'].paginator.count, 61)
         self.assertIn('Synthetic low 60', response.context['low_text'])
         self.assertIn(response.context['low_text'], unquote(response.context['mail_url']))

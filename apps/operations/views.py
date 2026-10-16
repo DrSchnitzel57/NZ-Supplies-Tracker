@@ -27,30 +27,14 @@ from apps.roster.models import Missionary
 
 @staff_required
 def dashboard(request):
-    low_items = list(
-        Item.objects.filter(
-            is_archived=False, on_hand__lte=Coalesce("low_threshold", 0)
-        ).order_by("category", "name")[:20]
-    )
-    recent = list(
-        Issue.objects.select_related("missionary")
-        .prefetch_related("lines")
-        .order_by("-issued_at")[:10]
-    )
-    counts = {
-        "low_stock": Item.objects.filter(
-            is_archived=False, on_hand__lte=Coalesce("low_threshold", 0)).count(),
-        "people": Missionary.objects.filter(is_archived=False).count(),
-        "items": Item.objects.filter(is_archived=False).count(),
-        "issues_today": Issue.objects.filter(
-            issued_at__date=timezone.localdate(), status=Issue.ACTIVE
-        ).count(),
-    }
-    return render(
-        request,
-        "dashboard.html",
-        {"low_items": low_items, "recent": recent, "counts": counts},
-    )
+    from apps.operations import overview
+
+    return render(request, "dashboard.html", {
+        "counts": overview.counts(),
+        "categories": overview.given_by_category(),
+        "recent": overview.recent_issues(),
+        **overview.attention(),
+    })
 
 
 @staff_required
@@ -85,9 +69,6 @@ def stock_api(request):
 def dashboard_api(request):
     from django.conf import settings
 
-    low = Item.objects.filter(
-        is_archived=False, on_hand__lte=Coalesce("low_threshold", 0)
-    ).count()
     # Server-driven expiry countdown so the warning banner is honest: it
     # reflects the actual idle timer, not page-load time.
     last = request.session.get("last_activity")
@@ -98,21 +79,19 @@ def dashboard_api(request):
             expires_in = max(0, int(timeout - (timezone.now().timestamp() - float(last))))
         except (TypeError, ValueError):
             expires_in = timeout
+    from apps.operations import overview
+
+    counts = overview.counts()
     return JsonResponse(
         {
-            "people": Missionary.objects.filter(is_archived=False).count(),
-            "items": Item.objects.filter(is_archived=False).count(),
-            "low_stock": low,
-            "issues_today": Issue.objects.filter(
-                issued_at__date=timezone.localdate(), status=Issue.ACTIVE
-            ).count(),
+            **{key: counts[key] for key in (
+                "people", "items", "low_stock", "issues_today", "running_low", "ran_out",
+                "out_of_stock", "arrived", "leaving_soon", "week_units", "week_issues")},
             "now": timezone.now().isoformat(),
             "expires_in": expires_in,
             "attention_html": render_to_string("components/home_attention.html", {
-                "low_items": Item.objects.filter(is_archived=False,
-                    on_hand__lte=Coalesce("low_threshold", 0)).order_by("category", "name")[:8],
-                "recent": Issue.objects.prefetch_related("lines").order_by("-issued_at")[:8],
-            }),
+                **overview.attention(), "recent": overview.recent_issues(),
+                "counts": counts}),
         }
     )
 

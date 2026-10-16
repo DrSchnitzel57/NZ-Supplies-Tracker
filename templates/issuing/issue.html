@@ -1,44 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Issue goods — MTC Supplies Tracker{% endblock %}
+{% block title %}Issue supplies — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Issue supplies</h1><p class="sub">Choose a recipient, then add supplies to their list.</p></div><a href="/issue/history/">View history</a></div>
+<div class="page-head"><div><h1>Issue supplies</h1><p class="sub">Choose the missionary, add what they need, then issue it in one go.</p></div><div class="actions"><a class="btn" href="/issue/history/">{% include "components/icon.html" with name="history" %}History</a></div></div>
 <div id="issue-feedback" role="status" aria-live="polite"></div>
 <div id="shortage-review" hidden></div>
 <form method="post" class="stack" id="issue-form" autocomplete="off" data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 <input type="hidden" name="draft_user_id" value="{{ user.pk }}">
 <input type="hidden" name="idempotency_key" value="{{ draft_key }}">
-<section class="recipient-area">
+<section class="recipient-area" aria-label="Recipient">
 <div id="recipient-picker" {% if selected_person %}hidden{% endif %}>
 <div class="combobox" data-finder="people" id="person-finder">
-<label for="person-filter">Find a missionary by name or ID</label>
-<input type="search" id="person-filter" autocomplete="off" placeholder="Name or missionary ID" maxlength="160" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="person-results">
-<div class="suggestions" id="person-results" role="listbox" hidden></div><span class="finder-status mini" id="person-count" role="status"></span>
+<label for="person-filter">1. Who is receiving supplies?</label>
+<input type="search" id="person-filter" autocomplete="off" placeholder="Type a name, “Sister Halvorsen” or a missionary ID" maxlength="160" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="person-results">
+<div class="suggestions" id="person-results" role="listbox" hidden></div><span class="finder-status" id="person-count" role="status"></span>
 </div></div>
 <input type="hidden" name="missionary_id" id="person-select" value="{{ missionary_id }}">
-<div id="selected-person" class="selected-person" {% if not selected_person %}hidden{% endif %}><div><strong id="selected-name">{{ selected_person.name }}</strong><span id="selected-id">{{ selected_person.external_id }}</span></div><button type="button" id="change-person">Change</button></div>
+<div id="selected-person" class="selected-person" {% if not selected_person %}hidden{% endif %} data-summary-url="{% if selected_person %}/roster/{{ selected_person.pk }}/summary/{% endif %}">
+<span class="avatar" aria-hidden="true" id="selected-initials">{{ selected_person.display_name|initials }}</span>
+<div class="who"><strong id="selected-name">{{ selected_person.display_name }}</strong><span id="selected-id">{{ selected_person.external_id }}</span>
+<div class="facts" id="selected-facts">{% if selected_person %}{% if selected_person.mission %}<span class="chip plain">{{ selected_person.mission }}</span>{% endif %}{% if selected_person.departure_date %}<span class="chip info">Leaves {{ selected_person.departure_date|day }}</span>{% endif %}{% endif %}</div>
+<div class="already" id="selected-already" aria-live="polite"></div></div>
+<button type="button" id="change-person">Change</button></div>
 <noscript><label>Missionary<select name="fallback_missionary_id" required>
 <option value="">— Choose a missionary —</option>
-{% for person in missionaries %}<option value="{{ person.pk }}" {% if person.pk|stringformat:"s" == missionary_id %}selected{% endif %}>{{ person.name }} ({{ person.external_id }})</option>{% endfor %}
+{% for person in missionaries %}<option value="{{ person.pk }}" {% if person.pk|stringformat:"s" == missionary_id %}selected{% endif %}>{{ person.display_name }} — {{ person.full_name }} ({{ person.external_id }})</option>{% endfor %}
 </select></label></noscript>
 </section>
 <div class="issuing-workspace">
-<section aria-label="Supply catalogue">
-<div class="catalogue-head"><h2>Catalogue</h2><span class="mini" id="item-count" role="status">{{ items|length }} items</span></div>
-<label for="item-filter">Search item, category or size</label>
-<input type="search" id="item-filter" autocomplete="off" placeholder="Search catalogue" maxlength="160" aria-controls="catalogue-rows">
+<section class="catalogue" aria-label="Supply catalogue">
+<div class="catalogue-head"><h2>2. Add supplies</h2><span class="finder-status" id="item-count" role="status">{{ items|length }} items</span></div>
+<div class="catalogue-tools">
+<div class="cat-chips" role="group" aria-label="Category">
+<button type="button" data-category="" aria-pressed="true">All</button>
+{% for cat in catalogue %}<button type="button" data-category="{{ cat.name }}" data-in-stock="{% if cat.available > 0 %}1{% else %}0{% endif %}" aria-pressed="false">{{ cat.name }}</button>{% endfor %}
+</div>
+<label class="stock-toggle"><input type="checkbox" id="show-out"> Show out-of-stock items ({{ out_of_stock }})</label>
+<label for="item-filter" class="sr-only">Search item, category or size</label>
+<input type="search" id="item-filter" autocomplete="off" placeholder="Search supplies — e.g. “white shirt 40”" maxlength="160" aria-controls="catalogue-rows">
+</div>
 <div class="catalogue-rows" id="catalogue-rows">
-{% for item in items %}<div class="catalogue-row" data-item="{{ item.pk }}" data-label="{{ item }}"><div><strong>{{ item.name }}</strong><small>{{ item.category }} · {{ item.size|default:"No size" }}</small></div><div class="available"><strong data-catalogue-stock="{{ item.pk }}">{{ item.on_hand }}</strong><small>available</small></div><button type="button" class="catalogue-add" aria-label="Add {{ item }}">Add</button></div>{% empty %}<p class="help">No active supplies. <a href="/inventory/new/">Add an item</a>.</p>{% endfor %}
-</div><p id="catalogue-empty" class="help" hidden>No matching supplies.</p>
-<noscript><label>Item<select id="catalogue-select" name="item_id">
+{% for cat in catalogue %}<div class="catalogue-group" data-category="{{ cat.name }}">{{ cat.name }}</div>
+{% for group in cat.groups %}{% if group.single %}{% with item=group.single %}
+<div class="catalogue-row{% if item.on_hand <= 0 %} is-out{% endif %}" data-item="{{ item.pk }}" data-label="{{ item }}" data-category="{{ cat.name }}" data-search="{{ group.search }}" data-in-stock="{% if item.on_hand > 0 %}1{% else %}0{% endif %}">
+<div class="name"><strong>{{ item.name }}{% if item.size %} <span class="tag">{{ item.size }}</span>{% endif %}</strong><small>{{ item.category }}</small></div>
+<div class="single"><div class="available"><strong data-catalogue-stock="{{ item.pk }}">{{ item.on_hand }}</strong> available</div><button type="button" class="catalogue-add" data-item="{{ item.pk }}" data-label="{{ item }}" aria-label="Add {{ item }}">Add</button></div>
+</div>{% endwith %}
+{% else %}
+<div class="catalogue-row sized{% if not group.in_stock %} is-out{% endif %}" data-category="{{ cat.name }}" data-search="{{ group.search }}" data-in-stock="{% if group.in_stock %}1{% else %}0{% endif %}" data-label="{{ cat.name }} / {{ group.name }}">
+<div class="name"><strong>{{ group.name }}</strong><small>{{ cat.name }} · {{ group.available }} available in {{ group.in_stock }} of {{ group.variants|length }} sizes</small></div>
+<div class="sizes" role="group" aria-label="{{ group.name }} sizes">{% for v in group.variants %}<button type="button" class="catalogue-add size-btn{% if v.on_hand <= 0 %} out{% elif v.on_hand <= v.low_threshold %} low{% endif %}" data-item="{{ v.pk }}" data-label="{{ v }}" data-in-stock="{% if v.on_hand > 0 %}1{% else %}0{% endif %}" aria-label="Add {{ v }} — {{ v.on_hand }} available">{{ v.size|default:"No size" }} <span class="n" data-catalogue-stock="{{ v.pk }}">{{ v.on_hand }}</span></button>{% endfor %}</div>
+</div>
+{% endif %}{% endfor %}
+{% empty %}<div class="empty"><strong>No supplies yet</strong><a href="/inventory/new/">Add an item</a> to start issuing.</div>{% endfor %}
+</div><p id="catalogue-empty" class="help" hidden>No supplies match. Try fewer words, another category, or tick “Show out-of-stock items”.</p>
+<noscript><div class="bd"><label>Item<select id="catalogue-select" name="item_id">
 <option value="">— Choose an item —</option>
-{% for item in items %}<option value="{{ item.pk }}" data-label="{{ item }}" data-available="{{ item.on_hand }}">{{ item }} — Available: {{ item.on_hand }}</option>{% endfor %}
+{% for item in items %}<option value="{{ item.pk }}" data-label="{{ item }}" data-available="{{ item.on_hand }}">{{ item }} — {{ item.on_hand }} available</option>{% endfor %}
 </select></label>
-<label for="catalogue-qty">Quantity to add</label><input type="number" name="quantity" id="catalogue-qty" min="1" max="999999999" value="1">
-<p>Choose one catalogue item per submission. JavaScript enables multi-item issuing.</p></noscript>
+<label for="catalogue-qty">Quantity</label><input type="number" name="quantity" id="catalogue-qty" min="1" max="999999999" value="1">
+<p class="help">Without JavaScript you can issue one item at a time.</p></div></noscript>
 </section>
-<section class="issue-summary stack"><h2>Issue summary</h2>
-<p id="recipient-summary" class="summary">Choose the recipient above.</p>
+<section class="issue-summary stack" aria-label="Issue summary"><div><h2>3. Check and issue</h2>
+<p id="recipient-summary" class="summary">Choose who is receiving supplies.</p></div>
 <div id="issue-rows">
 {% for row in draft_lines %}<div class="issue-row" data-item="{{ row.item_id }}">
 <input type="hidden" name="item-{{ forloop.counter0 }}" value="{{ row.item_id }}">
@@ -47,12 +71,11 @@
 <button type="button" class="remove-row" aria-label="Remove {{ row.label }}">Remove</button>
 </div>{% endfor %}
 </div>
-<p class="empty-draft">Add supplies from the catalogue.</p>
-<p id="draft-count" class="mini"></p>
-<label for="issue-note">Note (optional)</label><input id="issue-note" name="note" value="{{ note }}" maxlength="4000">
+<p class="empty-draft">Nothing added yet. Choose items from the list.</p>
+<p id="draft-count"></p>
+<div class="field"><label for="issue-note">Note <span class="muted">(optional)</span></label><input id="issue-note" name="note" value="{{ note }}" maxlength="4000" placeholder="e.g. Replacement — old shoes worn out"></div>
 <button type="submit" class="primary" id="issue-submit">Issue supplies</button>
-<p class="mini">Up to 50 distinct items. This draft stays in this tab only; closing or reloading discards it.</p>
+<p class="help">If something has run short since you started, nothing is issued until you review it. Unsaved work stays only in this tab.</p>
 </section></div>
 </form>
-<details><summary>Shortages and corrections</summary><p>A shortage needs your confirmation before anything is issued. To correct a saved issue, open History and choose Undo this issue with a reason.</p></details>
 {% endblock %}

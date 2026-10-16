@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% block title %}Search: {{ q }} — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Search results</h1><p class="sub">{{ q }}</p></div>
+<div class="page-head"><div><h1>Search results</h1><p class="sub">for “{{ q }}”</p></div></div>
 <div class="grid two">
-<section class="panel"><h2>Missionaries · {{ people_total }}</h2><ul class="result-list">
-{% for p in people %}<li><a href="/roster/{{ p.pk }}/">{{ p.name }}</a><span>{{ p.external_id }}</span></li>{% empty %}<li>No missionaries found.</li>{% endfor %}</ul><a href="/roster/?q={{ q|urlencode }}">All matching missionaries</a></section>
-<section class="panel"><h2>Inventory · {{ items_total }}</h2><ul class="result-list">
-{% for i in items %}<li><a href="/inventory/{{ i.pk }}/">{{ i }}</a><span>{{ i.on_hand }} available</span></li>{% empty %}<li>No items found.</li>{% endfor %}</ul><a href="/inventory/?q={{ q|urlencode }}">All matching items</a></section>
+<section class="card"><div class="hd"><h2>Missionaries · {{ people_total }}</h2>{% if people_total %}<a href="/roster/?q={{ q|urlencode }}">See all</a>{% endif %}</div><ul class="result-list">
+{% for p in people %}<li><div class="grow"><a href="/roster/{{ p.pk }}/">{{ p.display_name }}</a><span>{{ p.full_name }} · {{ p.external_id }}{% if p.mission %} · {{ p.mission }}{% endif %}</span></div>{% if not p.is_archived %}<a class="btn small" href="/issue/?missionary={{ p.pk }}">Issue</a>{% endif %}</li>{% empty %}<li><span>No missionaries found.</span></li>{% endfor %}</ul></section>
+<section class="card"><div class="hd"><h2>Supplies · {{ items_total }}</h2>{% if items_total %}<a href="/inventory/?q={{ q|urlencode }}">See all</a>{% endif %}</div><ul class="result-list">
+{% for i in items %}<li><div class="grow"><a href="/inventory/{{ i.pk }}/">{{ i.name }}{% if i.size %} ({{ i.size }}){% endif %}</a><span>{{ i.category }}</span></div><div class="end"><strong>{{ i.on_hand }}</strong><span>available</span></div></li>{% empty %}<li><span>No supplies found.</span></li>{% endfor %}</ul></section>
 </div>{% endblock %}

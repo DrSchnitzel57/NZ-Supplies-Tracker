@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Confirm identity — MTC Supplies Tracker{% endblock %}
+{% block title %}Confirm your password — MTC Supplies{% endblock %}
 {% block content %}
 <div class="auth-wrap"><div class="auth-card">
-<h1>Confirm your identity</h1>
-<div class="sub">Sensitive admin tools need a recent password confirmation</div>
-<p class="help">Sensitive admin tools need a recent password confirmation (valid 10 minutes). This never extends your idle sign-in. Confirm your password to continue.</p>
+<h1>Confirm your password</h1>
+<p class="sub">Administration changes need a recent password check. It lasts 10 minutes.</p>
 <form method="post" class="stack">
 {% csrf_token %}
 <input type="hidden" name="next" value="{{ next }}">
 <label>Your password <input type="password" name="password" required autocomplete="current-password"></label>
-<p><button type="submit" class="primary">Confirm identity</button></p>
+<button type="submit" class="primary">Confirm identity</button>
 </form>
+<p class="help">This doesn’t keep you signed in for longer.</p>
 </div></div>
 {% endblock %}

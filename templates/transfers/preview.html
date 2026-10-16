@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Import preview — MTC Supplies Tracker{% endblock %}
+{% block title %}Check the import — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Import preview — {% if preview.kind == 'roster' %}Missionaries{% else %}Inventory{% endif %}</h1><div class="sub">{% if preview.mode == 'replace' %}Replace active list{% else %}Add / update{% endif %} · {{ valid|length }} valid · {{ errors|length }} with errors</div></div>
+<p class="crumbs"><a href="{% if preview.kind == 'roster' %}/transfers/roster/{% else %}/transfers/inventory/{% endif %}">← Import</a></p>
+<div class="page-head"><div><h1>Check the import — {% if preview.kind == 'roster' %}missionaries{% else %}inventory{% endif %}</h1><p class="sub">{% if preview.mode == 'replace' %}Replace the whole list{% else %}Add and update{% endif %} · nothing has changed yet</p></div></div>
+<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="kpi"><div class="lab">Ready to apply</div><div class="big">{{ valid|length }}</div></div><div class="kpi {% if errors %}warn{% endif %}"><div class="lab">Need fixing</div><div class="big">{{ errors|length }}</div></div><div class="kpi"><div class="lab">{% if preview.mode == "replace" %}Would be archived{% else %}Mode{% endif %}</div><div class="big">{% if preview.mode == "replace" %}{{ to_archive }}{% else %}<small>Add &amp; update</small>{% endif %}</div></div></div>
 {% if legacy %}<p class="error" role="alert">This old preview cannot establish which fields were supplied. Re-upload and review again.</p>{% endif %}
 {% if stale %}<p class="error" role="alert">Source data changed since this preview was made. Re-upload and review again — confirmation is blocked.</p>{% endif %}
-<p class="help">{{ valid|length }} valid · {{ errors|length }} with errors{% if preview.mode == "replace" %} · {{ to_archive }} record(s) would be archived as missing{% endif %}.</p>
-<p class="help">Missing columns and blank optional cells preserve existing values in both modes. Clear a field deliberately in Edit details. Nothing has changed yet.</p>
+<p class="help">Blank cells and missing columns keep the values already stored. To clear a value on purpose, use Edit on that record.</p>
 {% if errors %}
-<div class="section-title">Rows needing fixes ({{ errors|length }})</div>
+<h2 class="section-title">Rows that need fixing <small>{{ errors|length }} — fix them in the spreadsheet and upload again</small></h2>
 <div class="tablewrap"><table>
 <thead><tr><th class="r">Row</th><th>Problems</th><th>Details</th></tr></thead>
 <tbody>
@@ -15,25 +16,25 @@
 </tbody>
 </table></div>
 {% endif %}
-<div class="section-title">Valid rows ({{ valid|length }})</div>
+<h2 class="section-title">Ready to apply <small>{{ valid|length }} rows</small></h2>
 <div class="card"><div class="bd">
 <form method="post" action="/transfers/preview/{{ preview.token }}/confirm/">
 {% csrf_token %}
 {% if preview.mode == "add_update" %}
 <input type="hidden" name="has_rows" value="1">
-<p class="toolbar" role="group" aria-label="Row selection">
+<p class="btn-row" role="group" aria-label="Row selection">
 <button type="submit" name="scope" value="all">Apply all</button>
 <button type="submit" name="scope" value="none">Apply none</button>
 </p>
-<p class="help">Tick the rows to apply and choose “Apply approved rows”, or apply everything / nothing at once. Confirming with nothing ticked writes nothing.</p>
+<p class="help">Untick any row you don’t want, then choose “Apply approved rows”. If nothing is ticked, nothing is written.</p>
 {% endif %}
 <div class="tablewrap"><table>
-<thead><tr>{% if preview.mode == "add_update" %}<th>Apply?</th>{% endif %}<th class="r">Row</th><th>Action</th><th>Summary</th><th>Change</th><th>Note</th></tr></thead>
+<thead><tr>{% if preview.mode == "add_update" %}<th>Apply?</th>{% endif %}<th class="r">Row</th><th>Action</th><th>Record</th><th>What changes</th><th>Reason</th></tr></thead>
 <tbody>
 {% for r in valid %}
 <tr>
 {% if preview.mode == "add_update" %}<td data-label="Apply?"><input type="checkbox" name="row-{{ r.row }}" checked aria-label="Apply row {{ r.row }}"></td>{% endif %}
-<td data-label="Row" class="r tnum">{{ r.row }}</td><td data-label="Action"><span class="tag">{{ r.action }}</span></td>
+<td data-label="Row" class="r tnum">{{ r.row }}</td><td data-label="Action">{% if r.action == "create" %}<span class="chip ok">New</span>{% else %}<span class="chip info">Update</span>{% endif %}</td>
 <td data-label="Summary">{% if preview.kind == "roster" %}{{ r.external_id }} — {{ r.name }}{% if r.archived %} (archived — will be reactivated){% endif %}{% else %}{{ r.category }} / {{ r.name }}{% if r.size %} ({{ r.size }}){% endif %}{% if r.archived %} (archived — will be reactivated){% endif %}{% endif %}</td>
 <td data-label="Change">{% if preview.kind == "inventory" %}{% if r.current is not None %}Available {{ r.current }} → {% endif %}{% if r.counted is not None %}count {{ r.counted }} ({{ r.delta|stringformat:"+d" }}){% else %}count preserved{% endif %}{% if r.low_threshold is not None %}<br>Alert level {{ r.old_threshold|default_if_none:'new' }} → {{ r.low_threshold }}{% else %}<br>Alert level preserved{% endif %}{% else %}{% for change in r.changes %}<div><strong>{{ change.field|capfirst }}:</strong> {{ change.before|default:'empty' }} → {{ change.after }}</div>{% empty %}No field changes{% endfor %}{% if r.preserved %}<p class="mini">Preserved: {{ r.preserved|join:', ' }}</p>{% endif %}{% endif %}</td>
 <td data-label="Note">{{ r.reason|default:"—" }}</td>
@@ -44,7 +45,7 @@
 </table></div>
 {% if not stale and valid %}
 {% if preview.mode == "replace" %}<p class="help">Replacement needs every row valid and archives {{ to_archive }} missing record(s). This cannot be partially approved.</p>{% endif %}
-<p><button type="submit" class="primary" {% if stale %}disabled{% endif %}>Apply approved rows</button></p>
+<div class="form-actions"><button type="submit" class="primary" {% if stale %}disabled{% endif %}>Apply approved rows</button></div>
 {% endif %}
 </form>
 </div></div>

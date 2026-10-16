@@ -1,34 +1,33 @@
 {% extends "base.html" %}
-{% block title %}User accounts — MTC Supplies Tracker{% endblock %}
+{% block title %}Staff accounts — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Accounts</h1><p class="sub">Administration / Staff access</p></div></div>
-<p class="help">Staff must change a temporary password on first sign-in. Deactivating an account signs it out everywhere.</p>
-{% if not fresh %}<p class="help"><a href="/admin-area/reauth/?next=/accounts/users/">Confirm your password before changing accounts</a>. Expired confirmation returns here; enter the temporary password again and resubmit. Passwords are never kept after an error.</p>{% endif %}
-<div class="card"><div class="hd"><h2>Create an account</h2></div><div class="bd">
-<form method="post" action="/accounts/users/create/" class="stack">
-{% csrf_token %}
-{% include "components/form_fields.html" %}
-<p><button type="submit" class="primary">Create account</button></p>
-</form>
-</div></div>
-<div class="section-title">Existing accounts</div>
+<div class="page-head"><div><span class="eyebrow">Administration</span><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account, so History shows who gave out what.</p></div></div>
+{% if not fresh %}<div class="banner info"><span class="ic">{% include "components/icon.html" with name="shield" %}</span><div><h2>Confirm your password to make changes</h2><p>For safety, account changes need a recent password check (it lasts 10 minutes). <a href="/admin-area/reauth/?next=/accounts/users/">Confirm your password</a>.</p></div></div>{% endif %}
+<div class="grid side-right">
+<section class="card"><div class="hd"><h2>Accounts</h2><span class="sub">{{ users|length }} total</span></div>
 <div class="tablewrap"><table>
-<thead><tr><th>Username</th><th>Role</th><th>Active</th><th>Actions</th></tr></thead>
+<thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Set a temporary password</th><th><span class="sr-only">Other actions</span></th></tr></thead>
 <tbody>
 {% for u in users %}
 <tr>
-<td data-label="Username"><strong>{{ u.username }}</strong></td>
-<td data-label="Role">{% if u.is_superuser %}<span class="tag">Administrator</span>{% elif u.is_staff %}<span class="tag">Staff</span>{% else %}<span class="tag">No access</span>{% endif %}</td>
-<td data-label="Active">{% if u.is_active %}<span class="dot">Yes</span>{% else %}<span class="dot warn">No</span>{% endif %}</td>
-<td data-label="Actions">
-<form method="post" action="/accounts/users/{{ u.pk }}/reset-password/" class="inline">{% csrf_token %}<input type="password" name="password" placeholder="New temporary password" required autocomplete="new-password" aria-label="New temporary password for {{ u.username }}"><button type="submit">Set temporary password</button></form>
-{% if u.pk != user.pk %}
-{% if u.is_active %}<form method="post" action="/accounts/users/{{ u.pk }}/deactivate/" class="inline">{% csrf_token %}<button type="submit">Deactivate</button></form>
-{% else %}<form method="post" action="/accounts/users/{{ u.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>{% endif %}
-{% endif %}
-</td>
+<td data-label="Username"><strong>{{ u.shown_name }}</strong><small>{{ u.username }}</small>
+<details class="disclosure" style="margin:4px 0 0"><summary>Change shown name</summary><form method="post" action="/accounts/users/{{ u.pk }}/display-name/" class="btn-row" style="margin-top:6px">{% csrf_token %}<input name="display_name" value="{{ u.display_name }}" maxlength="80" aria-label="Name shown for {{ u.username }}" placeholder="Sister Langkilde" style="max-width:200px"><button type="submit" class="small">Save</button></form></details></td>
+<td data-label="Role">{% if u.is_superuser %}<span class="chip info plain">Administrator</span>{% elif u.is_staff %}<span class="chip plain">Staff</span>{% else %}<span class="chip plain">No access</span>{% endif %}</td>
+<td data-label="Active">{% if u.is_active %}<span class="dot">Active</span>{% else %}<span class="dot warn">Deactivated</span>{% endif %}{% if u.must_change_password %}<small>Waiting for first sign-in</small>{% endif %}</td>
+<td data-label="Actions"><form method="post" action="/accounts/users/{{ u.pk }}/reset-password/" class="btn-row">{% csrf_token %}<input type="password" name="password" placeholder="New temporary password" required autocomplete="new-password" aria-label="New temporary password for {{ u.username }}" style="max-width:220px"><button type="submit" class="small">Set temporary password</button></form></td>
+<td class="actions">{% if u.pk != user.pk %}{% if u.is_active %}<form method="post" action="/accounts/users/{{ u.pk }}/deactivate/" class="inline">{% csrf_token %}<button type="submit" class="small danger">Deactivate</button></form>
+{% else %}<form method="post" action="/accounts/users/{{ u.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit" class="small">Reactivate</button></form>{% endif %}{% else %}<small>You</small>{% endif %}</td>
 </tr>
 {% endfor %}
 </tbody>
-</table></div>
+</table></div></section>
+<section class="card"><div class="hd"><h2>Add a staff member</h2></div><div class="bd">
+<form method="post" action="/accounts/users/create/" class="stack">
+{% csrf_token %}
+{% include "components/form_fields.html" %}
+<p class="help">Give them the username and temporary password in person. They’ll choose their own password the first time they sign in. Deactivating an account signs it out everywhere immediately.</p>
+<div class="form-actions"><button type="submit" class="primary">Create account</button></div>
+</form>
+</div></section>
+</div>
 {% endblock %}

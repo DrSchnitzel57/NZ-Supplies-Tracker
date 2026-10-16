@@ -1,12 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Home — MTC Supplies Tracker{% endblock %}
+{% block title %}Overview — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Overview</h1><p class="sub">Supplies and recent activity</p></div><a class="btn primary" href="/issue/">Issue supplies</a></div>
-<div class="grid kpis">
-<a class="kpi good" href="/roster/"><div class="lab">Active missionaries</div><div class="big tnum" data-live-people>{{ counts.people }}</div></a>
-<a class="kpi" href="/inventory/"><div class="lab">Active items</div><div class="big tnum" data-live-items>{{ counts.items }}</div></a>
-<a class="kpi" href="/issue/history/"><div class="lab">Issues today</div><div class="big tnum" data-live-today>{{ counts.issues_today }}</div><div class="note">Current issues · New Zealand day</div></a>
-<a class="kpi warn" href="/inventory/?low=1"><div class="lab">Low / out of stock</div><div class="big tnum" data-live-low>{{ counts.low_stock }}</div><div class="note">All active items at their alert level or below</div></a>
+<div class="page-head">
+  <div><span class="eyebrow">{% now "l j F" %}</span><h1>Overview</h1><p class="sub">What needs attention at the MTC today.</p></div>
+  <div class="actions"><a class="btn" href="/reports/?family=low-stock">{% include "components/icon.html" with name="download" %}Reorder list</a><a class="btn primary" href="/issue/">{% include "components/icon.html" with name="plus" %}Issue supplies</a></div>
+</div>
+<div class="kpis">
+  <a class="kpi" href="/roster/?arrival=arrived">
+    <div class="lab">{% include "components/icon.html" with name="people" %}In the MTC now</div>
+    <div class="big">{{ counts.arrived }} <small>of <span data-live-people>{{ counts.people }}</span></small></div>
+    <div class="progress" aria-hidden="true"><span style="width:{{ counts.arrived|percent:counts.people }}%"></span></div>
+    <div class="note">{% if counts.expected %}{{ counts.expected }} not yet arrived{% else %}Everyone on the roster has arrived{% endif %}</div>
+  </a>
+  <a class="kpi" href="/roster/?leaving=14&amp;sort=leaving">
+    <div class="lab">{% include "components/icon.html" with name="plane" %}Leaving in the next 14 days</div>
+    <div class="big">{{ counts.leaving_soon }}</div>
+    <div class="note">{% if counts.next_departure %}Next departure {{ counts.next_departure|day }} ({{ counts.next_departure|relative_day }}){% else %}No departure dates recorded{% endif %}</div>
+  </a>
+  <a class="kpi" href="/issue/history/">
+    <div class="lab">{% include "components/icon.html" with name="history" %}Given out this week</div>
+    <div class="big">{{ counts.week_units }} <small>item{{ counts.week_units|plural }}</small></div>
+    <div class="note">{{ counts.week_issues }} issue{{ counts.week_issues|plural }} to {{ counts.week_people }} missionar{{ counts.week_people|plural:"y,ies" }} · today <span data-live-today>{{ counts.issues_today }}</span></div>
+  </a>
+  <a class="kpi {% if counts.running_low or counts.ran_out %}warn{% endif %}" href="/inventory/?stock=attention">
+    <div class="lab">{% include "components/icon.html" with name="alert" %}Stock to reorder</div>
+    <div class="big"><span data-live-attention>{{ counts.running_low|add:counts.ran_out }}</span> <small>item{{ counts.running_low|add:counts.ran_out|plural }}</small></div>
+    <div class="note">{{ counts.running_low }} running low · {{ counts.ran_out }} ran out<span class="sr-only"> · <span data-live-low>{{ counts.low_stock }}</span> at or below alert level</span></div>
+  </a>
 </div>
 <div id="home-attention">{% include "components/home_attention.html" %}</div>
+<div class="grid two" style="margin-top:16px">
+  <section class="card"><div class="hd"><h2>Given out in the last 30 days</h2><a href="/reports/?family=category">By category</a></div>
+    <div class="bd">{% if categories %}<ul class="bars">{% for row in categories %}<li><span class="label">{{ row.label }}</span><span class="track"><span class="fill" style="width:{{ row.width }}%"></span></span><span class="value">{{ row.value }}</span></li>{% endfor %}</ul>{% else %}<p class="empty">Nothing given out in the last 30 days.</p>{% endif %}</div>
+  </section>
+  <section class="card"><div class="hd"><h2>Recent issues</h2><a href="/issue/history/">All history</a></div>
+    {% if recent %}<ul class="result-list">{% for issue in recent %}<li><div class="grow"><a href="/issue/{{ issue.pk }}/">{{ issue|person_name }}</a>{% if issue.status == 'REVERSED' %} <span class="badge-reversed">Undone</span>{% endif %}<span>{% for line in issue.lines.all %}{{ line|line_label }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></div><div class="end"><span>{{ issue.issued_at|when }}</span><span>{{ issue|staff_name }}</span></div></li>{% endfor %}</ul>
+    {% else %}<div class="empty"><strong>No issues yet</strong><a href="/issue/">Issue supplies</a> to get started.</div>{% endif %}
+  </section>
+</div>
 {% endblock %}

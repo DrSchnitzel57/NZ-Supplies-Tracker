@@ -20,6 +20,7 @@ from apps.issuing.models import Issue
 from apps.roster.models import Missionary
 from apps.reports.filters import ReportFilters, filter_issues
 from apps.common.pagination import paginate
+from apps.common.sorting import sorted_items
 
 
 def _line_indices(post):
@@ -64,13 +65,38 @@ def _parse_lines(post) -> list[dict]:
     return lines
 
 
+def build_catalogue(items):
+    """Group items for the issuing catalogue: category → item name → sizes.
+
+    One row per item name keeps long size runs (shirts, shoes, dresses) on a
+    single line of size buttons instead of a dozen near-identical rows.
+    """
+    categories: list[dict] = []
+    for item in sorted_items(items):
+        if not categories or categories[-1]["name"] != item.category:
+            categories.append({"name": item.category, "groups": [], "available": 0})
+        cat = categories[-1]
+        groups = cat["groups"]
+        if not groups or groups[-1]["name"].casefold() != item.name.casefold():
+            groups.append({"name": item.name, "variants": [], "available": 0})
+        groups[-1]["variants"].append(item)
+        groups[-1]["available"] += item.on_hand
+        cat["available"] += item.on_hand
+    for cat in categories:
+        for group in cat["groups"]:
+            variants = group["variants"]
+            group["sized"] = len(variants) > 1
+            group["single"] = None if group["sized"] else variants[0]
+            group["in_stock"] = sum(1 for v in variants if v.on_hand > 0)
+            group["search"] = " ".join([cat["name"], group["name"], *[v.size for v in variants]])
+    return categories
+
+
 def _form_context(draft_key=None, draft_lines=None, missionary_id="", note=""):
     missionaries = list(
         Missionary.objects.filter(is_archived=False).order_by("name")
     )
-    items = list(
-        Item.objects.filter(is_archived=False).order_by("category", "name", "size")
-    )
+    items = sorted_items(Item.objects.filter(is_archived=False))
     if draft_lines is None:
         draft_lines = []
     labels = {str(item.pk): str(item) for item in items}
@@ -80,6 +106,8 @@ def _form_context(draft_key=None, draft_lines=None, missionary_id="", note=""):
     return {
         "missionaries": missionaries,
         "items": items,
+        "catalogue": build_catalogue(items),
+        "out_of_stock": sum(1 for item in items if item.on_hand <= 0),
         "draft_key": draft_key or str(uuid.uuid4().hex),
         "draft_lines": draft_lines,
         "missionary_id": str(selected_person.pk) if selected_person else "",
@@ -211,7 +239,7 @@ def _handle_issue_post(request, *, return_to, template, quick_person=None):
         messages.error(request, f"Could not issue goods: {exc}")
         ctx = _form_context(draft_key=idem, missionary_id=missionary_id, note=note, draft_lines=lines)
         return render(request, template, ctx, status=400)
-    messages.success(request, f"Issued goods to {issue.missionary_name}.")
+    messages.success(request, f"Issued goods to {issue.missionary.display_name}.")
     if request.headers.get("X-Requested-With") == "fetch":
         return JsonResponse({"redirect_url": reverse("issue-detail", kwargs={"pk": issue.pk})})
     return redirect("issue-detail", pk=issue.pk)
@@ -296,7 +324,7 @@ def issue_confirm(request):
         kept = original or proposal
         ctx = _form_context(draft_key=idem, missionary_id=str(missionary.pk), note=note, draft_lines=kept)
         return render(request, "issuing/issue.html", ctx, status=400)
-    messages.success(request, f"Issued revised quantities to {issue.missionary_name}.")
+    messages.success(request, f"Issued revised quantities to {issue.missionary.display_name}.")
     if request.headers.get("X-Requested-With") == "fetch":
         return JsonResponse({"redirect_url": reverse("issue-detail", kwargs={"pk": issue.pk})})
     return redirect("issue-detail", pk=issue.pk)
@@ -312,7 +340,7 @@ def issue_list(request):
     form = ReportFilters(data, family='history')
     valid = form.is_valid()
     qs = filter_issues(Issue.objects.all(), form.cleaned_data) if valid else Issue.objects.none()
-    issues, pagination = paginate(request, qs.select_related('missionary').prefetch_related('lines').order_by('-issued_at', 'pk'))
+    issues, pagination = paginate(request, qs.select_related('missionary', 'issued_by').prefetch_related('lines').order_by('-issued_at', 'pk'))
     return render(request, 'issuing/history.html', {'issues': issues, 'form': form, **pagination}, status=200 if valid else 400)
 
 

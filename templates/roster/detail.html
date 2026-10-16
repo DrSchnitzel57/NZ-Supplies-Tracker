@@ -1,55 +1,66 @@
 {% extends "base.html" %}
-{% block title %}{{ person.name }} — MTC Supplies Tracker{% endblock %}
+{% block title %}{{ person.display_name }} — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{{ person.name }}</h1><p class="sub">{{ person.title_prefix }} · {{ person.external_id }} · {% if person.is_archived %}Archived{% else %}Active{% endif %}</p></div>{% if not person.is_archived %}<a class="btn primary" href="/issue/?missionary={{ person.pk }}">Issue supplies</a>{% endif %}</div>
-<div class="panel">
-<p style="margin:0"><a class="btn" href="/roster/{{ person.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit</a>
-{% if person.is_archived %}
-<form method="post" action="/roster/{{ person.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>
-{% else %}
-<form method="post" action="/roster/{{ person.pk }}/archive/" class="inline">{% csrf_token %}<button type="submit">Archive</button></form>
-{% endif %}
-<a class="btn" href="{{ return_to }}">Back to list</a></p>
+<p class="crumbs"><a href="{{ return_to }}">← Missionaries</a></p>
+<div class="page-head">
+  <div class="profile-head">
+    <span class="avatar" aria-hidden="true">{{ person.display_name|initials }}</span>
+    <div>
+      <h1>{{ person.display_name }}</h1>
+      <p class="sub">{{ person.full_name }} · {{ person.external_id }}{% if person.is_archived %} · Archived{% endif %}</p>
+      <div class="chips">
+        {% if person.arrived %}<span class="chip ok">Arrived{% if person.arrival_date %} {{ person.arrival_date|day }}{% endif %}</span>{% elif person.arrived is False %}<span class="chip warn">Not yet arrived</span>{% endif %}
+        {% if person.departure_date %}<span class="chip info">Leaves {{ person.departure_date|day }} · {{ person.departure_date|relative_day }}</span>{% endif %}
+        {% if person.is_archived %}<span class="chip plain">Archived</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/roster/{{ person.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit details</a>
+    <details class="menu"><summary aria-label="More actions">{% include "components/icon.html" with name="more" %}</summary><div class="menu-list">
+      <a href="/issue/history/?missionary={{ person.pk }}">Filter history for this person</a>
+      {% if person.is_archived %}<form method="post" action="/roster/{{ person.pk }}/reactivate/">{% csrf_token %}<button type="submit">Reactivate</button></form>
+      {% else %}<form method="post" action="/roster/{{ person.pk }}/archive/">{% csrf_token %}<button type="submit" class="danger">Archive (keeps history)</button></form>{% endif %}
+    </div></details>
+    {% if not person.is_archived %}<a class="btn primary" href="/issue/?missionary={{ person.pk }}">{% include "components/icon.html" with name="plus" %}Issue supplies</a>{% endif %}
+  </div>
 </div>
 
-<div class="grid two">
-<section class="card"><div class="hd"><h2>Mission and arrival</h2></div><div class="bd">
-<dl><dt>Arrival status</dt><dd>{{ person.arrival_status|default:"Not recorded" }}</dd>
-<dt>Arrival date</dt><dd>{{ person.arrival_date|default:"Not recorded" }}</dd>
-<dt>Mission</dt><dd>{{ person.mission|default:"Not recorded" }}</dd>
-<dt>Language</dt><dd>{{ person.language|default:"Not recorded" }}</dd></dl>
-</div></section>
-<section class="card"><div class="hd"><h2>Goods received</h2></div><div class="bd">
-<p class="big tnum">{{ net_total }}</p><p>Units in current issues, excluding all undone issues.</p>
-</div></section></div>
-<details class="panel"><summary>Details</summary>
-<dl><dt>Title</dt><dd>{{ person.title_prefix|default:"Not recorded" }}</dd>
-<dt>Home stake</dt><dd>{{ person.stake|default:"Not recorded" }}</dd>
-<dt>Release date</dt><dd>{{ person.release_date|default:"Not recorded" }}</dd>
-<dt>Email</dt><dd>{{ person.email|default:"Not recorded" }}</dd>
-<dt>Personal email</dt><dd>{{ person.personal_email|default:"Not recorded" }}</dd></dl>
-{% if person.intake_metadata %}<h3>Source information</h3><dl>{% for key, value in person.intake_metadata.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>{% endif %}
-</details>
+<div class="grid side-right">
+  <section class="card"><div class="hd"><h2>Received so far</h2><span class="sub">{{ net_total }} item{{ net_total|plural }} · undone issues not counted</span></div>
+    {% if received %}<ul class="received-list">{% for row in received %}<li><span><span class="cat">{{ row.item_category }}</span>{{ row.label }}</span><span><strong>× {{ row.units }}</strong><span class="cat">{{ row.last|when }}</span></span></li>{% endfor %}</ul>
+    {% else %}<div class="empty"><strong>Nothing received yet</strong>{% if not person.is_archived %}<a href="/issue/?missionary={{ person.pk }}">Issue supplies</a> to get started.{% endif %}</div>{% endif %}
+  </section>
+  <section class="card"><div class="hd"><h2>Details</h2></div><div class="bd">
+    <dl>
+      <dt>Assigned mission</dt><dd>{{ person.mission|default:"Not recorded" }}</dd>
+      <dt>Training language</dt><dd>{{ person.language|default:"Not recorded" }}</dd>
+      <dt>Arrived at the MTC</dt><dd>{% if person.arrival_date %}{{ person.arrival_date }}{% else %}{{ person.arrival_label }}{% endif %}</dd>
+      <dt>Leaves the MTC</dt><dd>{{ person.departure_date|default:"Not recorded" }}</dd>
+      <dt>Mission release</dt><dd>{{ person.release_date|default:"Not recorded" }}</dd>
+      <dt>Home stake</dt><dd>{{ person.stake|default:"Not recorded" }}</dd>
+      <dt>Missionary email</dt><dd>{% if person.email %}<a href="mailto:{{ person.email }}">{{ person.email }}</a>{% else %}Not recorded{% endif %}</dd>
+      <dt>Personal email</dt><dd>{% if person.personal_email %}<a href="mailto:{{ person.personal_email }}">{{ person.personal_email }}</a>{% else %}Not recorded{% endif %}</dd>
+    </dl>
+    {% if person.intake_metadata %}<details class="disclosure"><summary>Other imported information</summary><dl>{% for key, value in person.intake_metadata.items %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl></details>{% endif %}
+  </div></section>
+</div>
 
-<div class="section-title">Net received: {{ net_total }}</div>
-<div class="card flush"><div class="hd"><h2>History for this person</h2></div>
-{% if issues %}
+<h2 class="section-title">Issue history <small>Net received: {{ net_total }}</small></h2>
 <div class="tablewrap"><table>
-<thead><tr><th>When</th><th>Items</th><th>Given by</th><th>Status</th><th></th></tr></thead>
+<thead><tr><th>When</th><th>Items</th><th>Given by</th><th>Status</th><th><span class="sr-only">Details</span></th></tr></thead>
 <tbody>
 {% for issue in issues %}
 <tr>
-<td data-label="When">{{ issue.issued_at }}</td>
-<td data-label="Items">{% for line in issue.lines.all %}{{ line.item_name }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
-<td data-label="Given by">{{ issue.issued_by_username }}</td>
+<td data-label="When" class="nowrap">{{ issue.issued_at|when }}</td>
+<td data-label="Items">{% for line in issue.lines.all %}{{ line|line_label }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if issue.note %}<small>Note: {{ issue.note }}</small>{% endif %}</td>
+<td data-label="Given by" class="nowrap">{{ issue|staff_name }}</td>
 <td data-label="Status">{% if issue.status == "REVERSED" %}<span class="badge-reversed">Undone</span>{% else %}<span class="badge-ok">Current</span>{% endif %}</td>
-<td data-label="Details"><a href="/issue/{{ issue.pk }}/">Open</a></td>
+<td class="actions"><a href="/issue/{{ issue.pk }}/">Open</a></td>
 </tr>
+{% empty %}<tr><td colspan="5"><div class="empty">No issues for this missionary yet.</div></td></tr>
 {% endfor %}
 </tbody>
 </table></div>
-{% else %}<div class="bd"><p>No issues for this person yet.</p></div>{% endif %}
-</div>
 {% include "components/pagination.html" %}
-<p><a href="/issue/history/?missionary={{ person.pk }}">Filter full issue history</a></p>
 {% endblock %}

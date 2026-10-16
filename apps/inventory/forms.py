@@ -5,6 +5,10 @@ from apps.inventory.models import Item
 import uuid
 
 
+def category_options():
+    return list(Item.objects.order_by('category').values_list('category', flat=True).distinct())
+
+
 class ItemForm(forms.ModelForm):
     expected_version = forms.IntegerField(min_value=0, required=False, widget=forms.HiddenInput)
     low_threshold = forms.IntegerField(min_value=0, max_value=COUNT_MAX, label='Low-stock alert level')
@@ -12,10 +16,20 @@ class ItemForm(forms.ModelForm):
     class Meta:
         model = Item
         fields = ['category', 'name', 'size', 'unit', 'low_threshold']
-        labels = {'name': 'Item name'}
+        labels = {'name': 'Item name', 'size': 'Size', 'unit': 'Counted in'}
+        help_texts = {
+            'category': 'Pick an existing category so items stay grouped together.',
+            'size': 'Leave blank if the item has no sizes.',
+            'unit': 'For example “each”, “pair” or “pack”.',
+            'low_threshold': 'Shows under “Needs reordering” once stock falls to this number.',
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Suggest existing categories as you type (prevents "Hygeine" typos).
+        self.fields['category'].widget.attrs.update({'list': 'category-options', 'autocomplete': 'off'})
+        self.fields['name'].widget.attrs.setdefault('placeholder', 'e.g. White Shirts')
+        self.fields['size'].widget.attrs.setdefault('placeholder', 'e.g. 40 L')
         if not self.instance._state.adding:
             self.fields['expected_version'].required = True
             self.initial['expected_version'] = self.instance.version
@@ -24,7 +38,7 @@ class ItemForm(forms.ModelForm):
 class NewItemForm(ItemForm):
     opening_qty = forms.IntegerField(min_value=0, max_value=COUNT_MAX, initial=0,
                                     label='Opening quantity')
-    reason = forms.CharField(max_length=4000, initial='opening balance')
+    reason = forms.CharField(max_length=4000, initial='opening balance', label='Reason for the opening stock')
     idempotency_key = forms.CharField(required=False, max_length=128, widget=forms.HiddenInput)
 
     def __init__(self, *args, **kwargs):

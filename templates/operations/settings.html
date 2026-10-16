@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}System settings — MTC Supplies Tracker{% endblock %}
+{% block title %}Settings — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Settings</h1><p class="sub">Administration / Notices and stock alerts</p></div></div>
-<div class="card"><div class="bd">
+<div class="page-head"><div><span class="eyebrow">Administration</span><h1>Settings</h1><p class="sub">A notice for everyone, and the default low-stock alert for new items.</p></div></div>
+<div class="card" style="max-width:860px"><div class="bd">
 <form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" %}
-<p><button type="submit" class="primary">Save settings</button></p>
+<div class="form-actions"><button type="submit" class="primary">Save settings</button></div>
 </form>
 </div></div>
-<p><a class="btn danger" href="/admin-area/reset/">Destructive tools: full reset</a></p>
+<p class="help">Need to start again from empty? <a href="/admin-area/reset/">Protected reset</a> (administrators only).</p>
 {% endblock %}

@@ -1,23 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Reports — MTC Supplies Tracker{% endblock %}
+{% block title %}{{ report_title }} — Reports — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Reports</h1><p class="sub">Choose a report and filter the records you need.</p></div></div>
-<form method="get" class="stack panel">
-<label for="report-family">Report</label><select name="family" id="report-family">{% for value, label in families %}<option value="{{ value }}" {% if value == family %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-{% include "components/form_fields.html" %}
+<div class="page-head"><div><h1>Reports</h1><p class="sub">Pick a report, narrow it down, then download it as a spreadsheet (CSV) or a printable A4 PDF.</p></div></div>
+<form method="get" class="filters" data-autosubmit>
+<div class="toolbar">
+<label for="report-family">Report<select name="family" id="report-family">{% for value, label in families %}<option value="{{ value }}" {% if value == family %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+{% for field in form %}{% if field.field.widget.input_type == 'checkbox' %}<label class="check" for="{{ field.id_for_label }}">{{ field }} {{ field.label }}</label>{% else %}<label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}</label>{% endif %}{% endfor %}
 <button type="submit" class="primary">Show report</button>
+</div>
+{% if form.errors %}<div class="form-errors" role="alert" style="margin-top:10px"><strong>Please check the filters.</strong>{% for field in form %}{{ field.errors }}{% endfor %}{{ form.non_field_errors }}</div>{% endif %}
 </form>
-<details class="report-meaning"><summary>How these figures are counted</summary><p class="help">Dates select when goods were issued (New Zealand time). Current net excludes all undone issues, even when undone later; it is not period accounting. Available stock is stock <strong>now</strong>, not as-of a past date. Summaries use current names; history retains original snapshots.</p></details>
-<h2>{{ report_title }}</h2>
+<div class="section-title" style="margin-top:8px"><span>{{ report_title }}</span>{% if filters_valid %}<span class="btn-row">
+<a class="btn small" data-report-csv href="/reports/family/{{ family }}/?{{ filters_query }}&amp;format=csv">{% include "components/icon.html" with name="download" %}Spreadsheet (CSV)</a>
+<a class="btn small" data-report-pdf href="/reports/family/{{ family }}/?{{ filters_query }}&amp;format=pdf">{% include "components/icon.html" with name="download" %}A4 PDF</a></span>{% endif %}</div>
+<p class="help" style="margin-top:-6px">{{ report_description }}{% if filters_valid %} Downloads include all {{ page_obj.paginator.count }} matching row{{ page_obj.paginator.count|plural }}.{% endif %}</p>
+{% if family == 'low-stock' and filters_valid %}<section class="card" style="margin-bottom:16px"><div class="hd"><h2>Send the reorder list</h2><span class="sub">This app never sends email itself</span></div><div class="bd stack">
+<label for="low-stock-message">Message ({{ page_obj.paginator.count }} item{{ page_obj.paginator.count|plural }})<textarea id="low-stock-message" rows="7" readonly>{{ low_text }}</textarea></label>
+<div class="btn-row"><button type="button" id="copy-low-stock">Copy list</button><a class="btn" href="{{ mail_url }}">Open in your email app</a></div><p id="copy-feedback" class="help" role="status"></p>
+</div></section>{% endif %}
 {% if summary %}<ul class="summary-bars" aria-label="All matching summary groups">{% for group in summary %}<li><span>{{ group.label }}</span><div aria-hidden="true"><i style="width:{{ group.width }}%"></i></div><strong>{{ group.value }}</strong></li>{% endfor %}</ul>{% endif %}
-{% if filters_valid %}<div class="toolbar">
-<a class="btn" data-report-csv href="/reports/family/{{ family }}/?{{ filters_query }}&amp;format=csv">Download CSV</a>
-<a class="btn" data-report-pdf href="/reports/family/{{ family }}/?{{ filters_query }}&amp;format=pdf">Download A4 PDF</a>
-<span>Downloads include all {{ page_obj.paginator.count }} matching rows.</span>
-</div>{% endif %}
 <div class="tablewrap"><table><thead><tr>{% for heading in headings %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead><tbody>
-{% for cells in report_rows %}<tr>{% for cell in cells %}<td>{{ cell|default_if_none:"" }}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="14">No matching records.</td></tr>{% endfor %}
+{% for cells in report_rows %}<tr>{% for cell in cells %}<td>{{ cell|default_if_none:"" }}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="16"><div class="empty">No matching records.</div></td></tr>{% endfor %}
 </tbody></table></div>
 {% include "components/pagination.html" %}
-{% if family == 'low-stock' and filters_valid %}<section class="panel"><h2>Low-stock follow-up</h2><p>All {{ page_obj.paginator.count }} matching items. This app sends no email.</p><label for="low-stock-message">Message<textarea id="low-stock-message" rows="6" readonly>{{ low_text }}</textarea></label><div class="toolbar"><button type="button" id="copy-low-stock">Copy list</button><a class="btn" href="{{ mail_url }}">Open your mail app</a></div><p id="copy-feedback" role="status"></p></section>{% endif %}
+<details class="disclosure"><summary>How these figures are counted</summary><p class="help">Dates are New Zealand time and select when goods were given out. “Given out” totals leave out undone issues. Stock figures are what’s on the shelf now, not on a past date. Summaries use people’s current names; History keeps the names as they were at the time.</p></details>
 {% endblock %}

@@ -1,11 +1,15 @@
 {% extends "base.html" %}
+{% block title %}{{ heading }} — {{ item.name }} — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{{ heading }}</h1><p class="sub">{{ item }}</p></div></div>
-<p>Available now: <strong data-available-for="{{ item.pk }}">{{ item.on_hand }}</strong> {{ item.unit }}</p>
+<p class="crumbs page-back"><a href="/inventory/{{ item.pk }}/?return_to={{ return_to|urlencode }}">← {{ item.name }}</a></p>
+<div class="page-head"><div><h1>{{ heading }}</h1><p class="sub">{{ item.name }}{% if item.size %} ({{ item.size }}){% endif %} · {{ item.category }}</p></div></div>
+<div class="card"><div class="bd">
+<p style="margin-top:0">Available now: <strong data-available-for="{{ item.pk }}">{{ item.on_hand }}</strong> {{ item.unit }}</p>
 <form method="post" action="/inventory/{{ item.pk }}/{{ action }}/{% if request.GET.return_to %}?return_to={{ return_to|urlencode }}{% endif %}" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}{% include "components/form_fields.html" %}
-{% if action == 'correct-count' %}<p class="help">Enter the amount counted on the shelf. This records the difference, not an issue. If stock changes, reopen this form and count again.</p>{% endif %}
-{% if action == 'correct-count' %}<p class="help">Your count and reason stay here after a conflict; <a href="/inventory/{{ item.pk }}/" target="_blank" rel="noopener">review current stock in another tab</a>, then reopen this form to count again.</p>{% endif %}
-<button type="submit" class="primary">{{ heading }}</button>
-</form><p class="page-back"><a href="/inventory/{{ item.pk }}/?return_to={{ return_to|urlencode }}">Back to item</a></p>
+{% if action == 'correct-count' %}<p class="help">Enter how many you actually counted on the shelf. The difference is recorded as a correction with your reason — it never creates or deletes issues. If stock changes while you count, you’ll be asked to count again; <a href="/inventory/{{ item.pk }}/" target="_blank" rel="noopener">see current stock in a new tab</a>.</p>
+{% else %}<p class="help">For deliveries and donations. The quantity is added to what’s on the shelf.</p>{% endif %}
+<div class="form-actions"><button type="submit" class="primary">{{ heading }}</button></div>
+</form>
+</div></div>
 {% endblock %}

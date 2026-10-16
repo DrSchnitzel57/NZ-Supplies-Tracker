@@ -1,35 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Inventory — MTC Supplies Tracker{% endblock %}
+{% block title %}Inventory — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Inventory</h1><p class="sub">{{ total }} matching items · {{ shown }} on this page</p></div><div class="row-actions"><a class="btn" href="/transfers/inventory/">Import</a><a class="btn" href="/inventory/batch/">Add multiple items</a><a class="btn primary" href="/inventory/new/">Add an item</a></div></div>
-<form method="get" class="toolbar" role="search">
-  <label>Search<input type="search" name="q" value="{{ q }}" placeholder="Item, category or size"></label>
-  <label>Category
-    <select name="category"><option value="">All</option>
-    {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
-    </select></label>
-  <label>Size<select name="size"><option value="">All sizes</option>{% for s in sizes %}<option value="{{ s|default:'__blank__' }}" {% if size == s or size == '__blank__' and not s %}selected{% endif %}>{{ s|default:"No size" }}</option>{% endfor %}</select></label>
-  <label>Sort / group<select name="sort"><option value="category">Group by category</option><option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option><option value="-name" {% if sort == '-name' %}selected{% endif %}>Name Z–A</option><option value="stock" {% if sort == 'stock' %}selected{% endif %}>Available, lowest first</option></select></label>
-  <label class="check"><input type="checkbox" name="low" value="1" {% if low_only %}checked{% endif %}> Low stock only</label>
-  <label class="check"><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Show archived</label>
-  <button type="submit" class="primary">Filter</button>
+<div class="page-head">
+  <div><h1>Inventory</h1><p class="sub">{{ item_total }} items{% if filters_on %} · {{ total }} shown{% endif %}</p></div>
+  <div class="actions">
+    <a class="btn" href="/transfers/inventory/">{% include "components/icon.html" with name="upload" %}Import</a>
+    <a class="btn" href="/reports/inventory.csv">{% include "components/icon.html" with name="download" %}Export</a>
+    <a class="btn" href="/inventory/batch/">Add several items</a>
+    <a class="btn primary" href="/inventory/new/">{% include "components/icon.html" with name="plus" %}Add an item</a>
+  </div>
+</div>
+<nav class="segmented" aria-label="Stock level" style="margin-bottom:14px">{% for link in stock_links %}<a href="{{ link.url }}" {% if link.current %}aria-current="page"{% endif %}>{{ link.label }} <span class="count">{{ link.count }}</span></a>{% endfor %}</nav>
+<form method="get" class="filters" role="search" data-autosubmit>
+  {% if stock %}<input type="hidden" name="stock" value="{{ stock }}">{% endif %}
+  <div class="toolbar">
+    <label>Search<input type="search" name="q" value="{{ q }}" placeholder="Item, category or size — e.g. “shirt 40”"></label>
+    <label>Category<select name="category"><option value="">All categories</option>{% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+    <label>Sort by<select name="sort">{% for value, label in sorts %}<option value="{{ value }}" {% if value == sort %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label class="check"><input type="checkbox" name="archived" value="1" {% if show_archived %}checked{% endif %}> Include archived</label>
+    <button type="submit" class="primary">Filter</button>
+    {% if filters_on %}<a class="btn ghost" href="/inventory/">Clear</a>{% endif %}
+  </div>
 </form>
 <div class="tablewrap"><table class="records-table">
-<thead><tr><th>Item</th><th>Size</th><th class="r">Available</th><th class="r">Given out (net)</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
+<thead><tr><th>Item</th><th>Size</th><th class="r">Available</th><th>Stock level</th><th class="r">Given out</th><th><span class="sr-only">Actions</span></th></tr></thead>
 <tbody>
 {% for item in items %}
-{% if sort == 'category' %}{% ifchanged item.category %}<tr class="group-row"><th colspan="7" scope="rowgroup">{{ item.category }}</th></tr>{% endifchanged %}{% endif %}
-<tr>
-<td data-label="Item"><a href="/inventory/{{ item.pk }}/?return_to={{ request.get_full_path|urlencode }}">{{ item.name }}</a></td><td>{{ item.size|default:"—" }}</td>
+{% if sort == 'category' %}{% ifchanged item.category %}<tr class="group-row"><th colspan="6" scope="rowgroup">{{ item.category }}</th></tr>{% endifchanged %}{% endif %}
+<tr data-stock-wrap class="{% if item.on_hand <= item.low_threshold %}is-low{% endif %}">
+<td data-label="Item"><a href="/inventory/{{ item.pk }}/?return_to={{ request.get_full_path|urlencode }}">{{ item.name }}</a>{% if sort != 'category' %}<small>{{ item.category }}</small>{% endif %}{% if item.is_archived %} <span class="tag">Archived</span>{% endif %}</td>
+<td data-label="Size">{{ item.size|default:"—" }}</td>
 <td data-label="Available" class="r tnum stock-num" data-available-for="{{ item.pk }}">{{ item.on_hand }}</td>
-<td data-label="Given out (net)" class="r tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</td>
-<td data-label="Stock"><span data-stock-status="{{ item.pk }}">{% if item.on_hand == 0 %}Out of stock{% elif item.on_hand <= item.low_threshold %}Low stock{% else %}Available{% endif %}</span></td>
-<td data-label="Status">{% if item.is_archived %}<span class="tag">Archived</span>{% else %}<span class="dot">Active</span>{% endif %}</td>
-<td><div class="row-actions"><a data-panel href="/inventory/{{ item.pk }}/edit/">Edit</a><a data-panel href="/inventory/{{ item.pk }}/stock/">Add stock</a><a data-panel href="/inventory/{{ item.pk }}/count/">Correct count</a></div></td>
+<td data-label="Stock level"><span data-stock-status="{{ item.pk }}" class="chip {% if item.on_hand == 0 %}crit{% elif item.on_hand <= item.low_threshold %}warn{% else %}ok{% endif %}">{% if item.on_hand == 0 %}Out of stock{% elif item.on_hand <= item.low_threshold %}Low stock{% else %}Available{% endif %}</span><small>alert at {{ item.low_threshold }}</small></td>
+<td data-label="Given out" class="r tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</td>
+<td class="actions"><div class="btn-row"><a class="btn small" data-panel href="/inventory/{{ item.pk }}/stock/">Add stock</a><a class="btn small ghost" data-panel href="/inventory/{{ item.pk }}/count/">Count</a><a class="btn small ghost" data-panel href="/inventory/{{ item.pk }}/edit/">Edit</a></div></td>
 </tr>
-{% empty %}<tr><td colspan="7">No items found. Try a different search or filter.</td></tr>
+{% empty %}<tr><td colspan="6"><div class="empty"><strong>No items found</strong>Try a different search, or <a href="/inventory/">clear the filters</a>.</div></td></tr>
 {% endfor %}
 </tbody>
 </table></div>
 {% include "components/pagination.html" %}
+<p class="help">“Given out” counts current issues only — undone issues are excluded. Use <strong>Count</strong> after a stocktake; it records the difference with your reason and never invents issues.</p>
 {% endblock %}
