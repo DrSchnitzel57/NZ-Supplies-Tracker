@@ -384,10 +384,13 @@ def prune_backups(*, backup_dir: str | Path, retention_days: int = RETENTION_DAY
         if mtime < cutoff:
             try:
                 path.unlink()
-                try:
-                    Path(str(path) + MANIFEST_SUFFIX).unlink()
-                except OSError:
-                    pass
+                # Backups keep the source's WAL flag, so a read-only verify
+                # leaves empty -wal/-shm sidecars; drop them with the file.
+                for extra in (MANIFEST_SUFFIX, "-wal", "-shm"):
+                    try:
+                        Path(str(path) + extra).unlink()
+                    except OSError:
+                        pass
                 deleted.append(str(path))
             except OSError:
                 kept.append(str(path))

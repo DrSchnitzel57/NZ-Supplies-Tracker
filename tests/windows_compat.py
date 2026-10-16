@@ -120,6 +120,23 @@ class WindowsBackupBranchTests(TransactionTestCase):
             staged_after = {p for p in os.listdir(live_dir) if ".tmp-" in p}
             self.assertEqual(staged_after - staged_before, set())
 
+    def test_prune_removes_verify_sidecars_with_the_backup(self):
+        import time as _time
+
+        from apps.operations import backup as backup_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            old = Path(tmp) / "daily-20200101-000000.sqlite3"
+            backup_mod.backup_sqlite(source_path=backup_mod.live_db_path(), dest_path=old)
+            backup_mod.verify_sqlite_backup(old)  # read-only open of a WAL-flagged file
+            for suffix in ("-wal", "-shm"):
+                Path(str(old) + suffix).touch()  # as left behind on any OS
+            ancient = _time.time() - 40 * 86400
+            os.utime(old, (ancient, ancient))
+            result = backup_mod.prune_backups(backup_dir=tmp, retention_days=30)
+            self.assertEqual(result["deleted"], [str(old)])
+            self.assertEqual(os.listdir(tmp), [])
+
     def test_posix_still_refuses_loose_permissions(self):
         from apps.operations import backup as backup_mod
 
