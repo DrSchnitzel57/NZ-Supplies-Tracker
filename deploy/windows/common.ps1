@@ -588,27 +588,33 @@ function Get-MtcPython {
 }
 
 function Invoke-MtcManage {
-    # python manage.py <args> with a release's own virtualenv. -Interactive
-    # leaves the console attached (password prompts) and returns the exit code.
+    # python manage.py <args> with a release's own virtualenv; output is
+    # echoed, logged and returned (ExitCode + Output).
     param([string]$Release, [string[]]$Arguments, [switch]$AllowFailure, [switch]$Quiet,
-        [switch]$Interactive, [string]$FailMessage = '')
+        [string]$FailMessage = '')
     $python = Get-MtcPython -Release $Release
     $manage = Join-Path $Release 'manage.py'
     if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Python environment missing in $Release." }
     Push-Location -LiteralPath $Release
     try {
-        if ($Interactive) {
-            & $python $manage @Arguments
-            $code = $LASTEXITCODE
-            if ($code -ne 0 -and -not $AllowFailure) {
-                $what = $FailMessage
-                if (-not $what) { $what = 'manage.py ' + $Arguments[0] + ' failed' }
-                throw ($what + ' (exit code ' + $code + ').')
-            }
-            return [pscustomobject]@{ ExitCode = [int]$code; Output = '' }
-        }
         return (Invoke-MtcNative -FilePath $python -ArgumentList (@($manage) + $Arguments) `
                 -AllowFailure:$AllowFailure -Quiet:$Quiet -FailMessage $FailMessage)
+    } finally {
+        Pop-Location
+    }
+}
+
+function Invoke-MtcManageInteractive {
+    # python manage.py <args> attached to this console (password prompts,
+    # shell). Call it as a statement - never assign or pipe its result, or
+    # PowerShell captures the program's output - then read $LASTEXITCODE.
+    param([string]$Release, [string[]]$Arguments)
+    $python = Get-MtcPython -Release $Release
+    $manage = Join-Path $Release 'manage.py'
+    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Python environment missing in $Release." }
+    Push-Location -LiteralPath $Release
+    try {
+        & $python $manage @Arguments
     } finally {
         Pop-Location
     }

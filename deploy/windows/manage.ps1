@@ -173,7 +173,8 @@ try {
             $manageArgs = @('recover_admin', '--username', $verbArgs[0])
             if ($verb -eq 'create-admin') { $manageArgs += '--create' }
             Write-Host 'Type a temporary password twice (nothing shows while typing); it must be changed at first sign-in.'
-            Invoke-MtcManage -Release $current -Arguments $manageArgs -Interactive -FailMessage 'The account was not changed' | Out-Null
+            Invoke-MtcManageInteractive -Release $current -Arguments $manageArgs
+            if ($LASTEXITCODE -ne 0) { throw 'The account was not changed.' }
         }
         'import-original' {
             if ($verbArgs.Count -lt 1 -or -not $opts.ContainsKey('Username')) {
@@ -253,8 +254,8 @@ try {
         }
         default {
             # Anything else goes straight to manage.py (interactive, as typed).
-            $result = Invoke-MtcManage -Release $current -Arguments $rest -Interactive -AllowFailure
-            $exitCode = $result.ExitCode
+            Invoke-MtcManageInteractive -Release $current -Arguments $rest
+            $exitCode = $LASTEXITCODE
         }
     }
 } catch {

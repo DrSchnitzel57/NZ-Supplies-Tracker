@@ -409,9 +409,8 @@ try {
         Write-MtcInfo 'Type a temporary password twice (nothing shows while typing). It must be changed at first sign-in.'
         $created = $false
         for ($attempt = 1; $attempt -le 3 -and -not $created; $attempt++) {
-            $result = Invoke-MtcManage -Release $current -Arguments @('recover_admin', '--username', $name, '--create') `
-                -Interactive -AllowFailure
-            $created = ($result.ExitCode -eq 0)
+            Invoke-MtcManageInteractive -Release $current -Arguments @('recover_admin', '--username', $name, '--create')
+            $created = ($LASTEXITCODE -eq 0)
             if (-not $created) { Write-MtcWarn 'That did not work (passwords must match and not be empty). Try again.' }
         }
         if (-not $created) {
