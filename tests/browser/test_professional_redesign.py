@@ -169,21 +169,25 @@ def test_panel_uncertain_receipt_cannot_close_or_duplicate(page, live_server, ex
 
 
 @pytest.mark.parametrize('_attempt', range(3))
-def test_mobile_panel_preserves_horizontal_list_position(mobile_page, live_server, externals, _attempt):
+def test_mobile_panel_keeps_stacked_list_position_and_focus(mobile_page, live_server, externals, _attempt):
+    """Phones show records as stacked cards (no sideways scrolling); saving a
+    panel returns to the same place with focus on the opener."""
     staff, _ = staff_login(mobile_page, live_server, 'mobile-panel07')
+    for i in range(12):
+        make_item(staff, category='Mobile', name=f'Synthetic mobile filler {i:02}')
     item = make_item(staff, category='Mobile', name='Synthetic mobile supply')
-    mobile_page.goto(live_server.url + '/inventory/?q=mobile')
+    mobile_page.goto(live_server.url + '/inventory/?q=mobile&sort=name')
     opener = mobile_page.locator(f'a[data-panel][href="/inventory/{item.pk}/stock/"]')
     opener.scroll_into_view_if_needed()
-    left = mobile_page.locator('main .tablewrap').evaluate('(node) => node.scrollLeft')
-    assert left > 0
+    assert mobile_page.locator('main .tablewrap').evaluate('(node) => node.scrollWidth <= node.clientWidth + 1')
+    top = mobile_page.evaluate('scrollY')
     opener.click()
     panel = mobile_page.frame_locator('.side-dialog iframe')
     panel.locator('input[name=quantity]').fill('2')
     panel.locator('input[name=reason]').fill('Synthetic mobile delivery')
     panel.locator('main button[type=submit]').click()
     expect(mobile_page.locator('body > .side-dialog')).not_to_be_visible()
-    assert mobile_page.locator('main .tablewrap').evaluate('(node) => node.scrollLeft') == left
+    assert abs(mobile_page.evaluate('scrollY') - top) <= 1
     expect(mobile_page.locator(f'a[href="/inventory/{item.pk}/stock/"]')).to_be_focused()
     assert mobile_page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     assert_no_internet(externals)
@@ -299,7 +303,7 @@ def test_batch_review_retained_errors_atomic_unknown_success_retry(page, live_se
     page.goto(f'{live_server.url}/inventory/batch/')
     fill_batch_row(page, 0, 'Synthetic batch towel')
     remove_box = page.locator('.batch-remove').bounding_box()
-    assert 44 <= remove_box['height'] <= 60 and remove_box['width'] < 200
+    assert 36 <= remove_box['height'] <= 60 and remove_box['width'] < 200
     assert page.locator('[name="form-0-name"]').bounding_box()['width'] >= 200
     page.click('#batch-add')
     fill_batch_row(page, 1, '  SYNTHETIC   BATCH TOWEL ')

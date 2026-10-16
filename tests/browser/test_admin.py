@@ -25,7 +25,7 @@ def _reauth(page, live_server, password, next_path="/admin-area/reset/"):
 def test_account_lifecycle_with_fresh_identity(page, live_server, externals):
     admin, pw = admin_login(page, live_server, "life")
     page.goto(f"{live_server.url}/accounts/users/")
-    assert "User accounts" in page.content()
+    assert "Staff accounts" in page.content()
     # Account changes need fresh identity: without it nothing is created.
     page.fill("input[name=username]", "blocked-1")
     page.fill("input[name=password]", "TempPass123!")
@@ -71,7 +71,7 @@ def test_protected_reset_with_counts(page, live_server, externals):
     make_missionary(admin)
     make_item(admin, opening_qty=4)
     page.goto(f"{live_server.url}/admin-area/reset/")
-    assert "Destructive area" in page.content()
+    assert "Protected reset" in page.content()
     # Without recent identity confirmation the button stays disabled, and a
     # forged POST is refused with nothing deleted.
     assert page.locator("main button[type=submit]").is_disabled()

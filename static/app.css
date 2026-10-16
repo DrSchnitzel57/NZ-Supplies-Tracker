@@ -117,18 +117,16 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline-offset:1
 .brand-mini .mark{width:28px;height:28px;border-radius:7px;background:var(--primary-bg);color:var(--on-primary);display:grid;place-items:center;font-size:13px;font-weight:700}
 .header-finder{display:flex;align-items:center;gap:4px;flex:1;max-width:520px;min-width:0;position:relative}
 .header-finder .combobox{flex:1;min-width:0}
-.header-finder input[type=search]{width:100%;padding-left:38px;background:var(--card-2);border-color:var(--border)}
+.header-finder input[type=search]{width:100%;padding-left:38px;padding-right:76px;background:var(--card-2);border-color:var(--border)}
 .header-finder .search-ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--faint);pointer-events:none;z-index:1}
-.header-finder button[type=submit]{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;min-height:0;padding:0;border:0}
-.header-finder button[type=submit]:focus-visible{opacity:1;position:static;width:auto;height:auto;padding:8px;pointer-events:auto}
+.header-finder .search-ic svg{width:18px;height:18px;display:block}
+.header-finder button[type=submit]{position:absolute;right:4px;top:50%;transform:translateY(-50%);min-height:30px;padding:4px 10px;font-size:12.5px;box-shadow:none;background:var(--card);z-index:1}
 .top .spacer{flex:1}
 .top-context{display:flex;align-items:center;gap:8px}
 #connection-status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;padding:4px 10px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
 #connection-status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
-#connection-status.ok{color:var(--good);background:none;padding-left:0}
-#connection-status.ok{font-size:0;padding:0}
-#connection-status.ok::before{width:9px;height:9px}
-#connection-status.neutral{color:var(--faint);font-size:0;padding:0}
+/* Quiet when healthy: the status only appears when something is wrong. */
+#connection-status.ok,#connection-status.neutral{display:none}
 #connection-status.warn{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
 #connection-status.crit{color:var(--crit);background:var(--crit-soft);border-color:var(--crit-line)}
 #last-refresh{display:none;font-size:12px;color:var(--muted)}
@@ -576,7 +574,31 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;backgrou
   .top-context{display:flex}
   .top-context:has(.crit),.top-context:has(.warn){flex-basis:100%;order:4}
 }
+@media (max-width:700px){
+  /* Record tables become stacked cards: one record per block, labels inline. */
+  .records-table{min-width:0}
+  .records-table,.records-table tbody,.records-table tr,.records-table td{display:block;width:100%}
+  .records-table thead{display:none}
+  .records-table tbody tr{padding:10px 14px;border-bottom:1px solid var(--border-2)}
+  .records-table tbody tr:last-child{border-bottom:0}
+  .records-table td{border:0;padding:3px 0;text-align:right;overflow:hidden}
+  .records-table td[data-label]::before{content:attr(data-label);float:left;margin-right:12px;color:var(--muted);font-size:12.5px;font-weight:500;text-align:left}
+  .records-table td:first-child{display:block;text-align:left;padding-bottom:6px}
+  .records-table td:first-child>*{text-align:left}
+  .records-table td:first-child::before{display:none}
+  .records-table td small{display:inline;margin-left:6px}
+  .records-table td .chip{vertical-align:middle}
+  .records-table td.actions{text-align:left;padding-top:8px}
+  .records-table td.actions .btn-row{justify-content:flex-start}
+  .records-table td.actions::before{display:none}
+  .records-table tr.group-row{padding:0}
+  .records-table tr.group-row th{display:block;width:100%}
+  .records-table td:empty{display:none}
+}
 @media (max-width:600px){
+  .userbar .avatar{display:none}
+  .userbar form button{min-height:36px;padding:6px 10px}
+  #menu-toggle{padding:8px 10px}
   .kpis{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
   .kpi{padding:14px}
   .kpi .big{font-size:24px}
@@ -602,3 +624,4 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;backgrou
   body{background:#fff;color:#000}
   .card,.tablewrap,.kpi{box-shadow:none;border-color:#ccc}
 }
+#draft-count:empty{display:none}

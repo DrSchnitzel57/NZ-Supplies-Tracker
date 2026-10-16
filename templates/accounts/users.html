@@ -3,8 +3,16 @@
 {% block content %}
 <div class="page-head"><div><span class="eyebrow">Administration</span><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account, so History shows who gave out what.</p></div></div>
 {% if not fresh %}<div class="banner info"><span class="ic">{% include "components/icon.html" with name="shield" %}</span><div><h2>Confirm your password to make changes</h2><p>For safety, account changes need a recent password check (it lasts 10 minutes). <a href="/admin-area/reauth/?next=/accounts/users/">Confirm your password</a>.</p></div></div>{% endif %}
-<div class="grid side-right">
-<section class="card"><div class="hd"><h2>Accounts</h2><span class="sub">{{ users|length }} total</span></div>
+<section class="card" style="max-width:860px"><div class="hd"><h2>Add a staff member</h2></div><div class="bd">
+<form method="post" action="/accounts/users/create/" class="stack">
+{% csrf_token %}
+{% include "components/form_fields.html" %}
+<p class="help">Give them the username and temporary password in person. They’ll choose their own password the first time they sign in. Deactivating an account signs it out everywhere immediately.</p>
+<div class="form-actions"><button type="submit" class="primary">Create account</button></div>
+</form>
+</div></section>
+
+<div style="margin-top:16px"><section class="card"><div class="hd"><h2>Accounts</h2><span class="sub">{{ users|length }} total</span></div>
 <div class="tablewrap"><table>
 <thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Set a temporary password</th><th><span class="sr-only">Other actions</span></th></tr></thead>
 <tbody>
@@ -21,13 +29,5 @@
 {% endfor %}
 </tbody>
 </table></div></section>
-<section class="card"><div class="hd"><h2>Add a staff member</h2></div><div class="bd">
-<form method="post" action="/accounts/users/create/" class="stack">
-{% csrf_token %}
-{% include "components/form_fields.html" %}
-<p class="help">Give them the username and temporary password in person. They’ll choose their own password the first time they sign in. Deactivating an account signs it out everywhere immediately.</p>
-<div class="form-actions"><button type="submit" class="primary">Create account</button></div>
-</form>
-</div></section>
 </div>
 {% endblock %}

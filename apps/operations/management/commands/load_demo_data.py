@@ -12,6 +12,7 @@ discard it (or use Protected reset) before loading real data.
 from __future__ import annotations
 
 import random
+import unicodedata
 import uuid
 from datetime import datetime, time, timedelta
 
@@ -76,6 +77,12 @@ NOTES = ["", "", "", "", "Arrival pack", "Replacement — old pair worn out", "S
 DELIVERY = ["Delivery from the distribution centre", "Donation from a local ward", "Monthly order"]
 
 
+def _ascii(text: str) -> str:
+    """Email-safe: "Hēnare Tangitau" -> "henaretangitau"."""
+    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return "".join(c for c in plain.lower() if c.isalnum() or c == ".")
+
+
 class Command(BaseCommand):
     help = "Fill an EMPTY installation with invented missionaries, stock and history (for demos)."
 
@@ -133,7 +140,7 @@ class Command(BaseCommand):
             people.append(roster.create_missionary(
                 actor=actor, external_id=f"DEMO-{n + 1:04d}",
                 name=f"{family}, {given} {middle}",
-                email=f"{given}.{family}".lower().replace(" ", "").replace("'", "") + "@example.org",
+                email=_ascii(f"{given}.{family}") + "@example.org",
                 title_prefix="Sister" if sister else "Elder",
                 arrival_status="arrived" if arrived else "expected",
                 stake=f"{rng.choice(TOWNS)} Stake", mission=rng.choice(MISSIONS),
