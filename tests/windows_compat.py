@@ -400,6 +400,51 @@ class _ReadyHandler:
         return Handler
 
 
+class KubernetesExampleTests(SimpleTestCase):
+    def test_kubernetes_example_keeps_one_sqlite_writer(self):
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML not installed")
+        docs = []
+        for path in sorted((REPO / "deploy" / "kubernetes").glob("*.yaml")):
+            docs.extend(d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d)
+        kinds = {d["kind"] for d in docs}
+        self.assertTrue({"Namespace", "Secret", "ConfigMap", "PersistentVolumeClaim",
+                         "Deployment", "Service", "Ingress"} <= kinds, kinds)
+        deployment = next(d for d in docs if d["kind"] == "Deployment")
+        spec = deployment["spec"]
+        self.assertEqual(spec["replicas"], 1)
+        self.assertEqual(spec["strategy"]["type"], "Recreate")
+        pod = spec["template"]["spec"]
+        self.assertEqual(pod["securityContext"]["runAsUser"], 10001)
+        self.assertEqual(pod["securityContext"]["fsGroup"], 10001)
+        container = pod["containers"][0]
+        self.assertNotIn(":latest", container["image"])
+        self.assertEqual(container["image"].rsplit(":", 1)[1],
+                         next(e["value"] for e in container["env"] if e["name"] == "APP_VERSION"))
+        for probe, path in (("readinessProbe", "/readyz/"), ("livenessProbe", "/healthz/")):
+            get = container[probe]["httpGet"]
+            self.assertEqual(get["path"], path)
+            self.assertIn({"name": "X-Forwarded-Proto", "value": "https"}, get["httpHeaders"])
+            self.assertIn({"name": "Host", "value": "localhost"}, get["httpHeaders"])
+        pvc = next(d for d in docs if d["kind"] == "PersistentVolumeClaim")
+        self.assertEqual(pvc["spec"]["accessModes"], ["ReadWriteOnce"])
+        config = next(d for d in docs if d["kind"] == "ConfigMap")["data"]
+        self.assertTrue(config["DJANGO_DB_PATH"].startswith("/app/data/"))
+        self.assertEqual(config["DJANGO_DEBUG"], "0")
+        ingress = next(d for d in docs if d["kind"] == "Ingress")
+        host = ingress["spec"]["rules"][0]["host"]
+        self.assertIn(host, config["DJANGO_ALLOWED_HOSTS"].split(","))
+        self.assertIn(f"https://{host}", config["DJANGO_CSRF_TRUSTED_ORIGINS"].split(","))
+        # The example Secret must never be applied by the kustomization, and
+        # its placeholder is the one the app refuses in production.
+        kustomization = next(d for d in docs if d["kind"] == "Kustomization")
+        self.assertNotIn("secret.example.yaml", kustomization["resources"])
+        secret = next(d for d in docs if d["kind"] == "Secret")
+        self.assertEqual(secret["stringData"]["DJANGO_SECRET_KEY"], "dev-insecure-secret-key-change-me")
+
+
 class CaddyConfigTests(SimpleTestCase):
     """Both Caddyfiles serve the public root certificate at /ca.crt."""
 

@@ -1,0 +1,30 @@
+# TLS ends at the ingress controller (no Caddy in Kubernetes). It must send
+# X-Forwarded-Proto: https to the app (ingress-nginx does by default) so
+# Django's HTTPS checks and secure cookies work. The TLS secret is yours:
+# from cert-manager, your internal CA, or `kubectl create secret tls`.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: supplies-tracker
+  namespace: mtc-supplies
+  annotations:
+    # Bundle uploads are up to 10 MB; ingress-nginx defaults to 1 MB.
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - supplies.example.internal
+      secretName: supplies-tracker-tls
+  rules:
+    - host: supplies.example.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: supplies-tracker
+                port:
+                  name: http

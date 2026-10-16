@@ -1,0 +1,7 @@
+# Example only: synthetic names/hosts. See README.md before applying.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mtc-supplies
+  labels:
+    app.kubernetes.io/part-of: supplies-tracker
