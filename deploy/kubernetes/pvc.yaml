@@ -1,0 +1,17 @@
+# One volume for the SQLite database and its backups. Use BLOCK storage
+# (local-path, Longhorn, a cloud disk...). Never NFS/SMB/CephFS or any
+# ReadWriteMany share: SQLite locking is not safe on network file systems.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: supplies-tracker-data
+  namespace: mtc-supplies
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # k3s/k3d's built-in node-local storage. Note: deleting a k3d cluster
+  # deletes this volume too - keep copies of backups outside the cluster.
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi

@@ -1,0 +1,15 @@
+# Non-secret settings (same variables as .env / settings.env). Replace the
+# example host with the name staff will use; it must match the Ingress.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supplies-tracker-config
+  namespace: mtc-supplies
+data:
+  DJANGO_DEBUG: "0"
+  # The public host name; loopback/localhost are always allowed for probes.
+  DJANGO_ALLOWED_HOSTS: supplies.example.internal
+  # Scheme + host (+ port if not 443) staff browse to; CSRF checks need it.
+  DJANGO_CSRF_TRUSTED_ORIGINS: https://supplies.example.internal
+  # SQLite lives on the persistent volume (backups go to /app/data/backups).
+  DJANGO_DB_PATH: /app/data/db.sqlite3
