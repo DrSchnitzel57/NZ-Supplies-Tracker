@@ -55,7 +55,7 @@ def parse_env_text(text: str) -> dict[str, str]:
     A malformed line raises ``ValueError`` naming only the line number,
     never its content (it may hold a secret).
     """
-    if text.startswith("﻿"):
+    if text.startswith("\ufeff"):
         text = text[1:]
     values: dict[str, str] = {}
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
