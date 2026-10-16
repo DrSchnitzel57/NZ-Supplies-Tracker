@@ -400,6 +400,49 @@ class _ReadyHandler:
         return Handler
 
 
+class CaddyConfigTests(SimpleTestCase):
+    """Both Caddyfiles serve the public root certificate at /ca.crt."""
+
+    def test_docker_caddyfile_serves_only_the_public_root_certificate(self):
+        docker = (REPO / "deploy" / "Caddyfile").read_text(encoding="utf-8")
+        self.assertIn("handle /ca.crt", docker)
+        self.assertIn("root * /data/caddy/pki/authorities/local", docker)
+        self.assertIn("rewrite * /root.crt", docker)
+        self.assertNotIn("root.key", docker)
+        # The site stays parameterized on the Compose-provided address/port.
+        self.assertIn("https://{$APP_HOST}:{$APP_PORT}", docker)
+
+    def test_caddyfiles_adapt_with_the_pinned_caddy(self):
+        caddy = os.environ.get("CADDY") or shutil.which("caddy")
+        if not caddy:
+            self.skipTest("caddy not available (set CADDY=/path/to/caddy 2.10.2)")
+        env = {**os.environ, "APP_HOST": "192.168.1.10", "APP_PORT": "8443"}
+        with tempfile.TemporaryDirectory() as tmp:
+            docker = subprocess.run(
+                [caddy, "adapt", "--config", str(REPO / "deploy" / "Caddyfile"),
+                 "--adapter", "caddyfile"], capture_output=True, text=True,
+                timeout=60, env=env, cwd=tmp)
+            self.assertEqual(docker.returncode, 0, docker.stderr)
+            self.assertIn("/root.crt", docker.stdout)
+            pwsh = _pwsh()
+            if pwsh:
+                generated = subprocess.run(
+                    [pwsh, "-NoProfile", "-NonInteractive", "-File",
+                     str(REPO / "tests" / "windows_ps_checks.ps1"), "-Mode", "caddyfile",
+                     "-Root", "C:\\MTCSupplies", "-HostAddress", "192.168.1.10", "-Port", "8443"],
+                    capture_output=True, text=True, timeout=120, cwd=REPO)
+                self.assertEqual(generated.returncode, 0, generated.stderr)
+                path = Path(tmp) / "Caddyfile"
+                path.write_text(generated.stdout, encoding="utf-8")
+                windows = subprocess.run(
+                    [caddy, "adapt", "--config", str(path), "--adapter", "caddyfile"],
+                    capture_output=True, text=True, timeout=60, cwd=tmp)
+                self.assertEqual(windows.returncode, 0, windows.stderr)
+                adapted = json.loads(windows.stdout)
+                self.assertEqual(adapted["apps"]["http"]["servers"]["srv0"]["listen"], [":8443"])
+                self.assertIn("C:/MTCSupplies/data/caddy/caddy/pki/authorities/local", windows.stdout)
+
+
 class PowerShellScriptTests(SimpleTestCase):
     """Parse + PS 5.1 compatibility scan + pure-helper unit tests (pwsh)."""
 
