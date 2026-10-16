@@ -739,8 +739,13 @@ function Install-MtcTool {
     $tools = Join-Path $Root 'tools'
     $exe = Join-Path $tools $ExeName
     if (Test-Path -LiteralPath $exe -PathType Leaf) {
-        $check = Invoke-MtcNative -FilePath $exe -ArgumentList $VersionArgs -AllowFailure -Quiet
-        if ($check.ExitCode -eq 0 -and (Test-MtcToolVersionOutput -Output $check.Output -Version $Version)) {
+        $check = $null
+        try {
+            $check = Invoke-MtcNative -FilePath $exe -ArgumentList $VersionArgs -AllowFailure -Quiet
+        } catch {
+            $check = $null  # damaged or wrong file: download it again
+        }
+        if ($null -ne $check -and $check.ExitCode -eq 0 -and (Test-MtcToolVersionOutput -Output $check.Output -Version $Version)) {
             Write-MtcOk "$Name $Version already present"
             return $exe
         }
