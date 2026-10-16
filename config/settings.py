@@ -206,3 +206,15 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# --- Windows/native install support ---
+# A native (non-Docker) install has no image tag to stamp APP_VERSION from:
+# fall back to the release's VERSION file so /readyz and backup manifests
+# report the running release. Docker/Compose always set APP_VERSION, and the
+# image does not ship VERSION, so container behaviour is unchanged.
+if not APP_VERSION:
+    try:
+        APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        APP_VERSION = ""
+# --- end Windows/native install support ---

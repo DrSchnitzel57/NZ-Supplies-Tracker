@@ -39,8 +39,41 @@ MANIFEST_SUFFIX = ".manifest.json"
 # Marker naming: the protected recovery backup is the newest verified
 # recovery backup; it is never pruned until superseded.
 
+# --- Windows/native install support ---
+#: Native Windows host (deploy/windows). A module-level flag rather than
+#: inline ``os.name`` checks so tests can exercise the Windows branches on
+#: POSIX by patching it. On Windows, POSIX mode bits do not exist (os.chmod
+#: only toggles the read-only attribute and st_mode always reads 0o666), so
+#: access control comes from NTFS ACLs: install.ps1 restricts the install
+#: root to Administrators + SYSTEM and every backup inherits that ACL.
+IS_WINDOWS = os.name == "nt"
+#: Transient sharing violations on Windows (antivirus/indexer briefly
+#: holding a just-written file) are retried this many times.
+_WINDOWS_REPLACE_ATTEMPTS = 20
+_WINDOWS_REPLACE_DELAY = 0.25
+
+
+def _replace(src: str | Path, dst: str | Path) -> None:
+    """Atomic rename over dst; on Windows retry brief sharing violations."""
+    if not IS_WINDOWS:
+        os.replace(src, dst)
+        return
+    import time
+
+    for attempt in range(_WINDOWS_REPLACE_ATTEMPTS):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == _WINDOWS_REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_WINDOWS_REPLACE_DELAY)
+# --- end Windows/native install support ---
+
 
 def _restrict(path: Path) -> None:
+    if IS_WINDOWS:
+        return  # NTFS ACLs (inherited from the install root) apply instead
     try:
         if path.is_dir():
             os.chmod(path, 0o700)
@@ -51,7 +84,9 @@ def _restrict(path: Path) -> None:
 
 
 def _fsync_file(path: Path) -> None:
-    fd = os.open(str(path), os.O_RDONLY)
+    # Windows: os.fsync -> FlushFileBuffers, which needs a writable handle.
+    flags = (os.O_RDWR | getattr(os, "O_BINARY", 0)) if IS_WINDOWS else os.O_RDONLY
+    fd = os.open(str(path), flags)
     try:
         os.fsync(fd)
     finally:
@@ -59,6 +94,10 @@ def _fsync_file(path: Path) -> None:
 
 
 def _fsync_dir(path: Path) -> None:
+    if IS_WINDOWS:
+        # No directory handles via os.open (and no os.O_DIRECTORY) on
+        # Windows; NTFS journals the rename metadata itself.
+        return
     try:
         fd = os.open(str(path), os.O_RDONLY | os.O_DIRECTORY)
     except OSError:
@@ -174,8 +213,8 @@ def backup_sqlite(*, source_path: str | Path, dest_path: str | Path) -> dict:
         }
         _write_manifest(tmp, info)
         _fsync_file(Path(str(tmp) + MANIFEST_SUFFIX))
-        os.replace(tmp, dst)
-        os.replace(str(tmp) + MANIFEST_SUFFIX, str(dst) + MANIFEST_SUFFIX)
+        _replace(tmp, dst)
+        _replace(str(tmp) + MANIFEST_SUFFIX, str(dst) + MANIFEST_SUFFIX)
         _fsync_dir(dst.parent)
     finally:
         for leftover in (tmp, Path(str(tmp) + MANIFEST_SUFFIX),
@@ -201,7 +240,9 @@ def verify_sqlite_backup(path: str | Path) -> None:
             mode = oct(path.stat().st_mode & 0o777)
         except OSError as exc:
             raise ValueError(f"backup is not readable: {exc}") from exc
-        if mode != "0o600":
+        # Windows has no POSIX mode bits (always 0o666/0o444); the
+        # install-root ACL is the access control there (see IS_WINDOWS).
+        if mode != "0o600" and not IS_WINDOWS:
             raise ValueError(f"backup has unsafe permissions {mode}; refusing to trust it")
     conn = (_connect_readonly(path) if uri
             else sqlite3.connect(f"file:{path}?mode=ro", uri=True))
@@ -472,7 +513,11 @@ def restore_sqlite(*, backup_path: str | Path, dest_path: str | Path,
         verify_sqlite_backup(tmp)
         if backup_digest(tmp) != expected:
             raise ValueError("staged restore checksum changed during copy; aborting")
-        os.replace(tmp, dst)
+        # verify_sqlite_backup() above reopened this process's Django
+        # connection to the live file: close it so no open handle/WAL sits
+        # under the swap (Windows also refuses to replace an open file).
+        _close_django_connections()
+        _replace(tmp, dst)
         # Stale sidecars belong to the pre-restore database image: with all
         # connections closed and the WAL checkpointed they are safe to drop
         # only now, after the swap, so a crash mid-restore keeps recovery data.
