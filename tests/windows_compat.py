@@ -375,3 +375,92 @@ class NativeReleaseContractTests(SimpleTestCase):
     def test_waitress_is_pinned_for_the_native_server(self):
         lines = (REPO / "requirements.prod.txt").read_text(encoding="utf-8").splitlines()
         self.assertIn("waitress==3.0.2", lines)
+
+
+class _ReadyHandler:
+    """Tiny /readyz/ stand-in recording the forwarded-proto header."""
+
+    @staticmethod
+    def make(state):
+        from http.server import BaseHTTPRequestHandler
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802 - http.server API
+                state["proto"] = self.headers.get("X-Forwarded-Proto")
+                body = json.dumps(state["body"]).encode()
+                self.send_response(state["status"])
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        return Handler
+
+
+class PowerShellScriptTests(SimpleTestCase):
+    """Parse + PS 5.1 compatibility scan + pure-helper unit tests (pwsh)."""
+
+    def setUp(self):
+        self.pwsh = _pwsh()
+        if not self.pwsh:
+            self.skipTest("pwsh not available (set PWSH=/path/to/pwsh)")
+
+    def _run(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.pwsh, "-NoProfile", "-NonInteractive", "-File",
+             str(REPO / "tests" / "windows_ps_checks.ps1"), *args],
+            capture_output=True, text=True, timeout=300, cwd=REPO)
+
+    def test_scripts_parse_and_avoid_powershell7_only_syntax(self):
+        proc = self._run("-Mode", "lint")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("lint ok", proc.stdout)
+
+    def test_pure_powershell_helpers(self):
+        proc = self._run("-Mode", "unit")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("unit ok", proc.stdout)
+
+    def test_settings_parsers_agree_between_python_and_powershell(self):
+        sample = ("\ufeff# c\r\nA=1\r\n  B = 'two words'  \nC=\"x=y\"\nD=\n"
+                  "E=C:\\MTCSupplies\\data\\db.sqlite3\nA=last\r\tF\t=\tg\t\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.env"
+            path.write_bytes(sample.encode("utf-8"))
+            proc = self._run("-Mode", "parse", "-Path", str(path))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        ps_values = json.loads(proc.stdout.strip().splitlines()[-1])
+        self.assertEqual(ps_values, _load_serve().parse_env_text(sample))
+
+    def test_readiness_probe_sends_https_proto_and_reads_status(self):
+        import threading
+        from http.server import ThreadingHTTPServer
+
+        state = {"status": 200, "proto": None,
+                 "body": {"ok": True, "version": "1.2.3", "maintenance": True}}
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _ReadyHandler.make(state))
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            ready = json.loads(self._run("-Mode", "readiness", "-Port", str(port)).stdout)
+            self.assertTrue(ready["Ok"])
+            self.assertEqual(ready["Version"], "1.2.3")
+            self.assertTrue(ready["Maintenance"])
+            self.assertTrue(ready["PortOpen"])
+            self.assertEqual(state["proto"], "https")
+            state.update(status=503, body={"ok": False, "reason": "migrations-pending"})
+            pending = json.loads(self._run("-Mode", "readiness", "-Port", str(port)).stdout)
+            self.assertFalse(pending["Ok"])
+            self.assertTrue(pending["Reachable"])
+            self.assertEqual(pending["StatusCode"], 503)
+            self.assertEqual(pending["Reason"], "migrations-pending")
+        finally:
+            server.shutdown()
+            server.server_close()
+        closed = json.loads(self._run("-Mode", "readiness", "-Port", str(port)).stdout)
+        self.assertFalse(closed["Reachable"])
+        self.assertFalse(closed["PortOpen"])
