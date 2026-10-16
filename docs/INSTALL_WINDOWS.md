@@ -151,7 +151,7 @@ again.
 | Problem | What to do |
 | --- | --- |
 | Staff PCs cannot open the address at all | On the server run `mtc status`. If the address shown is not the server's current address, run `mtc repair -HostAddress <new address>`. Make sure the office network is set to *Private* in Windows (the installer offers to fix this). |
-| "Your connection isn't private" on a staff PC | That PC does not trust the certificate yet: see *Let staff PCs trust the connection*. If it appeared after the address changed, re-do it with the new `/ca.crt`. |
+| "Your connection isn't private" on a staff PC | That PC does not trust the certificate yet: see *Let staff PCs trust the connection*. (After `mtc repair` with a new address the same certificate stays valid; staff just use the new address.) |
 | "Bad Request (400)" | The address typed is not the one the app was set up with. Use the address from `mtc status`, or `mtc repair -HostAddress ...`. |
 | Staff are told saving is paused / maintenance | An update or backup is running; wait a few minutes. If it stays like that, run `mtc status`. After an interrupted update run the update again with `-Takeover`, or `mtc rollback -Takeover`. |
 | Nothing answers after a restart of the server | Give it two minutes, then `mtc status`, `mtc restart`, `mtc logs`. |
@@ -206,4 +206,6 @@ domain networks only. Pinned tools: uv 0.12.20 (SHA-256) and Caddy 2.10.2
 release's published checksum list. `APP_VERSION` comes from each release's
 `VERSION` file; do not set it in `settings.env`. Update, rollback and restore
 use the same maintenance-window/token protocol as `scripts/update.sh` and
-`scripts/restore.sh`; logs for each are in `data\logs`.
+`scripts/restore.sh`; logs for each are in `data\logs`. Updates do not touch
+the generated `Caddyfile`, tasks or firewall rule: if a release changes those
+templates, run `mtc repair` after updating.
