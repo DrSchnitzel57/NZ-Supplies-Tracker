@@ -19,6 +19,7 @@ from datetime import datetime, time, timedelta
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 GIVEN_F = ["Aroha", "Ana", "Mele", "Grace", "Lucy", "Emma", "Leilani", "Sina", "Hannah", "Ruby",
@@ -39,39 +40,40 @@ LANGUAGES = ["English", "English", "English", "English (ESL)", "Samoan", "Tongan
 TOWNS = ["Hamilton", "Tauranga", "Apia", "Nuku'alofa", "Brisbane", "Mesa", "Auckland", "Suva",
          "Rotorua", "Provo", "Christchurch", "Lae"]
 
-# (category, name, sizes, typical stock per size, alert level)
+# (category, name, sizes, typical stock per size, alert level, who: "M" Elders, "F" Sisters, "" everyone)
 CATALOGUE = [
-    ("Clothing", "White Shirts", ["38 S", "38 L", "40 S", "40 L", "42 S", "42 L", "44 L", "46 L"], 12, 4),
-    ("Clothing", "Dress Pants", ["30", "32", "34", "36", "38", "40"], 6, 2),
-    ("Clothing", "Belt", ["30", "32", "34", "36", "38", "40", "42"], 5, 2),
-    ("Clothing", "Tie", [""], 25, 6),
-    ("Clothing", "Dress", ["6", "8", "10", "12", "14", "16", "18", "20"], 4, 2),
-    ("Clothing", "Skirt", ["8", "10", "12", "14", "16"], 4, 2),
-    ("Clothing", "Socks", ["S", "M", "L"], 20, 6),
-    ("Clothing", "Sports Tops", ["S", "M", "L", "XL", "2XL", "3XL"], 8, 3),
-    ("Clothing", "Sports Bottoms", ["S", "M", "L", "XL", "2XL", "3XL"], 8, 3),
-    ("Clothing", "Winter Jacket", ["S", "M", "L", "XL"], 3, 1),
-    ("Shoes", "Dress Shoes (men)", ["7", "8", "9", "10", "11", "12"], 4, 2),
-    ("Shoes", "Dress Shoes (women)", ["5", "6", "7", "8", "9"], 4, 2),
-    ("Shoes", "Sports Shoes", ["6", "7", "8", "9", "10", "11"], 4, 2),
-    ("Hygiene", "Soap", [""], 80, 15),
-    ("Hygiene", "Shampoo & Conditioner", [""], 40, 10),
-    ("Hygiene", "Toothpaste", [""], 60, 12),
-    ("Hygiene", "Toothbrush", [""], 60, 12),
-    ("Hygiene", "Deodorant", [""], 45, 10),
-    ("Hygiene", "Razor", [""], 30, 8),
-    ("Hygiene", "Feminine Hygiene", ["Regular", "Super"], 30, 8),
-    ("Hygiene", "Lip Balm", [""], 25, 6),
-    ("Medical", "Pain Relief Tablets", [""], 30, 8),
-    ("Medical", "Plasters", [""], 40, 10),
-    ("Medical", "Cold & Flu Tablets", [""], 20, 6),
-    ("Medical", "Antiseptic Cream", [""], 15, 5),
-    ("Medical", "Sunscreen", [""], 20, 6),
-    ("Medical", "Knee Brace", ["S/M", "L/XL"], 3, 1),
-    ("Baggage", "Suitcase", ["23 kg", "7 kg carry-on"], 6, 2),
-    ("Baggage", "Backpack", [""], 8, 3),
-    ("Stationery", "Study Journal", [""], 50, 10),
-    ("Stationery", "Pens (pack)", [""], 40, 10),
+    ("Clothing", "White Shirts", ["38 S", "38 L", "40 S", "40 L", "42 S", "42 L", "44 L", "46 L"], 12, 4, "M"),
+    ("Clothing", "Dress Pants", ["30", "32", "34", "36", "38", "40"], 6, 2, "M"),
+    ("Clothing", "Belt", ["30", "32", "34", "36", "38", "40", "42"], 5, 2, "M"),
+    ("Clothing", "Tie", [""], 25, 6, "M"),
+    ("Clothing", "Blouse", ["8", "10", "12", "14", "16", "18"], 5, 2, "F"),
+    ("Clothing", "Dress", ["6", "8", "10", "12", "14", "16", "18", "20"], 4, 2, "F"),
+    ("Clothing", "Skirt", ["8", "10", "12", "14", "16"], 4, 2, "F"),
+    ("Clothing", "Socks", ["S", "M", "L"], 20, 6, ""),
+    ("Clothing", "Sports Tops", ["S", "M", "L", "XL", "2XL", "3XL"], 8, 3, ""),
+    ("Clothing", "Sports Bottoms", ["S", "M", "L", "XL", "2XL", "3XL"], 8, 3, ""),
+    ("Clothing", "Winter Jacket", ["S", "M", "L", "XL"], 3, 1, ""),
+    ("Shoes", "Dress Shoes (men)", ["7", "8", "9", "10", "11", "12"], 4, 2, "M"),
+    ("Shoes", "Dress Shoes (women)", ["5", "6", "7", "8", "9"], 4, 2, "F"),
+    ("Shoes", "Sports Shoes", ["6", "7", "8", "9", "10", "11"], 4, 2, ""),
+    ("Hygiene", "Soap", [""], 80, 15, ""),
+    ("Hygiene", "Shampoo & Conditioner", [""], 40, 10, ""),
+    ("Hygiene", "Toothpaste", [""], 60, 12, ""),
+    ("Hygiene", "Toothbrush", [""], 60, 12, ""),
+    ("Hygiene", "Deodorant", [""], 45, 10, ""),
+    ("Hygiene", "Razor", [""], 30, 8, "M"),
+    ("Hygiene", "Feminine Hygiene", ["Regular", "Super"], 30, 8, "F"),
+    ("Hygiene", "Lip Balm", [""], 25, 6, ""),
+    ("Medical", "Pain Relief Tablets", [""], 30, 8, ""),
+    ("Medical", "Plasters", [""], 40, 10, ""),
+    ("Medical", "Cold & Flu Tablets", [""], 20, 6, ""),
+    ("Medical", "Antiseptic Cream", [""], 15, 5, ""),
+    ("Medical", "Sunscreen", [""], 20, 6, ""),
+    ("Medical", "Knee Brace", ["S/M", "L/XL"], 3, 1, ""),
+    ("Baggage", "Suitcase", ["23 kg", "7 kg carry-on"], 6, 2, ""),
+    ("Baggage", "Backpack", [""], 8, 3, ""),
+    ("Stationery", "Study Journal", [""], 50, 10, ""),
+    ("Stationery", "Pens (pack)", [""], 40, 10, ""),
 ]
 NOTES = ["", "", "", "", "Arrival pack", "Replacement — old pair worn out", "Swapped for a larger size"]
 DELIVERY = ["Delivery from the distribution centre", "Donation from a local ward", "Monthly order"]
@@ -109,7 +111,8 @@ class Command(BaseCommand):
                 "refusing: this installation already has data. Demo data only goes into an "
                 "empty trial installation, never alongside a real roster.")
         rng = random.Random(options["seed"])
-        staff = [actor] + list(User.objects.filter(is_active=True).exclude(pk=actor.pk)[:3])
+        others = User.objects.filter(Q(is_staff=True) | Q(is_superuser=True), is_active=True)
+        staff = [actor] + list(others.exclude(pk=actor.pk).order_by("username")[:3])
         with transaction.atomic():
             people = self._people(rng, actor, max(1, options["people"]))
             items = self._items(rng, actor, start=timezone.now() - timedelta(days=options["days"] + 1))
@@ -154,7 +157,7 @@ class Command(BaseCommand):
         from apps.inventory.models import StockMovement
 
         items = []
-        for category, name, sizes, typical, alert in CATALOGUE:
+        for category, name, sizes, typical, alert, who in CATALOGUE:
             for size in sizes:
                 qty = max(0, int(rng.gauss(typical, typical * 0.35)))
                 item = inventory.create_item(
@@ -162,6 +165,7 @@ class Command(BaseCommand):
                     reason="Opening stock (demo)", idempotency_key=f"demo-open-{uuid.uuid4().hex}")
                 item.low_threshold = alert
                 item.save(update_fields=["low_threshold"])
+                item.demo_for = who
                 items.append(item)
         # Openings happened before the history so every ledger chain stays in order.
         StockMovement.objects.filter(kind=StockMovement.OPENING).update(created_at=start)
@@ -174,6 +178,7 @@ class Command(BaseCommand):
         from apps.issuing import services as issuing
         from apps.issuing.models import Issue
 
+        suits = {item.pk: item.demo_for for item in items}  # Elders never get a dress, and so on
         tz = timezone.get_current_timezone()
         today = timezone.localdate()
         arrived = [p for p in people if p.arrival_status == "arrived"]
@@ -187,9 +192,10 @@ class Command(BaseCommand):
         moments.sort(key=lambda pair: pair[0])
         count = 0
         for at, person in moments:
-            in_stock = list(Item.objects.filter(on_hand__gt=0))
+            who = "F" if person.title_prefix == "Sister" else "M"
+            in_stock = [i for i in Item.objects.filter(on_hand__gt=0) if suits.get(i.pk) in ("", who)]
             if not in_stock:
-                break
+                continue
             picks = rng.sample(in_stock, k=min(len(in_stock), rng.choice([1, 2, 2, 3, 4])))
             lines = [{"item_id": str(i.pk), "quantity": min(i.on_hand, rng.choice([1, 1, 1, 2]))} for i in picks]
             try:

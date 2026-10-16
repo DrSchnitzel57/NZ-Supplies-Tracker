@@ -134,7 +134,7 @@ def test_report_families_serve_csv_and_pdf(page, live_server, externals):
             page.click('[data-report-pdf]')
         assert open(dl2.value.path(), "rb").read(4) == b"%PDF"
     page.goto(f"{live_server.url}/reports/")
-    assert "Available stock" in page.content()
+    assert "Stock on hand now" in page.content()
     page.goto(f"{live_server.url}/reports/?family=intake")
-    assert "Arrivals overview" in page.content()
+    assert "Arrivals and departures" in page.content()
     assert_no_internet(externals)
