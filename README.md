@@ -5,9 +5,10 @@ missionary is given, add deliveries, count the shelves and pull reports. It
 runs on **one computer in the office**; everyone else just opens a link in
 their browser and sees the same, live stock.
 
-It replaces the single-file HTML tracker (kept for reference in
-[docs/history](docs/history/prototype-READ-ME.txt)) and can import that file's
-data directly.
+It replaces the single-file HTML tracker and can import that file's data
+directly. The HTML file itself is **not** in this repository, because it
+contains real missionary details; only its original instructions are kept, in
+[docs/history](docs/history/prototype-READ-ME.txt).
 
 ![Overview screen with invented data](static/img/02-dashboard.png)
 
