@@ -6,12 +6,13 @@ import io
 import json
 from html import escape
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Exists, OuterRef, Sum
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
 
-from apps.inventory.models import Item
+from apps.common.sorting import item_sort_key
+from apps.inventory.models import Item, StockMovement
 from apps.issuing.models import Issue, IssueLine
 from apps.reports.filters import REPORT_CHOICES, filter_issues, filter_items, filter_people
 from apps.roster.models import Missionary
@@ -79,8 +80,13 @@ def report_table(family, *, include_archived=False, filters=None):
     elif family in ('stock', 'low-stock', 'inventory'):
         items = filter_items(Item.objects.all(), filters)
         if family == 'low-stock':
-            items = items.filter(on_hand__lte=Coalesce('low_threshold', 0))
-        items = list(items.order_by('category', 'name', 'size', 'pk'))
+            stocked = StockMovement.objects.filter(item=OuterRef('pk'), delta__gt=0)
+            items = items.filter(on_hand__lte=Coalesce('low_threshold', 0)).annotate(ever_stocked=Exists(stocked))
+        items = sorted(items, key=lambda i: (item_sort_key(i), str(i.pk)))
+        if family == 'low-stock':
+            # Most useful first: still on the shelf but low, then ran out, then
+            # catalogue lines that have never had any stock.
+            items.sort(key=lambda i: 0 if i.on_hand > 0 else (1 if i.ever_stocked else 2))
         net = _net_out_map([item.pk for item in items])
         if family == 'inventory':
             fields = ['id', 'category', 'name', 'size', 'unit', 'available', 'given_out_net', 'alert_level', 'archived', 'source_remaining', 'source_corrected']
@@ -88,6 +94,12 @@ def report_table(family, *, include_archived=False, filters=None):
                      'unit': item.unit, 'available': item.on_hand, 'given_out_net': net.get(item.pk, 0),
                      'alert_level': item.low_threshold, 'archived': 'yes' if item.is_archived else 'no',
                      'source_remaining': item.source_remaining, 'source_corrected': item.source_corrected} for item in items]
+        elif family == 'low-stock':
+            fields = ['item', 'status', 'available', 'given_out_net', 'alert_level', 'archived']
+            rows = [{'item': str(item),
+                     'status': 'Running low' if item.on_hand > 0 else ('Ran out' if item.ever_stocked else 'Never stocked'),
+                     'available': item.on_hand, 'given_out_net': net.get(item.pk, 0),
+                     'alert_level': item.low_threshold, 'archived': 'yes' if item.is_archived else 'no'} for item in items]
         else:
             fields = ['item', 'available', 'given_out_net', 'alert_level', 'archived']
             rows = [{'item': str(item), 'available': item.on_hand, 'given_out_net': net.get(item.pk, 0),
@@ -96,12 +108,16 @@ def report_table(family, *, include_archived=False, filters=None):
         people = filter_people(Missionary.objects.all(), filters)
         if family == 'intake':
             fields = ['arrival_status', 'people']
-            rows = [{'arrival_status': r['arrival_status'] or '(unspecified)', 'people': r['total']} for r in
+            from apps.roster.models import ARRIVAL_CHOICES
+            labels = dict(ARRIVAL_CHOICES)
+            rows = [{'arrival_status': labels.get(r['arrival_status'], r['arrival_status']) or 'Not recorded', 'people': r['total']} for r in
                     people.values('arrival_status').annotate(total=Count('id')).order_by('arrival_status')]
-            rows += [{'arrival_status': f"arrival month {r['arrival_date__year']}-{r['arrival_date__month']:02d}", 'people': r['total']} for r in
+            rows += [{'arrival_status': f"Arrived at the MTC {r['arrival_date__year']}-{r['arrival_date__month']:02d}", 'people': r['total']} for r in
                      people.exclude(arrival_date=None).values('arrival_date__year', 'arrival_date__month').annotate(total=Count('id')).order_by('arrival_date__year', 'arrival_date__month')]
+            rows += [{'arrival_status': f"Leaving the MTC {r['departure_date__year']}-{r['departure_date__month']:02d}", 'people': r['total']} for r in
+                     people.exclude(departure_date=None).values('departure_date__year', 'departure_date__month').annotate(total=Count('id')).order_by('departure_date__year', 'departure_date__month')]
         else:
-            fields = ['id', 'external_id', 'name', 'email', 'title_prefix', 'arrival_status', 'stake', 'mission', 'language', 'arrival_date', 'release_date', 'personal_email', 'intake_metadata', 'archived']
+            fields = ['id', 'external_id', 'name', 'email', 'title_prefix', 'arrival_status', 'stake', 'mission', 'language', 'arrival_date', 'departure_date', 'release_date', 'personal_email', 'intake_metadata', 'archived']
             rows = []
             for person in people.order_by('name', 'pk'):
                 row = {field: getattr(person, field) for field in fields if field != 'archived'}

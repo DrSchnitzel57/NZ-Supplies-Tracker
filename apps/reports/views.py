@@ -11,7 +11,7 @@ from apps.accounts.decorators import admin_required, staff_required
 from apps.accounts.reauth import reauth_required
 from apps.reports import services as rep
 from apps.transfers import services as transfer_services
-from apps.reports.filters import REPORT_CHOICES, ReportFilters
+from apps.reports.filters import REPORT_CHOICES, REPORT_DESCRIPTIONS, ReportFilters
 from apps.common.pagination import paginate
 
 
@@ -31,13 +31,22 @@ def report_home(request):
         label, number = ('category', 'given_out_net') if family == 'category' else ('arrival_status', 'people')
         maximum = max((row[number] for row in rows), default=1) or 1
         summary = [{'label': row[label], 'value': row[number], 'width': round(row[number] / maximum * 100)} for row in rows]
-    low_text = '\n'.join(f"{row['item']}: {row['available']} available; alert at {row['alert_level']}" for row in rows) if valid and family == 'low-stock' else ''
+    low_text = ''
+    if valid and family == 'low-stock':
+        sections = []
+        for status in ('Running low', 'Ran out', 'Never stocked'):
+            group = [row for row in rows if row['status'] == status]
+            if group:
+                sections.append(f"{status} ({len(group)}):\n" + '\n'.join(
+                    f"• {row['item']}: {row['available']} left (alert at {row['alert_level']})" for row in group))
+        low_text = 'Supplies to reorder — MTC\n\n' + '\n\n'.join(sections)
     return render(request, 'reports/home.html', {
         'family': family, 'families': REPORT_CHOICES, 'form': form, 'report_title': title,
+        'report_description': REPORT_DESCRIPTIONS.get(family, ''),
         'headings': ['Given out (net)' if field == 'given_out_net' else field.replace('_', ' ').capitalize() for field in fields],
         'report_rows': [[row.get(field, '') for field in fields] for row in page],
         'filters_query': query, 'filters_valid': valid, 'summary': summary, 'low_text': low_text,
-        'mail_url': 'mailto:?subject=Low%20stock%20follow-up&body=' + quote(low_text),
+        'mail_url': 'mailto:?subject=' + quote('MTC supplies to reorder') + '&body=' + quote(low_text),
         **pagination}, status=200 if valid else 400)
 
 

@@ -22,7 +22,12 @@ def _seed(staff):
 
 
 def add_item(page, item, quantity='1'):
-    page.locator(f'.catalogue-row[data-item="{item.pk}"] button').click()
+    # Works for single rows and size buttons; out-of-stock items are hidden
+    # until "Show out-of-stock items" is ticked, exactly as staff would do.
+    button = page.locator(f'.catalogue-add[data-item="{item.pk}"]')
+    if not button.is_visible() and not page.is_checked('#show-out'):
+        page.check('#show-out')
+    button.click()
     if quantity != '1':
         page.locator(f'.issue-row[data-item="{item.pk}"] input[type=number]').fill(quantity)
 
@@ -32,7 +37,7 @@ def choose_person(page, person):
     expect(page.locator('#person-results [role=option]').first).to_be_visible()
     page.press('#person-filter', 'ArrowDown')
     page.press('#person-filter', 'Enter')
-    expect(page.locator('#selected-name')).to_have_text(person.name)
+    expect(page.locator('#selected-name')).to_have_text(person.display_name)
 
 
 def test_issue_goods_desktop(page, live_server, externals):

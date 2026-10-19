@@ -16,6 +16,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 LANGUAGE_CODE = "en-nz"
 TIME_ZONE = "Pacific/Auckland"
 USE_TZ = True
+# Django has no en-NZ formats; ours give "17 Oct 2026, 2:17 PM".
+FORMAT_MODULE_PATH = ["config.formats"]
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -64,8 +66,10 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DATA_UPLOAD_MAX_MEMORY_SIZE", 
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("FILE_UPLOAD_MAX_MEMORY_SIZE", str(5 * 1024 * 1024)))
 DATA_UPLOAD_MAX_NUMBER_FIELDS = int(os.environ.get("DATA_UPLOAD_MAX_NUMBER_FIELDS", "2000"))
 
+# Django's built-in /admin/ site is deliberately not installed: nothing is
+# managed there, and its separate login page bypassed the app's sign-in
+# throttling. Administrators use the app's own Administration pages.
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -108,6 +112,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "apps.operations.context_processors.site_notice",
             ],
+            "builtins": ["apps.common.templatetags.supplies"],
         },
     },
 ]
@@ -206,3 +211,15 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# --- Windows/native install support ---
+# A native (non-Docker) install has no image tag to stamp APP_VERSION from:
+# fall back to the release's VERSION file so /readyz and backup manifests
+# report the running release. Docker/Compose always set APP_VERSION, and the
+# image does not ship VERSION, so container behaviour is unchanged.
+if not APP_VERSION:
+    try:
+        APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        APP_VERSION = ""
+# --- end Windows/native install support ---

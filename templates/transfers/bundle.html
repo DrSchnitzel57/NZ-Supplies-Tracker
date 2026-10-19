@@ -1,22 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Full bundle &amp; backups — MTC Supplies Tracker{% endblock %}
+{% block title %}Full data export &amp; import — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Full bundle &amp; backups</h1><div class="sub">Data exchange · administrator migration interchange + host backups</div></div>
-<p class="help">All import, export and backup tools live under <strong>Data exchange</strong> in the sidebar: <a href="/reports/">Reports &amp; exports</a> · <a href="/transfers/roster/">Missionary import</a> · <a href="/transfers/inventory/">Inventory import</a> · this page (full bundle &amp; backups). Administrator-only migration interchange (versioned ZIP of CSV tables plus a manifest with checksums). Bundles carry archived records, movements, issue snapshots, reversals and operational audits — never accounts or passwords. Import only into empty operational data.</p>
-<div class="banner {% if empty %}info{% else %}warn{% endif %}"><div><h2>Operational data now: {% if empty %}empty — ready for import{% else %}not empty (reset first to import){% endif %}</h2></div></div>
+<div class="page-head"><div><span class="eyebrow">Administration</span><h1>Full data export &amp; import</h1><p class="sub">Move everything — roster, stock, history and audit — in one ZIP file. Used to load the original tracker’s data once, or to hand data to the PowerApp later.</p></div></div>
+<div class="banner {% if empty %}info{% else %}warn{% endif %}"><span class="ic">{% include "components/icon.html" with name="info" %}</span><div><h2>{% if empty %}The app is empty — a full import can be loaded{% else %}The app already has data — a full import needs an empty app (use Protected reset first){% endif %}</h2><p>A full import is all-or-nothing: if anything in the file is wrong, nothing is written.</p></div></div>
 <div class="grid two">
-<div class="card"><div class="hd"><h2>Export</h2></div><div class="bd"><p><a class="btn primary" href="/transfers/bundle/export/">Download full bundle ZIP</a></p><p class="help">Same file as <a href="/reports/bundle/export/">migration export</a>. For day-to-day CSV/PDF reports, use <a href="/reports/">Reports &amp; exports</a>.</p></div></div>
-<div class="card"><div class="hd"><h2>Import</h2></div><div class="bd">
+<section class="card"><div class="hd"><h2>Export everything</h2></div><div class="bd"><p style="margin-top:0">A ZIP of CSV tables with a checksum manifest. It never contains accounts or passwords.</p><a class="btn primary" href="/transfers/bundle/export/">{% include "components/icon.html" with name="download" %}Download full export (ZIP)</a><p class="help">For everyday spreadsheets and PDFs, use <a href="/reports/">Reports</a>.</p></div></section>
+<section class="card"><div class="hd"><h2>Import a full export</h2></div><div class="bd">
 <form method="post" action="/transfers/bundle/import/" enctype="multipart/form-data" class="stack">
 {% csrf_token %}
-<label>Bundle ZIP <input type="file" name="bundle" accept=".zip" required></label>
-<p><button type="submit" class="primary">Import bundle</button></p>
+<label>ZIP file <input type="file" name="bundle" accept=".zip" required></label>
+<div class="form-actions"><button type="submit" class="primary">Import</button></div>
 </form>
-</div></div>
+<p class="help">To load the original HTML tracker, convert it first on the server: <code>manage.py seed_bundle</code> (or <code>mtc import-original</code> on Windows). See the install guide.</p>
+</div></section>
 </div>
-<div class="card"><div class="hd"><h2>Backups (host-local, operator-owned)</h2></div><div class="bd">
-<p class="help">Daily host-local SQLite backups with 30-day retention run on the host (<code>scripts/daily_backup.sh</code>); the newest verified pre-update backup is kept until superseded. Restores are operator-run (<code>scripts/restore.sh</code>) under a maintenance window with integrity checks — ask the operator rather than importing a bundle for recovery. Database backups, not bundles, are the exact recovery source.</p>
-<p>Routine spreadsheet changes belong on <a href="/transfers/roster/">Missionary import</a> / <a href="/transfers/inventory/">Inventory import</a>; full history moves belong here. See <code>docs/OPERATIONS.md</code> for the operator runbook.</p>
-</div></div>
-<p class="help">Import is atomic: bad versions, checksums, references or balances reject the whole file before anything is written. Nothing is merged with existing history.</p>
+<section class="card" style="margin-top:16px"><div class="hd"><h2>Backups</h2></div><div class="bd">
+<p style="margin-top:0">The server makes a verified backup every night and keeps 30 days of them, plus a backup before every update. Restoring a backup is done on the server by whoever installed the app — it is the exact way to recover from a mistake, not this page.</p>
+<p class="help">Backups live on the same computer as the app. Copy them somewhere else regularly in case that computer fails.</p>
+</div></section>
 {% endblock %}

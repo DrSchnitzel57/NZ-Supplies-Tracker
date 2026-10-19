@@ -14,6 +14,16 @@
 
 https://{$APP_HOST}:{$APP_PORT} {
 	tls internal
+	# Staff PCs download the local root certificate here to trust it. Only
+	# the public root.crt is served (the rewrite pins the one file; the CA
+	# key next to it is never reachable). It exists once Caddy has started.
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=MTC-Supplies-CA.crt"
+		file_server
+	}
 	reverse_proxy app:8000 {
 		header_up X-Forwarded-Proto https
 	}

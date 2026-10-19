@@ -1,31 +1,37 @@
 {% extends "base.html" %}
-{% block title %}{{ item }} — MTC Supplies Tracker{% endblock %}
+{% block title %}{{ item.name }}{% if item.size %} ({{ item.size }}){% endif %} — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><h1>{{ item }}</h1><div class="sub">{% if item.is_archived %}Archived{% else %}Active{% endif %} · alert at {{ item.low_threshold }}</div></div>
-<div class="grid kpis">
-  <div class="kpi good"><span class="rail"></span><div class="lab">Available</div><div class="big tnum" data-available-for="{{ item.pk }}">{{ item.on_hand }}</div><div class="note">On the shelf now</div></div>
-  <div class="kpi"><span class="rail"></span><div class="lab">Given out (net)</div><div class="big tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</div><div class="note">Current issues only</div></div>
-  <div class="kpi"><span class="rail"></span><div class="lab">Count corrections</div><div class="big tnum" data-corrections-for="{{ item.pk }}">{{ item.corrections_total }}</div><div class="note">Recounts &amp; fixes</div></div>
+<p class="crumbs"><a href="{{ return_to }}">← Inventory</a> · {{ item.category }}</p>
+<div class="page-head">
+  <div><h1>{{ item.name }}{% if item.size %} <span class="muted" style="font-weight:500">· {{ item.size }}</span>{% endif %}</h1>
+  <p class="sub">{{ item.category }} · counted in “{{ item.unit }}” · low-stock alert at {{ item.low_threshold }}{% if item.is_archived %} · <span class="tag">Archived</span>{% endif %}</p></div>
+  <div class="actions">
+    <a class="btn" data-panel href="/inventory/{{ item.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit details</a>
+    <a class="btn" data-panel href="/inventory/{{ item.pk }}/count/">Correct stock count</a>
+    <details class="menu"><summary aria-label="More actions">{% include "components/icon.html" with name="more" %}</summary><div class="menu-list">
+      {% if item.is_archived %}<form method="post" action="/inventory/{{ item.pk }}/reactivate/">{% csrf_token %}<button type="submit">Reactivate</button></form>
+      {% else %}<form method="post" action="/inventory/{{ item.pk }}/archive/">{% csrf_token %}<button type="submit" class="danger">Archive (keeps history)</button></form>{% endif %}
+    </div></details>
+    <a class="btn primary" data-panel href="/inventory/{{ item.pk }}/stock/">{% include "components/icon.html" with name="plus" %}Add stock</a>
+  </div>
 </div>
-<p class="help">Available is the shelf count. “Given out” counts only current issues. If the shelf count is wrong, use “Correct stock count” with a reason — it records a correction, it does not invent or erase issues.</p>
-<p><a class="btn" data-panel href="/inventory/{{ item.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit details</a><a class="btn" data-panel href="/inventory/{{ item.pk }}/stock/">Add stock</a><a class="btn" data-panel href="/inventory/{{ item.pk }}/count/">Correct stock count</a>
-{% if item.is_archived %}
-<form method="post" action="/inventory/{{ item.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit">Reactivate</button></form>
-{% else %}
-<form method="post" action="/inventory/{{ item.pk }}/archive/" class="inline">{% csrf_token %}<button type="submit">Archive</button></form>
-{% endif %}
-<a class="btn" href="{{ return_to }}">Back to inventory</a></p>
-
-<div class="section-title">Recent stock changes</div>
+<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+  <div class="kpi {% if item.alert_status == 'out' %}crit{% elif item.alert_status == 'low' %}warn{% endif %}"><div class="lab">Available now</div><div class="big tnum" data-available-for="{{ item.pk }}">{{ item.on_hand }}</div><div class="note">{% if item.alert_status == 'out' %}Out of stock{% elif item.alert_status == 'low' %}Running low — alert at {{ item.low_threshold }}{% else %}On the shelf{% endif %}</div></div>
+  <div class="kpi"><div class="lab">Given out</div><div class="big tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</div><div class="note">In current issues (undone issues excluded)</div></div>
+  <div class="kpi"><div class="lab">Count corrections</div><div class="big tnum" data-corrections-for="{{ item.pk }}">{{ item.corrections_total }}</div><div class="note">Net change from stocktakes</div></div>
+</div>
+<h2 class="section-title">Stock history <small>Every change, newest first</small></h2>
 <div class="tablewrap"><table>
-<thead><tr><th>When</th><th>What changed</th><th class="r">Change</th><th class="r">Available after</th><th>Reason</th></tr></thead>
+<thead><tr><th>When</th><th>What happened</th><th class="r">Change</th><th class="r">Available after</th><th>Details</th><th>By</th></tr></thead>
 <tbody>
 {% for m in movements %}
-<tr><td data-label="When">{{ m.created_at }}</td><td data-label="What changed"><span class="tag">{{ m.plain_kind }}</span></td><td data-label="Change" class="r tnum">{{ m.delta }}</td><td data-label="Available after" class="r tnum">{{ m.balance_after }}</td><td data-label="Reason">{{ m.reason }}</td></tr>
-{% empty %}<tr><td colspan="5">No stock changes yet.</td></tr>
+<tr><td data-label="When" class="nowrap">{{ m.created_at|when }}</td><td data-label="What happened"><span class="tag">{{ m.plain_kind }}</span></td><td data-label="Change" class="r tnum">{% if m.delta > 0 %}+{% endif %}{{ m.delta }}</td><td data-label="Available after" class="r tnum">{{ m.balance_after }}</td>
+<td data-label="Details">{% if m.issue_id %}<a href="/issue/{{ m.issue_id }}/">{{ m.plain_reason }}</a>{% else %}{{ m.plain_reason }}{% endif %}</td>
+<td data-label="By" class="nowrap">{% if m.created_by %}{{ m.created_by.shown_name }}{% else %}{{ m.created_by_username|default:"—" }}{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6"><div class="empty">No stock changes yet.</div></td></tr>
 {% endfor %}
 </tbody>
 </table></div>
 {% include "components/pagination.html" %}
-{% if item.source_corrected %}<p class="help">Migration correction: source balance {{ item.source_remaining }}; opening balance corrected to zero.</p>{% endif %}
+{% if item.source_corrected %}<p class="help">Imported from the original spreadsheet with a balance of {{ item.source_remaining }}; the opening amount was set to zero because stock can’t be negative.</p>{% endif %}
 {% endblock %}

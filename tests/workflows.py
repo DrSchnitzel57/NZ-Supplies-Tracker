@@ -322,7 +322,7 @@ class StockCorrectionFlowTests(TestCase):
         self.assertEqual(item.on_hand, 6)
         response = self.client.get(f"/inventory/{item.pk}/")
         content = response.content.decode()
-        self.assertIn("Given out (net)", content)
+        self.assertIn("Given out", content)
         self.assertIn("Count corrections", content)
 
     def test_stale_count_shows_error_and_keeps_value(self):

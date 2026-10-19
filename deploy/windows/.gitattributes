@@ -1,0 +1,4 @@
+# Windows scripts: CRLF in checkouts and release zips (cmd.exe misreads
+# LF-only batch files; PowerShell is fine either way).
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

@@ -203,7 +203,8 @@ def _norm_person(p: dict, n: int) -> dict:
              "title", "prefix", "type", "arrivalstatus", "arrival_status", "status",
              "arrived", "stake", "homestake", "home_stake", "mission", "language",
              "tlanguage", "t_language", "arrivaldate", "arrival_date",
-             "missionarrival", "mission_arrival", "releasedate", "release_date",
+             "missionarrival", "mission_arrival", "departuredate", "departure_date",
+             "releasedate", "release_date",
              "missionrelease", "mission_release", "personalemail", "personal_email"}
     title = str(_first(p, "title_prefix", "titlePrefix", "title", "prefix", "type",
                        default="")).strip()
@@ -219,11 +220,15 @@ def _norm_person(p: dict, n: int) -> dict:
     stake = str(_first(p, "stake", "homeStake", "home_stake", default="")).strip()
     mission = str(_first(p, "mission", default="")).strip()
     language = str(_first(p, "language", "tLanguage", "t_language", default="")).strip()
-    arrival_raw = _first(p, "arrival_date", "arrivalDate", "missionArrival",
-                         "mission_arrival", default="")
+    # arrivalDate is the day they arrived at the MTC; missionArrival is the
+    # day they arrive in the field, i.e. the day they leave the MTC.
+    arrival_raw = _first(p, "arrival_date", "arrivalDate", default="")
+    departure_raw = _first(p, "departure_date", "departureDate", "missionArrival",
+                           "mission_arrival", default="")
     release_raw = _first(p, "release_date", "releaseDate", "missionRelease",
                          "mission_release", default="")
     arrival_date = _clean_date(arrival_raw)
+    departure_date = _clean_date(departure_raw)
     release_date = _clean_date(release_raw)
     personal_email = str(_first(p, "personal_email", "personalEmail", default="")).strip()
     metadata = {k: v for k, v in p.items()
@@ -233,12 +238,15 @@ def _norm_person(p: dict, n: int) -> dict:
     # ISO date for the typed field.
     if str(arrival_raw or "").strip() and not arrival_date:
         metadata.setdefault("arrival_date_raw", str(arrival_raw).strip())
+    if str(departure_raw or "").strip() and not departure_date:
+        metadata.setdefault("departure_date_raw", str(departure_raw).strip())
     if str(release_raw or "").strip() and not release_date:
         metadata.setdefault("release_date_raw", str(release_raw).strip())
     return {"external_id": ext or f"SEED-{n + 1}", "name": name, "email": email,
             "title_prefix": title, "arrival_status": arrival_status,
             "stake": stake, "mission": mission, "language": language,
-            "arrival_date": arrival_date, "release_date": release_date,
+            "arrival_date": arrival_date, "departure_date": departure_date,
+            "release_date": release_date,
             "personal_email": personal_email, "intake_metadata": metadata}
 
 
@@ -346,6 +354,7 @@ def seed_to_bundle_rows(seed) -> dict:
          "stake": p.get("stake", ""), "mission": p.get("mission", ""),
          "language": p.get("language", ""),
          "arrival_date": p.get("arrival_date", ""),
+         "departure_date": p.get("departure_date", ""),
          "release_date": p.get("release_date", ""),
          "personal_email": p.get("personal_email", ""),
          "intake_metadata": json.dumps(p.get("intake_metadata") or {}, sort_keys=True),

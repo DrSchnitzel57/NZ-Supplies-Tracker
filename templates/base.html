@@ -3,8 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Shared missionary supplies on the local network.">
-<title>{% block title %}MTC Supplies Tracker{% endblock %}</title>
+<meta name="description" content="Missionary supplies for the New Zealand MTC: issuing, stock and reports.">
+<meta name="color-scheme" content="light dark">
+<title>{% block title %}MTC Supplies{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2300607f'/%3E%3Ctext x='16' y='22' font-family='Arial' font-size='16' font-weight='700' fill='white' text-anchor='middle'%3EM%3C/text%3E%3C/svg%3E">
+<link rel="preload" href="/static/fonts/Inter-Regular.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="/static/fonts/Inter-SemiBold.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="/static/app.css">
 <script>try{var t=localStorage.getItem("mtc-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
 </head>
@@ -12,49 +16,50 @@
 <a class="skip" href="#main">Skip to main content</a>
 <div class="app{% if not user.is_authenticated or user.must_change_password %} auth-app{% endif %}">
 <aside class="side" id="navigation" aria-label="Navigation">
-<button type="button" id="menu-close">Close menu</button>
+<button type="button" id="menu-close" class="ghost">{% include "components/icon.html" with name="close" %}Close menu</button>
 <a class="brand" href="/"><span class="mark" aria-hidden="true">M</span><span><span class="t1">MTC Supplies</span><br><span class="t2">New Zealand MTC</span></span></a>
 {% if user.is_authenticated %}
 <nav class="nav" aria-label="Main navigation">
-<a class="navlink primary-action" href="/issue/">{% include "components/icon.html" with name="plus" %}Issue supplies</a>
+<a class="navlink primary-action" href="/issue/" {% if request.path == '/issue/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="plus" %}Issue supplies</a>
 <a class="navlink" href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="overview" %}Overview</a>
 <a class="navlink" href="/roster/" {% if request.path|slice:':8' == '/roster/' or request.path == '/transfers/roster/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="people" %}Missionaries</a>
 <a class="navlink" href="/inventory/" {% if request.path|slice:':11' == '/inventory/' or request.path == '/transfers/inventory/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="inventory" %}Inventory</a>
-<a class="navlink" href="/issue/history/">{% include "components/icon.html" with name="history" %}History</a>
+<a class="navlink" href="/issue/history/" {% if request.path == '/issue/history/' or request.path|slice:':7' == '/issue/' and request.path != '/issue/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="history" %}History</a>
 <a class="navlink" href="/reports/" {% if request.path|slice:':9' == '/reports/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="reports" %}Reports</a>
 </nav>
 <nav class="nav" aria-label="Help and administration">
 <a class="navlink" href="/guide/" {% if request.path == '/guide/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="help" %}Help</a>
 {% if user.is_superuser %}
-<details class="admin-nav" {% if request.path|slice:':12' == '/admin-area/' or request.path|slice:':16' == '/accounts/users/' or request.path == '/transfers/bundle/' %}open{% endif %}><summary>Administration</summary>
-<a class="navlink" href="/accounts/users/">Accounts</a>
-<a class="navlink" href="/admin-area/settings/">Settings</a>
-<a class="navlink" href="/transfers/bundle/">Migration and full bundles</a>
-<a class="navlink" href="/admin-area/reset/">Protected reset</a>
+<details class="admin-nav" {% if request.path|slice:':12' == '/admin-area/' or request.path|slice:':16' == '/accounts/users/' or request.path == '/transfers/bundle/' %}open{% endif %}><summary>{% include "components/icon.html" with name="shield" %}Administration</summary>
+<a class="navlink" href="/accounts/users/" {% if request.path|slice:':16' == '/accounts/users/' %}aria-current="page"{% endif %}>Staff accounts</a>
+<a class="navlink" href="/admin-area/settings/" {% if request.path == '/admin-area/settings/' %}aria-current="page"{% endif %}>Settings</a>
+<a class="navlink" href="/transfers/bundle/" {% if request.path == '/transfers/bundle/' %}aria-current="page"{% endif %}>Full data export &amp; import</a>
+<a class="navlink" href="/admin-area/reset/" {% if request.path == '/admin-area/reset/' %}aria-current="page"{% endif %}>Protected reset</a>
 </details>
 {% endif %}
 </nav>
 {% endif %}
-<div class="foot"><button class="iconbtn" id="themeBtn" type="button" aria-label="Toggle light and dark theme">Light / dark theme</button></div>
+<div class="foot"><button class="iconbtn" id="themeBtn" type="button" aria-label="Switch between light and dark theme">{% include "components/icon.html" with name="moon" %}<span>Light / dark</span></button></div>
 </aside>
 <div class="main">
-<header class="top topbar">
-<button type="button" id="menu-toggle" aria-controls="navigation" aria-expanded="false">Menu</button>
-<a class="brand-mini" href="/">MTC Supplies</a>
-{% if user.is_authenticated %}<form class="header-finder" method="get" action="/search/" role="search">
-<div class="combobox" data-finder="all"><label class="sr-only" for="global-search">Find missionaries or supplies</label><input type="search" id="global-search" name="q" placeholder="Find missionaries or supplies…" maxlength="160" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="global-results"><div class="suggestions" id="global-results" role="listbox" hidden></div><span class="finder-status sr-only" role="status"></span></div>
-<button type="submit" aria-label="Search all records">{% include "components/icon.html" with name="search" %}</button></form>{% endif %}
-<div class="top-context"><span class="pill neutral" id="connection-status" role="status" aria-live="polite">Connection: checking…</span><span class="mini" id="last-refresh">Last refresh: not yet</span></div>
+<header class="top">
+<button type="button" id="menu-toggle" aria-controls="navigation" aria-expanded="false">{% include "components/icon.html" with name="menu" %}Menu</button>
+<a class="brand-mini" href="/"><span class="mark" aria-hidden="true">M</span>MTC Supplies</a>
+{% if user.is_authenticated and not user.must_change_password %}<form class="header-finder" method="get" action="/search/" role="search">
+<span class="search-ic">{% include "components/icon.html" with name="search" %}</span>
+<div class="combobox" data-finder="all"><label class="sr-only" for="global-search">Find missionaries or supplies</label><input type="search" id="global-search" name="q" placeholder="Find a missionary or supply…" maxlength="160" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="global-results"><div class="suggestions" id="global-results" role="listbox" hidden></div><span class="finder-status sr-only" role="status"></span></div>
+<button type="submit" aria-label="Search all records">Search</button></form>{% endif %}
+<div class="top-context"><span class="pill neutral" id="connection-status" role="status" aria-live="polite" title="Live connection to the shared stock">Connection: checking…</span><span id="last-refresh">Last refresh: not yet</span></div>
 <div class="spacer"></div>
-<div class="userbar">{% if user.is_authenticated %}<span>Signed in as <strong>{{ user.username }}</strong></span><form method="post" action="/accounts/logout/" class="inline">{% csrf_token %}<button type="submit">Sign out</button></form>{% else %}<a href="/accounts/login/">Sign in</a>{% endif %}</div>
+<div class="userbar">{% if user.is_authenticated %}<span class="who"><span class="avatar" aria-hidden="true">{{ user.shown_name|initials|default:"?" }}</span><span class="name">Signed in as <strong>{{ user.shown_name }}</strong><small>{% if user.is_superuser %}Administrator{% else %}Staff{% endif %}</small></span></span><form method="post" action="/accounts/logout/" class="inline">{% csrf_token %}<button type="submit">Sign out</button></form>{% else %}<a href="/accounts/login/">Sign in</a>{% endif %}</div>
 </header>
-<div class="statusbar" role="status" aria-live="polite"><span id="session-warning" hidden>Sign-in may expire. Keep your draft tab open. <a href="/accounts/login/" target="_blank" rel="noopener">Sign in in another tab</a> as the same staff member, then retry here. Never reload to recover a draft.</span></div>
+<div class="statusbar" role="status" aria-live="polite"><span id="session-warning" hidden>Your sign-in is about to expire. Keep this tab open, <a href="/accounts/login/" target="_blank" rel="noopener">sign in again in another tab</a> as the same person, then come back and carry on. Don’t reload this page — unsaved work would be lost.</span></div>
 <div class="wrap"><main id="main" tabindex="-1">
 {% if messages %}<ul class="messages" aria-live="polite">{% for message in messages %}<li class="msg-{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
 {% if site_notice %}<p class="notice" role="note"><strong>Notice:</strong> {{ site_notice }}</p>{% endif %}
 {% block content %}{% endblock %}
 </main></div>
-<footer class="foot"><a href="/guide/">Quick-start guide</a> · Shared live stock; drafts stay in this open tab only.</footer>
+<footer class="foot"><a href="/guide/">Quick-start guide</a> · Everyone sees the same live stock. Unsaved work stays only in the tab you are using.</footer>
 </div></div>
 <script src="/static/app.js" defer></script>
 <script src="/static/components.js" defer></script>

@@ -1,68 +1,88 @@
-# Quick-start guide (one page)
+# Quick-start guide
 
-You need only a **browser link and a staff account**. All examples are synthetic.
-Overview shows low stock and recent work. On a narrow screen, **Menu** reaches every
-section, help and the light/dark theme.
+Everything a staff member needs, on one page. You only need the **link** and a
+**staff account** from your administrator; nothing is installed on your PC.
+Synthetic (invented) data is used in every picture.
 
 ## 1. Sign in
 
-Ask an administrator for your account. Change a temporary password on first
-sign-in. Check your username at the top; sign out when leaving a shared computer.
+Open the link, sign in, and choose your own password the first time. Your name
+shows at the top right. **Sign out** when you leave a shared computer.
 
 ![Synthetic sign-in screen.](../static/img/01-sign-in.png)
 
+**Overview** is the home page. It shows who is in the MTC, who leaves in the
+next two weeks (and whether they have received anything yet), what was given
+out this week and what **needs reordering**. Click any number to see the list
+behind it.
+
+![Synthetic Overview with reorder and departure lists.](../static/img/02-dashboard.png)
+
 ## 2. Issue supplies
 
-Open **Issue supplies** (also available from a missionary’s profile).
-Type a name or ID and **choose a suggestion** (arrows and Enter work too).
-Check the selected identity. Use **Add** on catalogue rows, then adjust quantities
-in the summary. Repeat: the same item combines into one line;
-up to **50 distinct items** are allowed. Review the named summary and quantities,
-then choose **Issue supplies**. **Change** clears items/note after confirmation.
+1. Choose **Issue supplies** (top of the menu, or **Issue supplies** on a
+   missionary's page).
+2. Type part of a name or missionary ID and pick the person, for example
+   **Sister Walker**. A card shows their mission, MTC dates and what they have
+   **already received**, so you can spot a double-up.
+3. Click what they need. Sized items show one button per size, with how many
+   are **Available**; a size that is running low is amber. Use the category
+   buttons or the search box to narrow the list. Out-of-stock items are hidden
+   unless you tick **Show out-of-stock items**.
+4. Check the list on the right, change quantities if needed, add a note, and
+   choose **Issue supplies**.
 
-![Synthetic recipient, catalogue and named issue summary.](../static/img/03-issue-goods.png)
+![Synthetic recipient card, size buttons and issue list.](../static/img/03-issue-goods.png)
 
-If stock is short, **nothing is issued yet**. Review “You asked for / Available
-now / Revised quantity” and **Confirm revised quantities**, or choose **Back
-without issuing** to retain the original draft. Confirmation rechecks stock.
+**Not enough stock?** Nothing is issued. The next screen shows what you asked
+for, what is available now and a revised quantity. Choose **Confirm revised
+quantities**, or **Back to my original list**.
 
 ## 3. Add stock or correct a count
 
-Use **Inventory** row actions to open a short panel (the item page also has these
-actions). Closing returns to the same filters/page/position; unsaved changes need
-confirmation. Use **Add stock** for a delivery, with quantity
-and reason. Use **Correct stock count** for the actual shelf count, with a reason;
-it records a correction, never an issue. A stale count keeps your input but needs
-review: check current stock in another tab, reopen the item and count again.
+In **Inventory**, each row has **Add stock**, **Count** and **Edit**. They open
+in a side panel, so you stay where you were in the list.
 
-For several new items, choose **Add multiple items**, fill up to 50 rows, then
-**Review items → Save all items**. Every item saves together, or none does.
+- **Add stock** – a delivery arrived: enter how many and where they came from.
+- **Count** – the shelf doesn't match: enter what is actually there and why.
+  This records a correction, never an issue.
+- **Add an item** / **Add several items** – a new kind of item (up to 50 at
+  once; they all save together or not at all).
 
-![Synthetic Add stock panel opened from inventory.](../static/img/04-stock-detail.png)
+The **Needs reordering**, **Running low** and **Out of stock** buttons above the
+list show what to reorder. Every change is kept in the item's stock history.
+
+![Synthetic Inventory with the Add stock panel open.](../static/img/04-stock-detail.png)
 
 ## 4. Undo a mistake
 
-Open **History**, filter/page to the issue and open it. Give a reason
-and choose **Undo this issue**. All goods in that issue return to Available, once
-only; the original record and staff attribution stay in history.
+Gave something to the wrong person, or the wrong size? Open **History**, open
+that issue, give a short reason and choose **Undo this issue**. Everything in it
+goes back on the shelf (back to **Available**). The record stays in history,
+marked **Undone**, with who undid it and why. Then issue the right items again.
 
-**Reports** selects one report with shared screen/CSV/A4 PDF filters. Downloads
-include all matching rows. Current net excludes all undone issues (even those
-undone later); Available stock is stock **now**, not as-of a date.
-Low-stock reports also offer **Copy list** and **Open your mail app**; the app
-sends no email. The header finder opens people/items; local search filters lists.
+## 5. Reports
 
-![Synthetic report filters and CSV/PDF downloads.](../static/img/05-reports.png)
+**Reports** has stock on hand, the reorder list, what was given out (by
+missionary, item or category), issue history and arrivals and departures. Choose a report,
+set dates if you want, and **Show report**. Download as **CSV** (opens in Excel)
+or **PDF**. The reorder list also has **Copy list** and **Open in your email
+app**; the app itself never sends email.
 
-## Keep an unfinished draft safe
+![Synthetic Reports screen with downloads.](../static/img/05-reports.png)
 
-- Drafts last **only in this open tab**. Reload/close discards them. No autosave,
-  personal browser storage, offline queue or background mutation.
-- Idle sign-in expires after 30 minutes. Keep the draft tab open, sign in in a
-  different tab **as the same staff member**, then retry here. The app refreshes
-  security tokens and checks identity; it never submits automatically.
-- Offline/no reply: success can be uncertain. Retry the **same original request**
-  deliberately, or inspect History in another tab. Do not start a duplicate issue.
-- Numbers refresh about every 15 seconds without changing inputs/focus or renewing
-  idle sign-in. Keyboard: Tab between controls, arrows/Enter choose suggestions,
-  Escape closes suggestions or a panel, Enter activates an Add button.
+## Good to know
+
+- **Everyone sees the same stock.** Numbers refresh by themselves about every
+  15 seconds, without touching what you are typing.
+- **Unsaved work lives only in your tab.** Reloading or closing the tab drops an
+  unfinished issue list.
+- **Signed out after 30 minutes idle.** Keep the tab open, sign in again in a
+  new tab as the same person, then come back and carry on.
+- **No reply from the server?** The app tells you it isn't sure whether it saved.
+  Check **History** in another tab before trying again, so nothing is issued twice.
+- **Find anything** with the search box at the top: type a name, missionary ID
+  or item.
+- **Keyboard:** Tab moves between controls, arrow keys and Enter pick a search
+  suggestion, Escape closes a suggestion list or side panel.
+- **Light or dark:** use **Light / dark** at the bottom of the menu.

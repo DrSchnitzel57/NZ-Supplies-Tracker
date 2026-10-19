@@ -1,25 +1,33 @@
 {% extends "base.html" %}
-{% block title %}{% if kind == "roster" %}Missionary import{% else %}Inventory import{% endif %} — MTC Supplies Tracker{% endblock %}
+{% block title %}{% if kind == "roster" %}Import missionaries{% else %}Import inventory{% endif %} — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><h1>{% if kind == "roster" %}Missionary import{% else %}Inventory import{% endif %}</h1><div class="sub">Preview first · nothing is applied until you approve</div></div>
-<p>Choose a CSV or XLSX file, up to 2 MB and 2000 rows. You will review every change before applying it.</p>
-<details><summary>File format and matching</summary><p class="help">The first worksheet uses its first row as headers. Macro workbooks (.xlsm/.xls/.xlsb) are rejected and formulas are never evaluated. {% if kind == "roster" %}Matches people by external ID.{% else %}Matches items by category/name/size. A Remaining value — or Stock minus Out — becomes a reasoned count correction; Out never invents issues.{% endif %}</p></details>
-<div class="card"><div class="bd">
+<p class="crumbs"><a href="{% if kind == 'roster' %}/roster/{% else %}/inventory/{% endif %}">← {% if kind == "roster" %}Missionaries{% else %}Inventory{% endif %}</a></p>
+<div class="page-head"><div><h1>{% if kind == "roster" %}Import missionaries{% else %}Import inventory{% endif %}</h1><p class="sub">Upload a spreadsheet, check every change, then approve. Nothing changes until you approve.</p></div></div>
+<div class="grid side-right">
+<section class="card"><div class="hd"><h2>Upload a spreadsheet</h2><span class="sub">CSV or Excel (.xlsx), up to 2 MB / 2,000 rows</span></div><div class="bd">
 <form method="post" enctype="multipart/form-data" class="stack">
 {% csrf_token %}
 <label>Spreadsheet <input type="file" name="file" accept=".csv,.xlsx" required></label>
-<label>Mode
+<label>What should happen?
 <select name="mode">
-<option value="add_update">Add/update (valid rows can be approved)</option>
-{% if user.is_superuser %}<option value="replace">Replace all (needs every row valid)</option>{% endif %}
+<option value="add_update">Add new {% if kind == "roster" %}missionaries{% else %}items{% endif %} and update existing ones</option>
+{% if user.is_superuser %}<option value="replace">Replace the whole list (administrators only — archives anyone missing)</option>{% endif %}
 </select></label>
-<p><button type="submit" class="primary">Review preview</button></p>
+<div class="form-actions"><button type="submit" class="primary">Check the file</button></div>
 </form>
-</div></div>
-<p class="help">Accepted headers: {% if kind == "roster" %}external_id (id, missionary id), name (full name), email, reason.{% else %}category, name (item), size, remaining/stock, out, alert level, reason.{% endif %} Full list is in <code>docs/DATA_FORMAT.md</code>.</p>
-<div class="card"><div class="hd"><h2>Recent previews</h2></div><div class="bd">
-<ul class="result-list">
-{% for p in previews %}<li><a href="/transfers/preview/{{ p.token }}/">{{ p.created_at }} · {{ p.rows|length }} rows</a><span>{% if p.mode == 'replace' %}Replace active list{% else %}Add or update{% endif %}</span></li>{% empty %}<li>No previews yet.</li>{% endfor %}
-</ul>
-</div></div>
+</div></section>
+<section class="card"><div class="hd"><h2>How it works</h2></div><div class="bd">
+<ol style="margin:0;padding-left:18px">
+<li>The easiest way: <a href="{% if kind == 'roster' %}/reports/roster.csv{% else %}/reports/inventory.csv{% endif %}">export the current list</a>, edit it in Excel, and import it back.</li>
+<li>{% if kind == "roster" %}People are matched by <strong>missionary ID</strong>. The original tracker’s export works as-is.{% else %}Items are matched by <strong>category, name and size</strong>. A “Remaining” (or Stock minus Out) number becomes a stock count with your reason — it never invents issues.{% endif %}</li>
+<li>Blank cells keep what’s already stored. To clear a value, use Edit on the record.</li>
+<li>Macros and formulas are never run.</li>
+</ol>
+<details class="disclosure"><summary>Column names the import understands</summary><p class="help">{% if kind == "roster" %}Missionary ID · Name (Family, Given) · Type / Title (Elder, Sister) · Mission · Training language · Arrived (yes/no, In-house/Awaiting) · Arrival date · Mission arrival / Departure date · Mission release · Home stake · Missionary email · Personal email · Reason{% else %}Category · Item (name) · Size · Remaining (or Stock and Out) · Reorder level / Alert level · Reason{% endif %}. Dates as YYYY-MM-DD. Full details are in <code>docs/DATA_FORMAT.md</code>.</p></details>
+</div></section>
+</div>
+<h2 class="section-title">Recent checks <small>Unapproved checks expire after 24 hours</small></h2>
+<div class="card"><ul class="result-list">
+{% for p in previews %}<li><div class="grow"><a href="/transfers/preview/{{ p.token }}/">{{ p.created_at|when }} · {{ p.rows|length }} rows</a><span>{% if p.mode == 'replace' %}Replace the whole list{% else %}Add and update{% endif %}</span></div></li>{% empty %}<li><span>No files checked yet.</span></li>{% endfor %}
+</ul></div>
 {% endblock %}

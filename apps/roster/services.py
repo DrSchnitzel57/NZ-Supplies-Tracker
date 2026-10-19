@@ -27,7 +27,7 @@ def create_missionary(*, actor, external_id: str, name: str, email: str = "",
     fields = {k: _clean(extra.get(k, "")) for k in (
         "title_prefix", "arrival_status", "stake", "mission", "language",
         "personal_email")}
-    fields.update({k: extra.get(k) for k in ("arrival_date", "release_date")})
+    fields.update({k: extra.get(k) for k in ("arrival_date", "departure_date", "release_date")})
     note = _clean(extra.get("note", ""))
     from apps.roster.models import Missionary
 
@@ -87,6 +87,8 @@ def update_missionary(*, actor, missionary_id, expected_version: int, **fields):
                 setattr(obj, extra_field, _clean(fields[extra_field]))
         if "arrival_date" in fields:
             obj.arrival_date = fields["arrival_date"]
+        if "departure_date" in fields:
+            obj.departure_date = fields["departure_date"]
         if "release_date" in fields:
             obj.release_date = fields["release_date"]
         obj.version += 1

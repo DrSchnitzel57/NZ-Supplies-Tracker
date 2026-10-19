@@ -24,12 +24,16 @@ def finder(request):
     scope = request.GET.get("scope", "all")
     results = []
     if scope in ("all", "people"):
-        results.extend({"id": str(p.pk), "label": p.name, "detail": p.external_id,
+        results.extend({"id": str(p.pk), "label": p.display_name, "detail": p.external_id,
+                        "sub": " · ".join(part for part in (
+                            p.full_name if p.full_name != p.display_name else "",
+                            p.external_id, p.mission) if part),
                         "group": "Missionaries", "url": f"/roster/{p.pk}/"}
                        for p in people[:12])
     if scope in ("all", "items"):
-        results.extend({"id": str(i.pk), "label": i.name,
+        results.extend({"id": str(i.pk), "label": f"{i.name} ({i.size})" if i.size else i.name,
                         "detail": f"{i.category} · {i.size or 'No size'}",
+                        "sub": f"{i.category} · {i.on_hand} available",
                         "available": i.on_hand, "group": "Inventory",
                         "url": f"/inventory/{i.pk}/"} for i in items[:12])
     return JsonResponse({"results": results})

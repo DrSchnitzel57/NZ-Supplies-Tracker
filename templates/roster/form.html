@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == "create" %}Add a person{% else %}Edit {{ person.name }}{% endif %} — MTC Supplies Tracker{% endblock %}
+{% block title %}{% if mode == "create" %}Add a missionary{% else %}Edit {{ person.display_name }}{% endif %} — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{% if mode == "create" %}Add a missionary{% else %}Edit missionary{% endif %}</h1><p class="sub">{% if person %}{{ person.name }} · {{ person.external_id }}{% else %}Missionary details{% endif %}</p></div></div>
-<div class="card"><div class="bd">
+<p class="crumbs"><a href="{% if person %}/roster/{{ person.pk }}/{% else %}/roster/{% endif %}">← {% if person %}{{ person.display_name }}{% else %}Missionaries{% endif %}</a></p>
+<div class="page-head"><div><h1>{% if mode == "create" %}Add a missionary{% else %}Edit details{% endif %}</h1><p class="sub">{% if person %}{{ person.full_name }} · {{ person.external_id }}{% else %}Only the name and missionary ID are required.{% endif %}</p></div></div>
+<div class="card" style="max-width:860px"><div class="bd">
 <form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" %}
-<p class="help">Clear an optional field here to remove its value. Imports preserve blank fields. A conflicting edit keeps your input; reopen the current record and review before retrying.</p>
-<p><button type="submit" class="primary">{% if mode == "create" %}Add missionary{% else %}Save changes{% endif %}</button> <a class="btn" href="{{ return_to|default:'/roster/' }}">Cancel</a></p>
+<p class="help">{% if mode == "create" %}Importing a whole list? Use <a href="/transfers/roster/">Import list</a> instead.{% else %}Clearing an optional field here removes it. If someone else changed this record while you were editing, your changes are kept on screen so you can check and try again.{% endif %}</p>
+<div class="form-actions"><button type="submit" class="primary">{% if mode == "create" %}Add missionary{% else %}Save changes{% endif %}</button> <a class="btn" href="{{ return_to|default:'/roster/' }}">Cancel</a></div>
 </form>
 </div></div>
 {% endblock %}

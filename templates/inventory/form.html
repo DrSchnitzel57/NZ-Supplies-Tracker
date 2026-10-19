@@ -1,14 +1,15 @@
 {% extends "base.html" %}
-{% block title %}{% if mode == "create" %}Add an item{% else %}Edit {{ item }}{% endif %} — MTC Supplies Tracker{% endblock %}
+{% block title %}{% if mode == "create" %}Add an item{% else %}Edit {{ item.name }}{% endif %} — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><h1>{% if mode == "create" %}Add an item{% else %}Edit item{% endif %}</h1><div class="sub">Matched by category, name and size · alert level drives low-stock warnings</div></div>
-<p class="help">Items are matched by category, name and size (ignoring extra spaces and letter case). Set the low-stock alert level so the dashboard can warn you.</p>
-<div class="card"><div class="bd">
+<p class="crumbs page-back"><a href="{% if item %}/inventory/{{ item.pk }}/{% else %}/inventory/{% endif %}">← {% if item %}{{ item.name }}{% else %}Inventory{% endif %}</a></p>
+<div class="page-head"><div><h1>{% if mode == "create" %}Add an item{% else %}Edit item details{% endif %}</h1><p class="sub">{% if mode == "create" %}One item, with its opening stock. Adding lots? Use <a href="/inventory/batch/">Add several items</a> or <a href="/transfers/inventory/">Import</a>.{% else %}{{ item }}{% endif %}</p></div></div>
+<div class="card" style="max-width:860px"><div class="bd">
 <form method="post" class="stack" data-safe-form data-draft-user="{{ user.pk }}">
 {% csrf_token %}
 {% include "components/form_fields.html" %}
-<p class="help">Stock is changed separately through Add stock or Correct stock count. Conflicting edits keep your input; review the current record before retrying.</p>
-<p><button type="submit" class="primary">{% if mode == "create" %}Add item{% else %}Save changes{% endif %}</button></p>
+<p class="help">Items are matched on category, name and size (capitals and extra spaces ignored), so “Hygiene / Soap” can only exist once. {% if mode == "create" %}The low-stock alert level decides when this item shows under “Needs reordering”.{% else %}To change how many are on the shelf, use Add stock or Correct stock count instead.{% endif %}</p>
+<div class="form-actions"><button type="submit" class="primary">{% if mode == "create" %}Add item{% else %}Save changes{% endif %}</button></div>
 </form>
 </div></div>
+<datalist id="category-options">{% for c in category_options %}<option value="{{ c }}">{% endfor %}</datalist>
 {% endblock %}

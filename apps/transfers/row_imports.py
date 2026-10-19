@@ -30,14 +30,20 @@ ROSTER_ALIASES = {
                     "ext_id", "id", "missionary id", "missionaryid"},
     "name": {"name", "full name", "fullname", "full_name", "missionary",
              "missionary name"},
-    "email": {"email", "e-mail", "email address"},
-    "title_prefix": {"title_prefix", "title prefix", "titleprefix", "prefix", "elder/sister", "title", "type"},
-    "arrival_status": {"arrival_status", "arrival status", "arrivalstatus", "status", "arrived"},
+    "email": {"email", "e-mail", "email address", "missionary email", "missionaryemail"},
+    "title_prefix": {"title_prefix", "title prefix", "titleprefix", "prefix", "elder/sister", "title", "type",
+                     "mtype"},
+    "arrival_status": {"arrival_status", "arrival status", "arrivalstatus", "status", "arrived",
+                       "in-house", "in house"},
     "stake": {"stake", "home stake", "homestake", "home_stake"},
-    "mission": {"mission"},
-    "language": {"language", "tlanguage", "t language", "t_language"},
-    "arrival_date": {"arrival_date", "arrival date", "arrivaldate", "mission arrival",
-                     "missionarrival", "mission_arrival"},
+    "mission": {"mission", "assigned mission", "assignedmission"},
+    "language": {"language", "tlanguage", "t language", "t_language", "training language",
+                 "traininglanguage"},
+    "arrival_date": {"arrival_date", "arrival date", "arrivaldate", "arrival", "mtc arrival",
+                     "mtcarrival"},
+    "departure_date": {"departure_date", "departure date", "departuredate", "departure",
+                       "mtc departure", "leaves mtc", "mission arrival", "missionarrival",
+                       "mission_arrival"},
     "release_date": {"release_date", "release date", "releasedate", "mission release",
                      "missionrelease", "mission_release"},
     "personal_email": {"personal_email", "personal email", "personalemail"},
@@ -222,7 +228,7 @@ def build_preview(*, kind: str, rows: list[list[str]], mode: str) -> dict:
 
 
 def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
-    from apps.roster.models import Missionary
+    from apps.roster.models import Missionary, normalize_arrival
 
     mapping = _map_headers(headers, ROSTER_ALIASES)
     valid: list[dict] = []
@@ -246,6 +252,7 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
                                   ("stake", cell("stake")), ("mission", cell("mission")),
                                   ("language", cell("language")),
                                   ("arrival_date", cell("arrival_date")),
+                                  ("departure_date", cell("departure_date")),
                                   ("release_date", cell("release_date")),
                                   ("personal_email", cell("personal_email"))):
             if _is_formula(value):
@@ -256,7 +263,7 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
             problems.append("name is required")
         personal = cell("personal_email")
         for field in ROSTER_ALIASES:
-            if field in ("arrival_date", "release_date", "reason"):
+            if field in ("arrival_date", "departure_date", "release_date", "reason"):
                 continue
             limit = Missionary._meta.get_field(field).max_length
             if limit and len(cell(field)) > limit:
@@ -283,7 +290,7 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
                     validate_email(value)
                 except DjangoValidationError:
                     problems.append(f"{field} looks invalid")
-        for label in ("arrival_date", "release_date"):
+        for label in ("arrival_date", "departure_date", "release_date"):
             raw = cell(label)
             if raw:
                 from django.utils.dateparse import parse_date
@@ -295,10 +302,11 @@ def _preview_roster(headers, data, mode, first_row: int = 2) -> dict:
                     problems.append(f"{label} must be a date (YYYY-MM-DD)")
         entry = {"row": n, "external_id": ext, "name": name, "email": email,
                  "title_prefix": cell("title_prefix"),
-                 "arrival_status": cell("arrival_status"),
+                 "arrival_status": normalize_arrival(cell("arrival_status")),
                  "stake": cell("stake"), "mission": cell("mission"),
                  "language": cell("language"),
                  "arrival_date": cell("arrival_date"),
+                 "departure_date": cell("departure_date"),
                  "release_date": cell("release_date"),
                  "personal_email": personal,
                   "present_fields": sorted(mapping),

@@ -20,7 +20,7 @@ def test_roster_import_preview_subset_confirm(page, live_server, externals):
     chooser.value.set_files(
         {"name": "roster.csv", "mimeType": "text/csv", "buffer": csv_bytes})
     page.click("main button[type=submit]")
-    page.wait_for_selector("text=Import preview")
+    page.wait_for_selector("text=Check the import")
     assert "B1" in page.content()
     # Uncheck the second row: only the approved subset applies.
     page.uncheck("input[name=row-3]")
@@ -41,7 +41,7 @@ def test_apply_none_writes_nothing(page, live_server, externals):
     chooser.value.set_files(
         {"name": "r.csv", "mimeType": "text/csv", "buffer": csv_bytes})
     page.click("main button[type=submit]")
-    page.wait_for_selector("text=Import preview")
+    page.wait_for_selector("text=Check the import")
     with page.expect_navigation():
         page.click("form[action$='/confirm/'] button[value='none']")
     assert "Import applied" in page.content()
@@ -62,7 +62,7 @@ def test_inventory_stock_minus_out_and_exports(page, live_server, externals):
     chooser.value.set_files(
         {"name": "inv.csv", "mimeType": "text/csv", "buffer": csv_bytes})
     page.click("main button[type=submit]")
-    page.wait_for_selector("text=Import preview")
+    page.wait_for_selector("text=Check the import")
     assert "recount" in page.content()
     assert "count 8" in page.content()  # stock-minus-out delta shown, not raw cells
     with page.expect_navigation():
@@ -134,7 +134,7 @@ def test_report_families_serve_csv_and_pdf(page, live_server, externals):
             page.click('[data-report-pdf]')
         assert open(dl2.value.path(), "rb").read(4) == b"%PDF"
     page.goto(f"{live_server.url}/reports/")
-    assert "Available stock" in page.content()
+    assert "Stock on hand now" in page.content()
     page.goto(f"{live_server.url}/reports/?family=intake")
-    assert "Arrivals overview" in page.content()
+    assert "Arrivals and departures" in page.content()
     assert_no_internet(externals)

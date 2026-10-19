@@ -1,10 +1,10 @@
-{% if form.errors %}<div class="form-errors" role="alert"><strong>Check the fields below.</strong>{{ form.non_field_errors }}</div>{% endif %}
+{% if form.errors %}<div class="form-errors" role="alert"><strong>Please check the highlighted fields.</strong>{{ form.non_field_errors }}</div>{% endif %}
 <div class="form-grid">
 {% for field in form %}
 {% if field.is_hidden %}{{ field }}{{ field.errors }}{% elif field.field.widget.input_type == 'checkbox' %}
-<div class="field check-field"><label for="{{ field.id_for_label }}">{{ field }} {{ field.label }}</label>{{ field.errors }}</div>
+<div class="field check-field"><label for="{{ field.id_for_label }}">{{ field }} {{ field.label }}</label>{{ field.errors }}{% if field.help_text and not compact %}<p class="help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</p>{% endif %}</div>
 {% else %}
-<div class="field">{{ field.label_tag }}{{ field }}{{ field.errors }}{% if field.help_text %}<p class="help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</p>{% endif %}</div>
+<div class="field{% if field.name == 'reason' or field.name == 'note' or field.name == 'site_notice' %} full{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>{{ field }}{{ field.errors }}{% if field.help_text and not compact %}<p class="help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</p>{% endif %}</div>
 {% endif %}
 {% endfor %}
 </div>

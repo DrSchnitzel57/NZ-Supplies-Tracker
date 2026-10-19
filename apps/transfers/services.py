@@ -69,6 +69,7 @@ def export_bundle(*, actor) -> bytes:
                 "title_prefix": m.title_prefix, "arrival_status": m.arrival_status,
                 "stake": m.stake, "mission": m.mission, "language": m.language,
                 "arrival_date": m.arrival_date.isoformat() if m.arrival_date else "",
+                "departure_date": m.departure_date.isoformat() if m.departure_date else "",
                 "release_date": m.release_date.isoformat() if m.release_date else "",
                 "personal_email": m.personal_email,
                 "intake_metadata": json.dumps(m.intake_metadata or {}),
@@ -203,6 +204,7 @@ def _load_tables(actor, tables: dict) -> None:
                     stake=row.get("stake", ""), mission=row.get("mission", ""),
                     language=row.get("language", ""),
                     arrival_date=_parse_date(row.get("arrival_date", "")),
+                    departure_date=_parse_date(row.get("departure_date", "")),
                     release_date=_parse_date(row.get("release_date", "")),
                     personal_email=row.get("personal_email", ""),
                     intake_metadata=intake_metadata,
@@ -434,7 +436,7 @@ def _apply_roster(actor, roster_services, valid, wanted, mode, applied, key_pref
             "email", "title_prefix", "arrival_status", "stake", "mission",
             "language", "personal_email")
             if field in entry["present_fields"] and entry.get(field)}
-        for date_field in ("arrival_date", "release_date"):
+        for date_field in ("arrival_date", "departure_date", "release_date"):
             raw = (entry.get(date_field) or "").strip()
             if raw:
                 from django.utils.dateparse import parse_date
@@ -455,10 +457,10 @@ def _apply_roster(actor, roster_services, valid, wanted, mode, applied, key_pref
             changed = (
                 existing.name != entry["name"]
                 or any((getattr(existing, f) or "") != (profile[f] or "")
-                       for f in profile if f not in ("arrival_date", "release_date"))
+                       for f in profile if f not in ("arrival_date", "departure_date", "release_date"))
             )
             if not changed:
-                for date_field in ("arrival_date", "release_date"):
+                for date_field in ("arrival_date", "departure_date", "release_date"):
                     want = profile.get(date_field)
                     if want is not None and getattr(existing, date_field) != want:
                         changed = True

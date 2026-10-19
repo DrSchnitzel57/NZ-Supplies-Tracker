@@ -15,9 +15,21 @@ class ReasonedForm(forms.Form):
 
 
 class AddStockForm(ReasonedForm):
-    quantity = forms.IntegerField(min_value=1, max_value=COUNT_MAX, label="Quantity to add")
+    field_order = ["quantity", "reason", "idempotency_key"]
+    quantity = forms.IntegerField(min_value=1, max_value=COUNT_MAX, label="How many arrived?")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["reason"].label = "Where did they come from?"
+        self.fields["reason"].widget.attrs.setdefault("placeholder", "e.g. Delivery from the distribution centre")
 
 
 class CorrectCountForm(ReasonedForm, VersionedForm):
+    field_order = ["counted_qty", "reason", "idempotency_key", "expected_version"]
     counted_qty = forms.IntegerField(min_value=0, max_value=COUNT_MAX,
-                                    label="Counted quantity now on the shelf")
+                                    label="How many are on the shelf right now?")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["reason"].label = "Reason for the change"
+        self.fields["reason"].widget.attrs.setdefault("placeholder", "e.g. Stocktake — two damaged and thrown out")

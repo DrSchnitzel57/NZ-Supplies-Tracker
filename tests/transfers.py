@@ -39,7 +39,8 @@ class BundleRoundTripTests(TestCase):
         item = make_item(self.admin, opening_qty=7)
         data = transfers.export_bundle(actor=self.admin)
         parsed = bundle_mod.parse_bundle(data)
-        self.assertEqual(parsed["manifest"]["version"], 1)
+        # v2 added roster departure_date; v1 bundles still import (see below).
+        self.assertEqual(parsed["manifest"]["version"], 2)
         self.assertEqual(parsed["manifest"]["counts"]["roster"], 1)
         # Import into a fresh empty DB: wipe operational tables first.
         from apps.audit.models import AuditEvent
@@ -57,6 +58,39 @@ class BundleRoundTripTests(TestCase):
         restored = Item.objects.get()
         self.assertEqual(restored.on_hand, 7)
         self.assertTrue(User.objects.filter(username=self.admin.username).exists())
+
+    def test_version_1_bundle_without_departure_column_still_imports(self):
+        """Bundles made before departure_date existed stay importable."""
+        import io
+        import json
+        import zipfile
+
+        make_missionary(self.admin)
+        make_item(self.admin, opening_qty=3)
+        data = transfers.export_bundle(actor=self.admin)
+        src = zipfile.ZipFile(io.BytesIO(data))
+        manifest = json.loads(src.read("manifest.json"))
+        tables = {name: src.read(name) for name in bundle_mod.TABLE_FILES}
+        rows = bundle_mod.parse_bundle(data)["tables"]["roster.csv"]
+        tables["roster.csv"] = bundle_mod._csv_bytes(bundle_mod.ROSTER_FIELDS_V1, rows)
+        manifest["version"] = 1
+        manifest["checksums"] = {n: bundle_mod._sha(raw) for n, raw in tables.items()}
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            for name, raw in tables.items():
+                zf.writestr(name, raw)
+        parsed = bundle_mod.parse_bundle(out.getvalue())
+        self.assertEqual(parsed["tables"]["roster.csv"][0]["departure_date"], "")
+        from apps.audit.models import AuditEvent
+        from apps.inventory.models import StockMovement
+        StockMovement.objects.all().delete()
+        Item.objects.all().delete()
+        Missionary.objects.all().delete()
+        AuditEvent.objects.all().delete()
+        transfers.import_bundle(actor=self.admin, data=out.getvalue())
+        self.assertEqual(Missionary.objects.count(), 1)
+        self.assertIsNone(Missionary.objects.get().departure_date)
 
     def test_non_admin_cannot_export_or_import(self):
         staff, _ = make_staff()

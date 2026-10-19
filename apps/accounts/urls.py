@@ -20,5 +20,6 @@ urlpatterns = [
     path("users/create/", views.user_create, name="accounts-user-create"),
     path("users/<int:pk>/reset-password/", views.user_reset_password, name="accounts-user-reset"),
     path("users/<int:pk>/deactivate/", views.user_deactivate, name="accounts-user-deactivate"),
+    path("users/<int:pk>/display-name/", views.user_display_name, name="accounts-user-display-name"),
     path("users/<int:pk>/reactivate/", views.user_reactivate, name="accounts-user-reactivate"),
 ]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.contrib import messages
-from django.db.models import Sum
+from django.db.models import Exists, F, OuterRef, Q, Sum
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -13,11 +13,12 @@ from apps.accounts.decorators import staff_required
 from apps.common.errors import DomainError
 from apps.common.forms import AddStockForm, CorrectCountForm
 from apps.common.pagination import paginate
+from apps.common.sorting import item_sort_key, natural_key
 from apps.common.search import items as search_items
 from apps.common.navigation import list_return
 from urllib.parse import urlencode
 from apps.inventory.forms import ItemForm, NewItemForm
-from apps.inventory.forms import BatchItemFormSet
+from apps.inventory.forms import BatchItemFormSet, category_options
 from apps.inventory import services as inv
 from apps.inventory.models import Item, StockMovement
 
@@ -51,53 +52,110 @@ def _summaries(items):
     return items
 
 
+STOCK_FILTERS = [("", "All items"), ("attention", "Needs reordering"), ("low", "Running low"),
+                 ("out", "Out of stock"), ("ok", "In stock")]
+SORTS = [("category", "Category"), ("name", "Name A–Z"), ("-name", "Name Z–A"),
+         ("stock", "Fewest available first")]
+
+
+def _stock_filter(qs, value):
+    stocked = StockMovement.objects.filter(item=OuterRef("pk"), delta__gt=0)
+    if value == "attention":
+        return qs.annotate(ever_stocked=Exists(stocked)).filter(
+            Q(on_hand__gt=0, on_hand__lte=F("low_threshold")) | Q(on_hand=0, ever_stocked=True))
+    if value == "low":
+        return qs.filter(on_hand__gt=0, on_hand__lte=F("low_threshold"))
+    if value == "out":
+        return qs.filter(on_hand=0)
+    if value == "ok":
+        return qs.filter(on_hand__gt=F("low_threshold"))
+    if value == "below":  # legacy ?low=1: everything at or below its alert level
+        return qs.filter(on_hand__lte=Coalesce("low_threshold", 0))
+    return qs
+
+
 @staff_required
 def item_list(request):
     q = (request.GET.get("q") or "").strip()[:160]
     category = (request.GET.get("category") or "").strip()
     size = (request.GET.get("size") or "").strip()
-    low_only = request.GET.get("low") == "1"
+    stock = (request.GET.get("stock") or "").strip()
+    if not stock and request.GET.get("low") == "1":
+        stock = "below"
     show_archived = request.GET.get("archived") == "1"
     qs = Item.objects.all()
     if not show_archived:
         qs = qs.filter(is_archived=False)
     sort = request.GET.get("sort", "category")
-    ordering = {"category": ("category", "name", "size"), "name": ("name", "size"),
-                "-name": ("-name", "size"), "stock": ("on_hand", "name")}.get(sort, ("category", "name", "size"))
-    qs = search_items(qs, q, ordering)
+    if sort not in dict(SORTS):
+        sort = "category"
+    qs = search_items(qs, q, ("category", "name", "size"))
     if category:
         qs = qs.filter(category__iexact=category)
     if size == "__blank__":
         qs = qs.filter(size="")
     elif size:
         qs = qs.filter(size__icontains=size)
-    if low_only:
-        qs = qs.filter(on_hand__lte=Coalesce("low_threshold", 0))
-    total = qs.count()
-    page, pagination = paginate(request, qs)
-    qs = _summaries(list(page))
+    scope = qs
+    qs = _stock_filter(qs, stock)
+    rows = list(qs)
+    if sort == "name":
+        rows.sort(key=lambda i: (i.search_rank, i.name.lower(), natural_key(i.size)))
+    elif sort == "-name":
+        # Stable sorts, applied least-significant first: size, name (Z–A), rank.
+        rows.sort(key=lambda i: natural_key(i.size))
+        rows.sort(key=lambda i: i.name.lower(), reverse=True)
+        rows.sort(key=lambda i: i.search_rank)
+    elif sort == "stock":
+        rows.sort(key=lambda i: (i.search_rank, i.on_hand, item_sort_key(i)))
+    else:
+        rows.sort(key=lambda i: (i.search_rank, item_sort_key(i)))
+    total = len(rows)
+    page, pagination = paginate(request, rows)
+    items = _summaries(list(page))
+    for item in items:
+        item.level = 0 if item.on_hand <= 0 else min(100, round(
+            item.on_hand / max(item.low_threshold * 3, item.on_hand, 1) * 100))
+    stock_counts = {
+        "": scope.count(),
+        "attention": _stock_filter(scope, "attention").count(),
+        "low": _stock_filter(scope, "low").count(),
+        "out": _stock_filter(scope, "out").count(),
+        "ok": _stock_filter(scope, "ok").count(),
+    }
     choices = Item.objects.all() if show_archived else Item.objects.filter(is_archived=False)
-    categories = list(
-        choices
-        .order_by("category")
-        .values_list("category", flat=True)
-        .distinct()
-    )
+    categories = list(choices.order_by("category").values_list("category", flat=True).distinct())
+    query = request.GET.copy()
+    query.pop("page", None)
+    query.pop("low", None)
+    stock_links = []
+    for value, label in STOCK_FILTERS:
+        link = query.copy()
+        if value:
+            link["stock"] = value
+        else:
+            link.pop("stock", None)
+        stock_links.append({"value": value, "label": label, "count": stock_counts.get(value),
+                            "url": "?" + link.urlencode(), "current": value == stock})
     return render(
         request,
         "inventory/list.html",
         {
-            "items": qs,
+            "items": items,
             "q": q,
             "category": category,
             "size": size,
             "sort": sort,
-            "low_only": low_only,
+            "sorts": SORTS,
+            "stock": stock,
+            "stock_links": stock_links,
+            "low_only": stock == "below",
             "show_archived": show_archived,
             "categories": categories,
-            "sizes": choices.order_by("size").values_list("size", flat=True).distinct(),
             "total": total,
-            "shown": len(qs),
+            "shown": len(items),
+            "item_total": Item.objects.filter(is_archived=False).count(),
+            "filters_on": any([q, category, size, stock, show_archived]),
             **pagination,
         },
     )
@@ -128,7 +186,8 @@ def item_create(request):
             messages.success(request, f"Added {obj}.")
             return redirect("inventory-detail", pk=obj.pk)
     return render(request, "inventory/form.html",
-                  {"mode": "create", "form": form}, status=400 if form.is_bound else 200)
+                  {"mode": "create", "form": form, "category_options": category_options()},
+                  status=400 if form.is_bound else 200)
 
 
 def _new_uuid() -> str:
@@ -164,7 +223,7 @@ def item_batch(request):
         else:
             reviewed = True
     return render(request, "inventory/batch.html", {"formset": formset, "batch_key": key,
-        "batch_error": error, "reviewed": reviewed},
+        "batch_error": error, "reviewed": reviewed, "category_options": category_options()},
         status=400 if request.method == "POST" and not reviewed else 200)
 
 
@@ -200,7 +259,9 @@ def item_detail(request, pk):
 
 def _render_detail(request, item):
     _summaries([item])
-    page, pagination = paginate(request, StockMovement.objects.filter(item=item).order_by("-created_at", "pk"))
+    page, pagination = paginate(request, StockMovement.objects.filter(item=item)
+                                .select_related("issue", "issue__missionary", "created_by")
+                                .order_by("-created_at", "pk"))
     movements = list(page)
     plain = {
         StockMovement.OPENING: "Opening amount",
@@ -211,6 +272,15 @@ def _render_detail(request, item):
     }
     for m in movements:
         m.plain_kind = plain.get(m.kind, m.kind)
+        # Issue movements store a machine reason ("issue <id>"); show who it
+        # went to instead, linked to the issue record.
+        if m.issue_id and m.kind in (StockMovement.ISSUE, StockMovement.REVERSAL):
+            who = m.issue.missionary.display_name if m.issue.missionary_id else m.issue.missionary_name
+            m.plain_reason = (f"Given to {who}" if m.kind == StockMovement.ISSUE
+                              else f"Undone issue to {who}" + (f" — {m.issue.reversal_reason}" if m.issue.reversal_reason else ""))
+        else:
+            m.plain_reason = m.reason
+    item.alert_status = ("out" if item.on_hand <= 0 else "low" if item.on_hand <= item.low_threshold else "ok")
     ledger_total = inv.ledger_balance(item.pk)
     return render(
         request,
@@ -239,7 +309,8 @@ def item_edit(request, pk):
         else:
             messages.success(request, "Saved changes.")
             return redirect(_item_destination(request, item))
-    return render(request, "inventory/form.html", {"mode": "edit", "item": item, "form": form},
+    return render(request, "inventory/form.html", {"mode": "edit", "item": item, "form": form,
+                  "category_options": category_options()},
                   status=400 if form.is_bound else 200)
 
 
@@ -257,7 +328,7 @@ def item_receive(request, pk):
         except DomainError as exc:
             form.add_error(None, str(exc))
         else:
-            messages.success(request, f"Added {form.cleaned_data['quantity']} to {item}.")
+            messages.success(request, f"Added {form.cleaned_data['quantity']} to {item.name}{f' ({item.size})' if item.size else ''}.")
             return redirect(_item_destination(request, item))
     return _render_stock_form(request, item, form, "stock", status=400)
 

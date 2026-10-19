@@ -1,46 +1,81 @@
 # Repository context
 
-- Milestone 07 implements `.openchamber/plans/07-professional-redesign.md`: Overview/sidebar/direct History and prominent Issue supplies supersede the 06 navigation; shared bounded Unicode finder/list matching, explicit recipient combobox plus catalogue/summary, sorted/grouped/filterable records, canonical short-task pages in guarded same-origin panels, atomic reviewed 1–50-item batches, consistent reports/low-stock copy/mail-app and refreshed synthetic help. No model/ZIP change or new stack. New regression suites: `tests.test_professional_redesign`, `tests/browser/test_professional_redesign.py`; final serial acceptance passes 241 Django/53 internet-blocked Chromium (no skips)/21 real deployment tests plus check/migrations/Compose/build/shell/whitespace commands. Populated render/PDF/error evidence is recorded in `docs/REVIEW.md`. Independent re-review and manual gates remain separate; no real-data import, push or rollout.
-- Redesign-planning baseline (2026-10-15, before application changes): first `.venv/bin/python manage.py test --noinput` ran 228 tests with two PDF-probe errors from missing local PyMuPDF. `uv pip install --python .venv/bin/python -r requirements.txt` installed the already-pinned `PyMuPDF==1.28.2`; a fresh full rerun passes all 228 tests. Fresh serial `.venv/bin/python -m pytest tests/browser` passes 36 real Chromium tests, no skips. No application fix was needed. The missing-`staticfiles/` and ReportLab deprecation warnings remain non-blocking. Deployment tests were not rerun during planning.
-- The replacement Django foundation (milestone 01) is implemented: `manage.py`, `config/`, `apps/` (accounts, roster, inventory, issuing, audit, operations, common), `templates/`, `static/`, pinned `requirements.txt` (Django 5.2 LTS), and synthetic tests in `tests/` (`foundation`, `auth`, `ledger`, `concurrency`). Milestone 02 added daily staff workflows (`tests.workflows`, `tests/browser/`). Milestone 03 added `apps/transfers` (versioned bundles, seed conversion, spreadsheet previews), `apps/reports` (CSV/PDF report families), admin account UI/system settings/protected reset in `apps/accounts`+`apps/operations`, interchange spec `docs/DATA_FORMAT.md`, and synthetic suites (`transfers`, `seed_conversion`, `reports`, `admin_safety`, `tests/browser/test_transfers_reports.py`, `test_admin.py`). The standalone HTML prototype remains entirely in the ignored `MTC Missionary Supplies Tracker.html`: embedded `SEED` data, styles, DOM rendering, business logic, and browser persistence. `READ ME.txt` describes this local edition; `README.md` covers the Django app's install/run/test commands.
-- Verified milestone-01 commands (run from repo root with the project venv): `uv pip install --python .venv/bin/python -r requirements.txt`; `.venv/bin/python manage.py migrate`; `.venv/bin/python manage.py check` (passes); `.venv/bin/python manage.py makemigrations --check --dry-run` (no missing migrations); `.venv/bin/python manage.py test tests.foundation tests.auth` (passes); `.venv/bin/python manage.py test tests.ledger` (passes); `.venv/bin/python manage.py test tests.concurrency` (passes: competing issues cannot go negative, duplicate reversals fail safely, stale counts lose, same-key concurrent submits write once, maintenance blocks other connections); `git diff --check` (passes). Baseline: 51 tests (26 + 18 + 7), Python 3.13, Django 5.2.18.
-- Verified milestone-02 commands (same venv): `.venv/bin/python manage.py test tests.workflows tests.auth tests.ledger tests.concurrency` (passes: 58 tests covering routes/permissions, plain labels/help, issuing/shortage-confirm, reversals, stock corrections, poll/session behavior); `.venv/bin/python -m pytest tests/browser/test_workflows.py` (passes: 8 passed + 1 Chromium smoke skipped without `python -m playwright install chromium`); `.venv/bin/python -m pytest tests/browser/test_refresh_sessions.py` (passes: 4 passed); `python manage.py check` (passes); `git diff --check` (passes). Pinned test tooling in `requirements.txt`: Django 5.2.18, pytest 8.3.5, pytest-django 4.9.0, playwright 1.49.1; `pytest.ini` sets `DJANGO_SETTINGS_MODULE=config.settings`.
-- Verified milestone-03 commands (same venv): `.venv/bin/python manage.py test tests.transfers tests.seed_conversion` (passes: 18 tests covering bundle round trips/source corrections, upload bounds, stale previews, import atomicity, XLSX aliases); `.venv/bin/python manage.py test tests.reports tests.admin_safety` (passes: 16 tests covering report permissions/net reporting/exports, account UI, settings, protected reset and backup-failure protection); `.venv/bin/python -m pytest tests/browser/test_transfers_reports.py tests/browser/test_admin.py` (passes: 5 passed); full explicit suite `.venv/bin/python manage.py test tests.foundation tests.auth tests.ledger tests.concurrency tests.workflows tests.transfers tests.seed_conversion tests.reports tests.admin_safety` (passes: 110 tests); `git check-ignore .local/imports/initial.zip` (prints the ignored path). Added `openpyxl`/`reportlab` to `requirements.txt` for local spreadsheet/PDF handling (no CDN).
-- Verified milestone-04 commands (same venv): `.venv/bin/python manage.py test` (passes: 118 tests via `tests/test_*.py` discovery shims over all suites including new `tests.deployment_security`); `.venv/bin/python manage.py test tests.concurrency tests.deployment_security` (passes: 15 tests including ten-client stock contention and production permission/config safeguards); `.venv/bin/python -m pytest tests/browser` (passes: 19 passed + 1 Chromium smoke skipped, including `test_offline.py` no-CDN check); `.venv/bin/python -m pytest tests/deployment` (passes: 15 tests covering image exclusions, persisted data, TLS/readiness, backup/restore and update-failure cases); `docker compose -f compose.test.yaml config --quiet` (passes with synthetic settings); `docker build -t supplies-tracker:test .` (succeeds; verified no `.html`/`.local` in image and `manage.py check` passes inside); `bash -n scripts/update.sh scripts/restore.sh` (passes); `git diff --check` (passes). Added `gunicorn` to `requirements.txt`; deployment artifacts: `Dockerfile`, `.dockerignore`, `compose.yaml`, `compose.test.yaml`, `deploy/Caddyfile`, `scripts/{update,restore,daily_backup}.sh`, `docs/OPERATIONS.md`, `.github/workflows/{tests,release}.yml`, `apps/operations/{health.py,backup.py (retention/restore),management/commands/{backup_db,prune_backups,restore_db}.py}`.
-- Verified milestone-05 commands (same venv): `.venv/bin/python manage.py test` (passes: 178 tests — 118 prior + 58 new `tests.review_regressions` + new admin/reauth cases — via `tests/test_*.py` discovery shims); `.venv/bin/python manage.py makemigrations --check --dry-run` (no missing migrations); `.venv/bin/python -m pytest tests/browser` (passes: 17 real Chromium desktop/mobile/poll/expiry/draft/error/import/export/admin flows with all internet hosts blocked, no skips; requires `.venv/bin/python -m playwright install chromium` once); `.venv/bin/python -m pytest tests/deployment` (passes: 15 real isolated Compose tests — TLS/readiness/static/persistence/backup/corrupt-restore/maintenance-token/dead-server/version-mismatch/script-refusals — with throwaway `suppliestest*` projects removed afterwards); `docker compose -f compose.test.yaml config --quiet` (passes); `docker build -t supplies-tracker:test .` (succeeds; prod-only `requirements.prod.txt`, no `.html`/`.local`/`tests`/bundles/backups/secrets in image); `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh` (passes); `git diff --check` (passes). Test DB is file-backed (`.local/test_db.sqlite3`, gitignored) so backup/restore/WAL behavior is real. Fresh whole-codebase review evidence in `docs/REVIEW.md` (verdict: SHIP after listed manual gates; no rollout yet). Synthetic guide screenshots in `static/img/` (committed, no PII) shown in `templates/guide.html` and `docs/QUICK_START.md`.
-- Product-assessment baseline at `548aad3`: `.venv/bin/python manage.py test --noinput` passes 195 tests; `.venv/bin/python -m pytest tests/browser` passes 17 with no skips; `.venv/bin/python -m pytest tests/deployment` passes 21 including image build/TLS/recovery; migration, Compose config, shell syntax and whitespace checks pass. Additional synthetic probes nevertheless return FIX (details in `docs/REVIEW.md`). These are baseline results, not acceptance of milestone 06; no application code was changed during planning.
-- Verified milestone-06 final code at `138ae8b` (Python 3.13.5/Django 5.2.18): `.venv/bin/python manage.py test --noinput` passes 224 tests; `.venv/bin/python -m pytest tests/browser` passes 33 real internet-blocked Chromium tests, no skips; `.venv/bin/python -m pytest tests/deployment` passes 21 real isolated Compose/TLS/recovery tests. `manage.py check`, `makemigrations --check --dry-run`, `docker compose -f compose.test.yaml config --quiet`, `docker build -t supplies-tracker:test .`, `bash -n scripts/update.sh scripts/restore.sh scripts/daily_backup.sh` and `git diff --check` pass. New suites: `tests.test_product_overhaul`, `tests.test_product_reports`, `tests/browser/test_product_overhaul.py`, `test_rendered_product.py`. Updated synthetic guide images in `static/img/`; reproducible rendered/export evidence in ignored `.local/review/`, with methods and fresh implementation-side SHIP in `docs/REVIEW.md`. Not independent review or rollout approval; manual gates skipped.
-- Fresh-checkout test prerequisites: `uv venv .venv --python 3.13`, `uv pip install --python .venv/bin/python -r requirements.txt`, `mkdir -p .local`, `.venv/bin/python -m playwright install chromium`. Run Django/browser/deployment suites **serially**: pytest-django also initializes the shared file-backed test DB for deployment tests, even though their application probes use isolated containers; a concurrent invocation can drop its tables. Native PDF probes use pinned test-only PyMuPDF in a checked subprocess (`tests/pdf_probe.py`); no native renderer in the production image. Noto Sans font/license/provenance are bundled in `static/fonts/`. Non-blocking local-test warnings: absent collected `staticfiles/` (the image collects them), ReportLab's Python 3.13 deprecation warning.
-- Independent review of `60d4c9f` returned FIX with six additional findings. All six reproduced/fixed at `465475b`: canonical headers win over aliases (stable roster CSV round trips in both modes), safe-form writes serialize through uncertain recovery, cross-tab recovery repairs shell/logout CSRF, action errors retain GET URLs, account passwords preserve surrounding spaces, current external IDs are searchable. Added `tests.test_review_followup` and `tests/browser/test_review_followup.py`, extended recovered-edit/logout browser test. Fresh serial full acceptance on 2026-10-13 passes 228 Django/36 internet-blocked browser (no skips)/21 real deployment tests plus check/migrations/Compose/build/shell/whitespace commands. Follow-up evidence in `docs/REVIEW.md`; independent re-review and manual rollout gates remain pending.
-- Startup runs `initTheme()`, builds navigation, and calls `go("dashboard")`; `RENDER` contains the five screens: dashboard, missionaries, inventory, issue goods, and reports.
-- `loadState()` reads `mtc_intake_stores_v2` from localStorage, falling back to `SEED`. `save()` silently catches storage errors. Hosting or sharing the HTML does not share edits or update the file.
-- Fonts, PDF export (jsPDF/AutoTable), and XLSX import load from external CDNs. Do not assume browser caching guarantees offline availability. CSV import/export uses local code; `trySave()` falls back from an optional Claude downloads integration to browser downloads.
+MTC Supplies Tracker: a self-hosted Django 5.2 LTS / Python 3.13 / SQLite (WAL)
+app for the New Zealand MTC supplies room, replacing a single-file HTML
+prototype. Server-rendered templates plus three small vanilla JS files
+(`static/app.js`, `components.js`, `issuing.js`); no build step, no CDN.
+Apps: `accounts`, `roster`, `inventory`, `issuing`, `audit`, `operations`,
+`transfers` (bundles, seed conversion, spreadsheet imports), `reports`
+(screen/CSV/PDF), `common` (finder, sorting, template filters).
 
-## Data and behavioral traps
+Deployment paths: native Windows (`deploy/windows/`, Waitress + Caddy +
+Task Scheduler, `mtc` command; docs/INSTALL_WINDOWS.md), Docker Compose
+(Gunicorn + Caddy; docs/INSTALL_DOCKER.md, docs/OPERATIONS.md) and a
+single-replica Kubernetes example (`deploy/kubernetes/`). All three use
+Caddy `tls internal` and serve the local root at `/ca.crt`.
 
-- `SEED` contains personal roster data, including names, IDs, and emails. Preserve it as the approved initial migration source; do not copy it into documentation, logs, test fixtures, or distributed application images. Its presence in private Git history is not authorization to publish it.
-- Distributions currently reference missionaries by name and contain item snapshots rather than durable relationships. Renaming a missionary rewrites matching distribution names; migration must resolve these relationships explicitly.
-- Both `dwSubmit()` and the Issue Goods submit handler record distributions and alter stock. Inventory also permits direct edits to stock/out totals. Changing only one path does not enforce an inventory rule globally.
-- The prototype permits negative stock after confirmation, and "Issued by" is free text. Neither behavior meets the agreed replacement requirements.
-- Reset reloads `SEED`; clear deletes browser-held data. Do not carry these unrestricted destructive controls into the shared application.
+Milestones 01–08 are implemented. Plans: `.openchamber/plans/`. Design and
+reasons: `docs/ARCHITECTURE.md`. Earlier verification logs, reviews and the
+roadmap: `docs/history/`.
 
-## Agreed replacement direction
+## Working rules
 
-- Preserve the core roster, inventory, issuing, low-stock, import/export, and reporting capabilities and business rules. The user explicitly approved redesigning navigation and workflows for milestone 06; the previous familiar-navigation constraint is superseded. Keep the Django/SQLite foundation, not a new framework stack.
-- One self-hosted modular application with SQLite on the host's local disk, serving roughly 10 simultaneous users. All browsers use the same server; no OneDrive persistence or live database on a network share.
-- Local staff accounts with admin provisioning/recovery and 30-minute idle expiry; polling cannot extend sessions. Staff handle daily workflows and reasoned whole-issue reversals; admins additionally control accounts, replacement imports, full bundles and full reset.
-- Never allow negative stock. Enforce stock checks and distribution writes atomically on the server, including concurrent requests. Use stable IDs instead of names for relationships.
-- The HTML is local-only and gitignored; obtain it separately from the operator on fresh clones. Its original commit was rewritten with user authorization; prior downloads/caches may still exist. Never force-add it. Convert its data into gitignored `.local/imports/initial.zip`; import explicitly into empty operational storage, never on startup/update. The seed has 95 missionaries, 224 items, no distribution history and four negative balances; user approved zeroing those with audit records.
-- Docker Compose deployment, LAN-only HTTPS at a fixed address/port, and private versioned prebuilt images. The internet-connected host should pull releases, not build source. Self-signed certificates are acceptable, but browser trust warnings remain unless trust is configured.
-- Controlled, remotely manageable updates with pre-migration backups, health checks, and a brief interruption; no unattended `latest` upgrades. Database rollback needs its own recovery strategy.
-- Daily host-local backups with 30-day retention and verified pre-update backups; these do not protect against host/disk loss. Full reset requires recent reauthentication, typed confirmation and verified backup; empty operational data but keep accounts and a minimal reset audit marker.
+- Do not implement or commit on `main`; work on a user-approved branch or
+  worktree. Never push.
+- Run suites **serially** (they share the file-backed test DB
+  `.local/test_db.sqlite3`): `manage.py test --noinput`, then
+  `pytest tests/browser`, then `pytest tests/deployment` (needs Docker).
+  Also `manage.py check`, `makemigrations --check --dry-run`, `git diff --check`.
+- Fresh checkout: `uv venv .venv --python 3.13`,
+  `uv pip install --python .venv/bin/python -r requirements.txt`,
+  `mkdir -p .local`, `.venv/bin/python -m playwright install chromium`.
+- PDF probes use test-only PyMuPDF in a subprocess (`tests/pdf_probe.py`);
+  without it four PDF tests fail locally. Browser tests block all internet.
+- Tests and screenshots use synthetic data only. `load_demo_data` makes an
+  invented, realistic dataset (refuses non-empty databases) for screenshots
+  in `static/img/` and demos.
+- Bundle format is versioned (`apps/transfers/bundle.py`, currently v2,
+  reads v1). Any roster/item field change needs a version bump, a legacy
+  header entry and a compatibility test; seed conversion and the original
+  HTML import must keep working.
 
-## Planning handoff
+## Data and behavioural traps
 
-- Read `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and the relevant numbered plan in `.openchamber/plans/` before implementation or review. Milestones 01–07 are implemented; `.openchamber/plans/07-professional-redesign.md` is the current agreed redesign deliverable. The milestone-06 and 07 manual gates remain pending. Do not implement or commit code on main; start only in a user-approved non-main checkout/worktree, and never push.
-- Independent review of `04b2227` returned FIX: 118 Django tests, 19 browser-contract tests (one skipped), 15 deployment-contract tests pass after declared dependency installation, but actual HTTPS/static delivery, stale import/bundle invariants, maintenance ownership and open-WAL restore fail. No real-data initialization/rollout until fixes and fresh review pass. Old browser/deployment suites largely inspect strings; green results do not prove runtime safety.
-- Agreed stack remains Django 5.2 LTS/Python 3.13, server templates/small JavaScript, SQLite, Gunicorn and Caddy. Milestone-06 coverage is now a verified behavioral contract; preserve existing invariants when replacing UI selectors. Plans and recorded findings are tracked/self-contained; ignored HTML/review artifacts do not carry into new worktrees. Use synthetic source-shaped fixtures; obtain private HTML separately for manual checks, never force-add it.
-- One active roster only; no signatures, SMTP or offline sync. Bundle runtime assets. Preserve draft forms during 15-second stock/dashboard polling. Shortages require explicit revised-quantity confirmation and another server stock check.
-- Staff-facing UI uses plain language (Available, Add stock, Correct stock count, Undo this issue), prioritizes issuing and links a one-page illustrated quick-start. Hide admin tools; keep operational commands out of staff workflows. Certificate trust setup is deferred, not a deliverable; LAN HTTPS remains required.
-- Standard full interchange is a versioned ZIP/CSV manifest; admin-only full import/export, empty-data full import, no accounts/secrets. Routine imports preview changes; approved valid subsets are allowed only for add/update, not replacement. Replacements archive missing records; inventory counts create ledger adjustments, not invented issues.
-- Milestone 06 decisions: desktop-first with complete narrow-screen navigation; Home landing; five staff sections with history inside issuing; one issuing workspace (50 distinct items, confirmed recipient change clears items/note); open-tab drafts only with safe same-user recovery, no autosave/queue; task-focused profiles with complete supported edits; missing/blank optional import cells preserve values in both modes; filtered/paginated history and stable-ID/current-name summaries using current-net issuance, never as-of stock. App/in-app help only, no boss-facing package. Full design and reasons are in the architecture doc. Manual staff/source/host gates remain separate from automated acceptance.
+- The original `MTC Missionary Supplies Tracker.html` embeds a `SEED` with
+  real missionary names, IDs and emails. It is gitignored and local-only.
+  Never commit, force-add, copy into docs/fixtures/logs/images, or ship it.
+  Convert it into ignored `.local/imports/initial.zip` and import explicitly
+  into empty data, never on startup/update. Real-data screenshots stay
+  internal; committed images must come from invented data.
+- Source quirks handled by `apps/transfers/seed.py`: `arrived` is a boolean
+  (normalised to `arrived`/`expected`), `missionArrival` is the day they leave
+  the MTC (stored as `departure_date`), names are `Family, Given` and some are
+  ALL CAPS (display tidies them), four items have negative balances (zeroed
+  with audit rows), there is no distribution history.
+- Never allow negative stock; every stock change goes through the ledger
+  services (`StockMovement`) atomically with idempotency keys. Relationships
+  use stable IDs, not names. Issues are undone (reversed) with a reason,
+  never deleted.
+- Polling (15 s) is read-only and never extends the 30-minute idle session.
+  Drafts live only in the open tab: no autosave, offline queue or background
+  writes. Shortages need explicit revised-quantity confirmation and a second
+  server stock check.
+- Writes are blocked during owned maintenance windows (updates, restores,
+  backups with `--quiesce`); crashed windows stay closed until an audited
+  takeover.
+- The Django admin site is removed on purpose (it bypassed login throttling);
+  administrator tools live under `/accounts/users/`, `/admin-area/` and
+  `/transfers/`.
+
+## Product decisions
+
+- Staff-facing language is plain: Issue supplies, Available, Add stock,
+  Count / Correct stock count, Undo this issue, Needs reordering. Missionaries
+  are shown as staff address them ("Sister Halvorsen", "Elder & Sister X" for
+  couples); staff accounts have an optional display name.
+- Dates use New Zealand formats (`config/formats/en_NZ`). Sizes sort
+  naturally (`apps/common/sorting.py`).
+- One active roster; no signatures, SMTP or offline sync. The reorder list
+  offers copy and a `mailto:` link only.
+- Not an official Church product: a temporary stop gap until an official
+  app exists. No paid services or outside accounts.

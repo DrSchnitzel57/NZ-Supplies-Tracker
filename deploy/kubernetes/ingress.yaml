@@ -1,0 +1,32 @@
+# TLS ends at the ingress controller (no Caddy in Kubernetes). It must send
+# X-Forwarded-Proto: https to the app (Traefik and ingress-nginx both do) so
+# Django's HTTPS checks and secure cookies work. The TLS secret is yours:
+# mkcert/your internal CA via `kubectl create secret tls`, or cert-manager.
+# The app must own the whole host name (no /supplies path prefix).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: supplies-tracker
+  namespace: mtc-supplies
+  # With ingress-nginx instead of Traefik, bundle uploads (up to 10 MB) need
+  # a larger body limit than its 1 MB default:
+  # annotations:
+  #   nginx.ingress.kubernetes.io/proxy-body-size: 16m
+spec:
+  # Traefik is the k3s/k3d default; use "nginx" for ingress-nginx.
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - supplies.example.internal
+      secretName: supplies-tracker-tls
+  rules:
+    - host: supplies.example.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: supplies-tracker
+                port:
+                  name: http

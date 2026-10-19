@@ -34,6 +34,15 @@
     batch.addEventListener("submit", function() { if (!batch.hasAttribute("data-safe-form")) batchDirty = false; });
   }
   bindBatchDraft();
+  // Filter bars: changing a dropdown or checkbox applies it straight away
+  // (the Search/Filter button still works for keyboards and without JS).
+  document.querySelectorAll("form[data-autosubmit]").forEach(function(filterForm) {
+    filterForm.addEventListener("change", function(event) {
+      if (event.target.matches("select, input[type=checkbox], input[type=date]")) {
+        if (typeof filterForm.requestSubmit === "function") filterForm.requestSubmit(); else filterForm.submit();
+      }
+    });
+  });
   window.addEventListener("content-refreshed", bindBatchDraft);
   window.addEventListener("safe-form-complete", function(event) { bindBatchDraft(); if (event.detail.saved) batchDirty = false; });
   window.addEventListener("beforeunload", function(event) { if (batchDirty) { event.preventDefault(); event.returnValue = ""; } });
@@ -66,7 +75,8 @@
         results.forEach(function (result, i) {
           var option = document.createElement("div"); option.id = popup.id + "-" + i; option.setAttribute("role", "option"); option.setAttribute("aria-selected", "false");
           var label = document.createElement("strong"); label.textContent = result.label;
-          var detail = document.createElement("span"); detail.textContent = result.group + " · " + result.detail;
+          var detail = document.createElement("span");
+          detail.textContent = (root.dataset.finder === "all" ? result.group + " · " : "") + (result.sub || result.detail);
           option.append(label, detail); option.addEventListener("mousedown", function(e) {e.preventDefault();});
           option.addEventListener("click", function () { select(i); }); popup.append(option);
         });
