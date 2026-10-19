@@ -19,9 +19,10 @@
 <div class="btn-row"><button type="button" id="copy-low-stock">Copy list</button><a class="btn" href="{{ mail_url }}">Open in your email app</a></div><p id="copy-feedback" class="help" role="status"></p>
 </div></section>{% endif %}
 {% if summary %}<ul class="summary-bars" aria-label="All matching summary groups">{% for group in summary %}<li><span>{{ group.label }}</span><div aria-hidden="true"><i style="width:{{ group.width }}%"></i></div><strong>{{ group.value }}</strong></li>{% endfor %}</ul>{% endif %}
-<div class="tablewrap"><table><thead><tr>{% for heading in headings %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead><tbody>
-{% for cells in report_rows %}<tr>{% for cell in cells %}<td>{{ cell|default_if_none:"" }}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="16"><div class="empty">No matching records.</div></td></tr>{% endfor %}
+<div class="tablewrap"><table class="report-table"><thead><tr>{% for heading in headings %}<th scope="col">{{ heading }}</th>{% endfor %}</tr></thead><tbody>
+{% for cells in report_rows %}<tr>{% for cell in cells %}<td title="{{ cell|default_if_none:'' }}">{{ cell|default_if_none:"" }}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="16"><div class="empty">No matching records.</div></td></tr>{% endfor %}
 </tbody></table></div>
+{% if hidden_columns %}<p class="help">Scroll sideways to see every column. The spreadsheet download also has the internal record IDs and imported extras.</p>{% endif %}
 {% include "components/pagination.html" %}
 <details class="disclosure"><summary>How these figures are counted</summary><p class="help">Dates are New Zealand time and select when goods were given out. “Given out” totals leave out undone issues. Stock figures are what’s on the shelf now, not on a past date. Summaries use people’s current names; History keeps the names as they were at the time.</p></details>
 {% endblock %}

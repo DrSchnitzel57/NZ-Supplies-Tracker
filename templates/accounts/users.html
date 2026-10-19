@@ -2,29 +2,45 @@
 {% block title %}Staff accounts — MTC Supplies{% endblock %}
 {% block content %}
 <div class="page-head"><div><span class="eyebrow">Administration</span><h1>Staff accounts</h1><p class="sub">Everyone signs in with their own account, so History shows who gave out what.</p></div></div>
-{% if not fresh %}<div class="banner info"><span class="ic">{% include "components/icon.html" with name="shield" %}</span><div><h2>Confirm your password to make changes</h2><p>For safety, account changes need a recent password check (it lasts 10 minutes). <a href="/admin-area/reauth/?next=/accounts/users/">Confirm your password</a>.</p></div></div>{% endif %}
-<section class="card" style="max-width:860px"><div class="hd"><h2>Add a staff member</h2></div><div class="bd">
+{% if created %}<section class="card next-steps" style="max-width:860px"><div class="hd"><h2>Next steps for {{ created.shown_name }}</h2></div><div class="bd">
+<p style="margin-top:0">Give them these three things in person or by phone (not by email):</p>
+<ol class="steps">
+<li><strong>The address:</strong> <a href="{{ site_address }}">{{ site_address }}</a> <span class="muted">(they can save it as a bookmark)</span></li>
+<li><strong>Their username:</strong> <code>{{ created.username }}</code></li>
+<li><strong>The temporary password</strong> you just typed. It isn’t shown again; if it’s lost, set a new one below.</li>
+</ol>
+<p class="help">The first time they sign in they choose their own password. If their browser says the connection is “not private”, set up the certificate on their PC once: open <a href="/ca.crt">{{ site_address }}ca.crt</a> and follow <em>Let staff PCs trust the connection</em> in the install guide.</p>
+</div></section>{% endif %}
+{% if not fresh %}<section class="card" style="max-width:860px;margin-top:16px"><div class="hd"><h2>Confirm your password to add or change accounts</h2></div><div class="bd">
+<p style="margin-top:0">For safety, account changes need a recent password check. It lasts 10 minutes.</p>
+<form method="post" action="/admin-area/reauth/?next=/accounts/users/" class="btn-row">
+{% csrf_token %}<input type="hidden" name="next" value="/accounts/users/">
+<label class="sr-only" for="reauth-password">Your password</label><input type="password" id="reauth-password" name="password" required autocomplete="current-password" placeholder="Your password" style="max-width:260px">
+<button type="submit" class="primary">Confirm</button>
+</form>
+</div></section>
+{% else %}<section class="card" style="max-width:860px;margin-top:16px"><div class="hd"><h2>Add a staff member</h2></div><div class="bd">
 <form method="post" action="/accounts/users/create/" class="stack">
 {% csrf_token %}
 {% include "components/form_fields.html" %}
-<p class="help">Give them the username and temporary password in person. They’ll choose their own password the first time they sign in. Deactivating an account signs it out everywhere immediately.</p>
+<p class="help">Choose a temporary password to give them. They’ll pick their own the first time they sign in. Deactivating an account signs it out everywhere immediately.</p>
 <div class="form-actions"><button type="submit" class="primary">Create account</button></div>
 </form>
-</div></section>
+</div></section>{% endif %}
 
 <div style="margin-top:16px"><section class="card"><div class="hd"><h2>Accounts</h2><span class="sub">{{ users|length }} total</span></div>
 <div class="tablewrap"><table>
 <thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Set a temporary password</th><th><span class="sr-only">Other actions</span></th></tr></thead>
 <tbody>
 {% for u in users %}
-<tr>
+<tr id="account-{{ u.pk }}"{% if created and u.pk == created.pk %} class="just-added"{% endif %}>
 <td data-label="Username"><strong>{{ u.shown_name }}</strong><small>{{ u.username }}</small>
-<details class="disclosure" style="margin:4px 0 0"><summary>Change shown name</summary><form method="post" action="/accounts/users/{{ u.pk }}/display-name/" class="btn-row" style="margin-top:6px">{% csrf_token %}<input name="display_name" value="{{ u.display_name }}" maxlength="80" aria-label="Name shown for {{ u.username }}" placeholder="Sister Langkilde" style="max-width:200px"><button type="submit" class="small">Save</button></form></details></td>
+{% if fresh %}<details class="disclosure" style="margin:4px 0 0"><summary>Change shown name</summary><form method="post" action="/accounts/users/{{ u.pk }}/display-name/" class="btn-row" style="margin-top:6px">{% csrf_token %}<input name="display_name" value="{{ u.display_name }}" maxlength="80" aria-label="Name shown for {{ u.username }}" placeholder="Sister Walker" style="max-width:200px"><button type="submit" class="small">Save</button></form></details>{% endif %}</td>
 <td data-label="Role">{% if u.is_superuser %}<span class="chip info plain">Administrator</span>{% elif u.is_staff %}<span class="chip plain">Staff</span>{% else %}<span class="chip plain">No access</span>{% endif %}</td>
 <td data-label="Active">{% if u.is_active %}<span class="dot">Active</span>{% else %}<span class="dot warn">Deactivated</span>{% endif %}{% if u.must_change_password %}<small>Waiting for first sign-in</small>{% endif %}</td>
-<td data-label="Actions"><form method="post" action="/accounts/users/{{ u.pk }}/reset-password/" class="btn-row">{% csrf_token %}<input type="password" name="password" placeholder="New temporary password" required autocomplete="new-password" aria-label="New temporary password for {{ u.username }}" style="max-width:220px"><button type="submit" class="small">Set temporary password</button></form></td>
-<td class="actions">{% if u.pk != user.pk %}{% if u.is_active %}<form method="post" action="/accounts/users/{{ u.pk }}/deactivate/" class="inline">{% csrf_token %}<button type="submit" class="small danger">Deactivate</button></form>
-{% else %}<form method="post" action="/accounts/users/{{ u.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit" class="small">Reactivate</button></form>{% endif %}{% else %}<small>You</small>{% endif %}</td>
+<td data-label="Actions">{% if fresh %}<form method="post" action="/accounts/users/{{ u.pk }}/reset-password/" class="btn-row">{% csrf_token %}<input type="password" name="password" placeholder="New temporary password" required autocomplete="new-password" aria-label="New temporary password for {{ u.username }}" style="max-width:220px"><button type="submit" class="small">Set temporary password</button></form>{% else %}<small class="muted">Confirm your password above first</small>{% endif %}</td>
+<td class="actions">{% if u.pk != user.pk and fresh %}{% if u.is_active %}<form method="post" action="/accounts/users/{{ u.pk }}/deactivate/" class="inline">{% csrf_token %}<button type="submit" class="small danger">Deactivate</button></form>
+{% else %}<form method="post" action="/accounts/users/{{ u.pk }}/reactivate/" class="inline">{% csrf_token %}<button type="submit" class="small">Reactivate</button></form>{% endif %}{% elif u.pk == user.pk %}<small>You</small>{% endif %}</td>
 </tr>
 {% endfor %}
 </tbody>

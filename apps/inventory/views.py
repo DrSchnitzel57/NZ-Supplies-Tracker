@@ -74,6 +74,36 @@ def _stock_filter(qs, value):
     return qs
 
 
+def _category_sections(items, *, fold_sizes: bool) -> list[dict]:
+    """[{name, lines, attention, groups:[{key, name, variants, folded, ...}]}].
+
+    Items arrive sorted by category, name and natural size order. A group is
+    one item name; it folds into a single row when it has several sizes.
+    """
+    sections: list[dict] = []
+    for item in items:
+        if not sections or sections[-1]["name"] != item.category:
+            sections.append({"name": item.category, "lines": 0, "attention": 0, "groups": []})
+        section = sections[-1]
+        section["lines"] += 1
+        if item.on_hand <= item.low_threshold:
+            section["attention"] += 1
+        groups = section["groups"]
+        if fold_sizes and groups and groups[-1]["name"].lower() == item.name.lower():
+            groups[-1]["variants"].append(item)
+        else:
+            groups.append({"key": str(item.pk), "name": item.name, "variants": [item]})
+    for section in sections:
+        for group in section["groups"]:
+            variants = group["variants"]
+            group["folded"] = len(variants) > 1
+            group["available"] = sum(v.on_hand for v in variants)
+            group["given"] = sum(v.net_given for v in variants)
+            group["out"] = sum(1 for v in variants if v.on_hand <= 0)
+            group["low"] = sum(1 for v in variants if 0 < v.on_hand <= v.low_threshold)
+    return sections
+
+
 @staff_required
 def item_list(request):
     q = (request.GET.get("q") or "").strip()[:160]
@@ -111,8 +141,17 @@ def item_list(request):
     else:
         rows.sort(key=lambda i: (i.search_rank, item_sort_key(i)))
     total = len(rows)
-    page, pagination = paginate(request, rows)
-    items = _summaries(list(page))
+    sections = None
+    if sort == "category":
+        # Category sections (collapsible) with every line on one page; with no
+        # search or stock filter, sizes of the same item fold under one row.
+        rows.sort(key=item_sort_key)
+        items = _summaries(rows)
+        sections = _category_sections(items, fold_sizes=not (q or stock or size))
+        pagination = {}
+    else:
+        page, pagination = paginate(request, rows)
+        items = _summaries(list(page))
     for item in items:
         item.level = 0 if item.on_hand <= 0 else min(100, round(
             item.on_hand / max(item.low_threshold * 3, item.on_hand, 1) * 100))
@@ -152,6 +191,7 @@ def item_list(request):
             "low_only": stock == "below",
             "show_archived": show_archived,
             "categories": categories,
+            "sections": sections,
             "total": total,
             "shown": len(items),
             "item_total": Item.objects.filter(is_archived=False).count(),

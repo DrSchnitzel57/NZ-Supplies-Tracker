@@ -154,6 +154,12 @@ try {
         throw 'The app''s scheduled task is missing; run install.ps1 -Repair first.'
     }
     $settings = Import-MtcSettings -Path (Join-Path $S.Root 'settings.env')
+    if (-not (Get-MtcSetting $settings 'DJANGO_TIME_ZONE' '')) {
+        # Installs from before 1.0.3 showed New Zealand time whatever the PC's clock said.
+        Set-MtcSettingValues -Path (Join-Path $S.Root 'settings.env') -Values @{ 'DJANGO_TIME_ZONE' = (Get-MtcLocalTimeZone) }
+        $settings = Import-MtcSettings -Path (Join-Path $S.Root 'settings.env')
+        Write-MtcOk ('Times will show in this PC''s time zone (' + (Get-MtcSetting $settings 'DJANGO_TIME_ZONE' '') + ')')
+    }
     Assert-MtcSettingsUsable $settings
     $S.OldVersion = Get-MtcReleaseVersion -Release $S.OldRelease
     $S.OldPrevious = Get-MtcPreviousRelease -Root $S.Root
@@ -248,10 +254,18 @@ try {
     }
     Copy-MtcLauncher -Root $S.Root -Release $S.NewRelease
     try {
+        Register-MtcControlTasks -Root $S.Root
+    } catch {
+        Write-MtcWarn ('Could not set up the tray icon controls (' + $_.Exception.Message + '); run: mtc repair')
+    }
+    try {
         Install-MtcShortcuts -Root $S.Root -HostAddress (Get-MtcSetting $settings 'APP_HOST' '') `
             -Port (Get-MtcSetting $settings 'APP_PORT' '') -Version $S.NewVersion `
             -BackupDir (Get-MtcBackupDir -Settings $settings -Root $S.Root) -Release $S.NewRelease | Out-Null
-        Write-MtcOk 'Start menu > MTC Supplies shortcuts and connection details updated'
+        Write-MtcOk 'Start menu > MTC Supplies shortcuts, tray icon and connection details updated'
+        if (-not ([Security.Principal.WindowsIdentity]::GetCurrent()).IsSystem) {
+            Start-MtcTrayForUser -Shortcut (Join-Path (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $MtcShortcutFolderName) 'MTC Supplies tray icon.lnk')
+        }
     } catch {
         Write-MtcWarn ('Could not update the Start menu shortcuts (' + $_.Exception.Message + ')')
     }

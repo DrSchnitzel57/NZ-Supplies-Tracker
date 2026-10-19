@@ -1,0 +1,8 @@
+<tr data-stock-wrap class="{% if variant_of %}variant-row {% endif %}{% if item.on_hand <= item.low_threshold %}is-low{% endif %}"{% if variant_of %} data-group="{{ variant_of }}" hidden{% endif %}>
+<td data-label="Item"><a href="/inventory/{{ item.pk }}/?return_to={{ request.get_full_path|urlencode }}">{{ item.name }}</a>{% if show_category %}<small>{{ item.category }}</small>{% endif %}{% if item.is_archived %} <span class="tag">Archived</span>{% endif %}</td>
+<td data-label="Size">{{ item.size|default:"—" }}</td>
+<td data-label="Available" class="r tnum stock-num" data-available-for="{{ item.pk }}">{{ item.on_hand }}</td>
+<td data-label="Stock level"><span data-stock-status="{{ item.pk }}" class="chip {% if item.on_hand == 0 %}crit{% elif item.on_hand <= item.low_threshold %}warn{% else %}ok{% endif %}">{% if item.on_hand == 0 %}Out of stock{% elif item.on_hand <= item.low_threshold %}Low stock{% else %}Available{% endif %}</span><small>alert at {{ item.low_threshold }}</small></td>
+<td data-label="Given out" class="r tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</td>
+<td class="actions"><div class="btn-row"><a class="btn small" data-panel href="/inventory/{{ item.pk }}/stock/">Add stock</a><a class="btn small ghost" data-panel href="/inventory/{{ item.pk }}/count/">Count</a><a class="btn small ghost" data-panel href="/inventory/{{ item.pk }}/edit/">Edit</a></div></td>
+</tr>

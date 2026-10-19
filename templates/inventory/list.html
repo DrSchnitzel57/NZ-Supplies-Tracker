@@ -22,23 +22,44 @@
     {% if filters_on %}<a class="btn ghost" href="/inventory/">Clear</a>{% endif %}
   </div>
 </form>
+{% if sections is not None %}
+{% if sections %}<div class="inv-sections-tools"><button type="button" class="small ghost" data-categories="collapse">Collapse all</button><button type="button" class="small ghost" data-categories="expand">Expand all</button></div>{% endif %}
+{% for section in sections %}
+<details class="inv-cat" data-category="{{ section.name }}"{% if not filters_on %} data-remember{% endif %} open>
+<summary><span class="inv-cat-name">{{ section.name }}</span><span class="inv-cat-meta">{{ section.lines }} line{{ section.lines|plural }}{% if section.attention %} <span class="chip warn">{{ section.attention }} to reorder</span>{% endif %}</span>{% include "components/icon.html" with name="chevron" %}</summary>
+<div class="tablewrap"><table class="records-table inv-table">
+<thead><tr><th>Item</th><th>Size</th><th class="r">Available</th><th>Stock level</th><th class="r">Given out</th><th><span class="sr-only">Actions</span></th></tr></thead>
+<tbody>
+{% for group in section.groups %}
+{% if group.folded %}
+<tr class="group-head">
+<td data-label="Item"><button type="button" class="group-name" data-group-toggle="{{ group.key }}" aria-expanded="false">{% include "components/icon.html" with name="chevron" %}<span>{{ group.name }}</span></button><small>{{ group.variants|length }} sizes</small></td>
+<td data-label="Sizes"><div class="size-strip">{% for v in group.variants %}<span class="size-chip{% if v.on_hand <= 0 %} out{% elif v.on_hand <= v.low_threshold %} low{% endif %}" title="{{ v.size }}: {{ v.on_hand }} available">{{ v.size|default:"No size" }} <b data-available-for="{{ v.pk }}">{{ v.on_hand }}</b></span>{% endfor %}</div></td>
+<td data-label="Available" class="r tnum">{{ group.available }}</td>
+<td data-label="Stock level">{% if group.out %}<span class="chip crit">{{ group.out }} out</span> {% endif %}{% if group.low %}<span class="chip warn">{{ group.low }} low</span>{% endif %}{% if not group.out and not group.low %}<span class="chip ok">All in stock</span>{% endif %}</td>
+<td data-label="Given out" class="r tnum">{{ group.given }}</td>
+<td class="actions"><button type="button" class="small" data-group-toggle="{{ group.key }}" aria-expanded="false">Show sizes</button></td>
+</tr>
+{% for item in group.variants %}{% include "inventory/_row.html" with variant_of=group.key %}{% endfor %}
+{% else %}
+{% for item in group.variants %}{% include "inventory/_row.html" %}{% endfor %}
+{% endif %}
+{% endfor %}
+</tbody>
+</table></div>
+</details>
+{% empty %}<div class="card"><div class="empty"><strong>No items found</strong>Try a different search, or <a href="/inventory/">clear the filters</a>.</div></div>
+{% endfor %}
+{% else %}
 <div class="tablewrap"><table class="records-table">
 <thead><tr><th>Item</th><th>Size</th><th class="r">Available</th><th>Stock level</th><th class="r">Given out</th><th><span class="sr-only">Actions</span></th></tr></thead>
 <tbody>
-{% for item in items %}
-{% if sort == 'category' %}{% ifchanged item.category %}<tr class="group-row"><th colspan="6" scope="rowgroup">{{ item.category }}</th></tr>{% endifchanged %}{% endif %}
-<tr data-stock-wrap class="{% if item.on_hand <= item.low_threshold %}is-low{% endif %}">
-<td data-label="Item"><a href="/inventory/{{ item.pk }}/?return_to={{ request.get_full_path|urlencode }}">{{ item.name }}</a>{% if sort != 'category' %}<small>{{ item.category }}</small>{% endif %}{% if item.is_archived %} <span class="tag">Archived</span>{% endif %}</td>
-<td data-label="Size">{{ item.size|default:"—" }}</td>
-<td data-label="Available" class="r tnum stock-num" data-available-for="{{ item.pk }}">{{ item.on_hand }}</td>
-<td data-label="Stock level"><span data-stock-status="{{ item.pk }}" class="chip {% if item.on_hand == 0 %}crit{% elif item.on_hand <= item.low_threshold %}warn{% else %}ok{% endif %}">{% if item.on_hand == 0 %}Out of stock{% elif item.on_hand <= item.low_threshold %}Low stock{% else %}Available{% endif %}</span><small>alert at {{ item.low_threshold }}</small></td>
-<td data-label="Given out" class="r tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</td>
-<td class="actions"><div class="btn-row"><a class="btn small" data-panel href="/inventory/{{ item.pk }}/stock/">Add stock</a><a class="btn small ghost" data-panel href="/inventory/{{ item.pk }}/count/">Count</a><a class="btn small ghost" data-panel href="/inventory/{{ item.pk }}/edit/">Edit</a></div></td>
-</tr>
+{% for item in items %}{% include "inventory/_row.html" with show_category=True %}
 {% empty %}<tr><td colspan="6"><div class="empty"><strong>No items found</strong>Try a different search, or <a href="/inventory/">clear the filters</a>.</div></td></tr>
 {% endfor %}
 </tbody>
 </table></div>
+{% endif %}
 {% include "components/pagination.html" %}
 <p class="help">“Given out” counts current issues only — undone issues are excluded. Use <strong>Count</strong> after a stocktake; it records the difference with your reason and never invents issues.</p>
 {% endblock %}

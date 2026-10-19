@@ -375,3 +375,90 @@ class SystemStatusTests(TestCase):
         staff, pw = make_staff()
         self.client.login(username=staff.username, password=pw)
         self.assertEqual(self.client.get("/admin-area/status/").status_code, 403)
+
+
+class Version103Tests(TestCase):
+    """Inventory folding, tidier reports, back links, accounts next steps."""
+
+    def setUp(self):
+        self.staff, pw = make_staff()
+        self.client.login(username=self.staff.username, password=pw)
+
+    def test_sizes_fold_under_one_row_inside_collapsible_categories(self):
+        for size, qty in (("32", 2), ("30", 0), ("34", 5)):
+            make_item(self.staff, category="Clothing", name="Belt", size=size, opening_qty=qty)
+        make_item(self.staff, category="Hygiene", name="Soap", opening_qty=9)
+        page = self.client.get("/inventory/")
+        sections = page.context["sections"]
+        self.assertEqual([s["name"] for s in sections], ["Clothing", "Hygiene"])
+        belt = sections[0]["groups"][0]
+        self.assertTrue(belt["folded"])
+        self.assertEqual([v.size for v in belt["variants"]], ["30", "32", "34"])
+        self.assertEqual((belt["available"], belt["out"]), (7, 1))
+        self.assertContains(page, 'class="inv-cat"', count=2)
+        self.assertContains(page, "Show sizes")
+        self.assertContains(page, 'data-group="', count=3)
+        self.assertFalse(sections[1]["groups"][0]["folded"])
+        # A search shows matching sizes directly instead of folding them.
+        searched = self.client.get("/inventory/", {"q": "belt 32"})
+        self.assertFalse(any(g["folded"] for s in searched.context["sections"] for g in s["groups"]))
+        # Other sort orders keep the flat, paginated table.
+        flat = self.client.get("/inventory/", {"sort": "stock"})
+        self.assertIsNone(flat.context["sections"])
+
+    def test_detail_pages_offer_a_real_back_link(self):
+        item = make_item(self.staff, opening_qty=1)
+        self.assertContains(self.client.get(f"/inventory/{item.pk}/"), "data-back>← Back</a>")
+        person = make_missionary(self.staff)
+        self.assertContains(self.client.get(f"/roster/{person.pk}/"), "data-back>← Back</a>")
+
+    def test_reorder_email_and_wide_reports(self):
+        low = make_item(self.staff, name="Soap", opening_qty=1)
+        Item.objects.filter(pk=low.pk).update(low_threshold=5)
+        report = self.client.get("/reports/", {"family": "low-stock"})
+        self.assertIn("Soap: 1 left", report.context["low_text"])
+        self.assertNotIn("alert at", report.context["low_text"])
+        make_missionary(self.staff)
+        roster = self.client.get("/reports/", {"family": "roster"})
+        self.assertNotIn("Id", roster.context["headings"])
+        self.assertIn("Missionary ID", roster.context["headings"])
+        self.assertContains(roster, 'class="report-table"')
+        self.assertContains(roster, "Scroll sideways")
+
+    def test_time_zone_comes_from_the_environment(self):
+        import subprocess
+        import sys
+
+        code = "import django,os;os.environ['DJANGO_SETTINGS_MODULE']='config.settings';django.setup();" \
+               "from django.conf import settings;print(settings.TIME_ZONE)"
+        for value, expected in (("America/Denver", "America/Denver"), ("Not/AZone", "Pacific/Auckland"),
+                                ("", "Pacific/Auckland")):
+            env = {**__import__("os").environ, "DJANGO_TIME_ZONE": value}
+            out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True)
+            self.assertEqual(out.stdout.strip(), expected)
+
+
+class AccountNextStepsTests(TestCase):
+    def test_confirm_first_then_create_then_clear_next_steps(self):
+        import time
+
+        admin, pw = make_admin()
+        self.client.login(username=admin.username, password=pw)
+        page = self.client.get("/accounts/users/")
+        self.assertContains(page, "Confirm your password to add or change accounts")
+        self.assertNotContains(page, 'name="username"')
+        session = self.client.session
+        session["admin_reauth"] = {"at": time.time(), "user_id": admin.pk, "pwd": admin.password}
+        session.save()
+        self.assertContains(self.client.get("/accounts/users/"), 'name="username"')
+        response = self.client.post("/accounts/users/create/", {
+            "display_name": "Sister Synthetic", "username": "sister.synthetic", "password": "TempPass123!"})
+        from django.contrib.auth import get_user_model
+        new = get_user_model().objects.get(username="sister.synthetic")
+        self.assertEqual(response.url, f"/accounts/users/?created={new.pk}#account-{new.pk}")
+        page = self.client.get(response.url)
+        self.assertContains(page, "Next steps for Sister Synthetic")
+        self.assertContains(page, "<code>sister.synthetic</code>", html=False)
+        self.assertContains(page, "http://testserver/")
+        self.assertContains(page, f'id="account-{new.pk}" class="just-added"')
+        self.assertNotContains(page, "TempPass123!")

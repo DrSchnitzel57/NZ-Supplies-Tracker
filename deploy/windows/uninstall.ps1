@@ -62,6 +62,7 @@ try {
             Write-MtcOk ('Removed task ' + $name)
         }
     }
+    Unregister-MtcControlTasks
     Stop-MtcStrayProcesses -Root $Root -Port $MtcAppPort -ImageName 'caddy'
 
     Write-MtcStep 'Removing the Start menu, desktop and Settings > Apps entries'

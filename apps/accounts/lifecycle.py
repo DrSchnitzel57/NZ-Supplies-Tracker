@@ -158,7 +158,7 @@ def invalidate_sessions(user) -> int:
 
 
 def set_display_name(*, actor, user_id, display_name: str):
-    """Admin-only: the name shown to colleagues ("Sister Langkilde")."""
+    """Admin-only: the name shown to colleagues ("Sister Walker")."""
     permissions.require_admin(actor)
     user = User.objects.get(pk=user_id)
     user.display_name = (display_name or "").strip()[:80]

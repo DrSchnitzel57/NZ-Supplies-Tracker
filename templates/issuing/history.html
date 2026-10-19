@@ -29,8 +29,8 @@
 <tr>
 <td data-label="When" class="nowrap">{{ issue.issued_at|when }}</td>
 <td data-label="Person"><a href="/roster/{{ issue.missionary_id }}/">{{ issue|person_name }}</a><small>{{ issue.missionary_external_id }}</small></td>
-<td data-label="Items">{% for line in issue.lines.all %}{{ line|line_label }} × {{ line.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if issue.note %}<small>Note: {{ issue.note }}</small>{% endif %}</td>
-<td data-label="Given by">{{ issue|staff_name }}</td>
+<td data-label="Items">{% for line in issue.lines.all %}<span class="line-item">{{ line|line_label }} × {{ line.quantity }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}{% if issue.note %}<small>Note: {{ issue.note }}</small>{% endif %}</td>
+<td data-label="Given by" class="nowrap">{{ issue|staff_name }}</td>
 <td data-label="Status">{% if issue.status == "REVERSED" %}<span class="badge-reversed">Undone</span>{% else %}<span class="badge-ok">Current</span>{% endif %}</td>
 <td class="actions"><a href="/issue/{{ issue.pk }}/">Open</a></td>
 </tr>

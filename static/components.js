@@ -178,3 +178,54 @@
     });
   });
 })();
+
+// "← Back" on detail pages returns to wherever you came from (Overview, a
+// filtered list, search...) when that was a page of this app; opened directly,
+// the link's own address (the section) is used instead.
+document.addEventListener("click", function (event) {
+  var link = event.target && event.target.closest ? event.target.closest("a[data-back]") : null;
+  if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  try {
+    var from = document.referrer ? new URL(document.referrer) : null;
+    if (from && from.origin === location.origin && from.href !== location.href && window.history.length > 1) {
+      event.preventDefault();
+      window.history.back();
+    }
+  } catch (err) { /* fall back to the link */ }
+});
+
+// Inventory: sizes of one item fold under a single row; categories collapse.
+document.addEventListener("click", function (event) {
+  var toggle = event.target && event.target.closest ? event.target.closest("[data-group-toggle]") : null;
+  if (!toggle) return;
+  var key = toggle.getAttribute("data-group-toggle");
+  var open = toggle.getAttribute("aria-expanded") !== "true";
+  document.querySelectorAll('tr[data-group="' + key + '"]').forEach(function (row) { row.hidden = !open; });
+  document.querySelectorAll('[data-group-toggle="' + key + '"]').forEach(function (button) {
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!button.classList.contains("group-name")) button.textContent = open ? "Hide sizes" : "Show sizes";
+  });
+});
+(function () {
+  // Remembered only on the plain list: a search or filter always shows its results.
+  var sections = Array.prototype.slice.call(document.querySelectorAll("details.inv-cat[data-remember]"));
+  if (!sections.length) return;
+  var KEY = "mtc-inventory-collapsed";
+  function read() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
+  function save() {
+    var closed = sections.filter(function (s) { return !s.open; }).map(function (s) { return s.getAttribute("data-category"); });
+    try { localStorage.setItem(KEY, JSON.stringify(closed)); } catch (e) { /* storage unavailable: still works, just not remembered */ }
+  }
+  var closed = read();
+  sections.forEach(function (section) {
+    if (closed.indexOf(section.getAttribute("data-category")) !== -1) section.open = false;
+    section.addEventListener("toggle", save);
+  });
+  document.querySelectorAll("[data-categories]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var expand = button.getAttribute("data-categories") === "expand";
+      sections.forEach(function (section) { section.open = expand; });
+      save();
+    });
+  });
+})();

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ person.display_name }} — MTC Supplies{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="{{ return_to }}">← Missionaries</a></p>
+<p class="crumbs"><a href="{{ return_to }}" data-back>← Back</a></p>
 <div class="page-head">
   <div class="profile-head">
     <span class="avatar" aria-hidden="true">{{ person.display_name|initials }}</span>

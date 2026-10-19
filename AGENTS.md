@@ -22,6 +22,9 @@ roadmap: `docs/history/`.
 
 - Work directly on `main` (the owner prefers it to side branches). This
   environment cannot push; the owner pushes from their PC.
+- Bumping `VERSION` and pushing to `main` publishes an update: Windows tray
+  icons offer it and install it via the "MTC Supplies - Update (tray)" task.
+  Bump it for every change meant for the MTC; never push a lower one.
 - Run suites **serially** (they share the file-backed test DB
   `.local/test_db.sqlite3`): `manage.py test --noinput`, then
   `pytest tests/browser`, then `pytest tests/deployment` (needs Docker).

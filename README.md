@@ -65,7 +65,9 @@ stock and three weeks of history. It refuses to run if any real data exists.
 
 ### Updating
 
-Windows: extract the new release and double-click `deploy\windows\update.cmd`.
+Windows: right-click the tray icon and choose **Check for updates** (it pulls
+the newest version from this repository), or extract a new release and
+double-click `deploy\windows\update.cmd`.
 It backs up first, pauses saving for a few minutes and puts the old version
 back by itself if anything fails. Docker: see
 [Operations](docs/OPERATIONS.md#updates-controlled-brief-interruption).

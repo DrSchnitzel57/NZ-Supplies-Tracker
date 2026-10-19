@@ -14,6 +14,11 @@ from apps.transfers import services as transfer_services
 from apps.reports.filters import REPORT_CHOICES, REPORT_DESCRIPTIONS, ReportFilters
 from apps.common.pagination import paginate
 
+SCREEN_HIDDEN = {'id', 'intake_metadata', 'source_remaining', 'source_corrected'}
+SCREEN_HEADINGS = {'given_out_net': 'Given out (net)', 'external_id': 'Missionary ID', 'title_prefix': 'Title',
+                   'arrival_status': 'Arrived', 'alert_level': 'Alert level', 'personal_email': 'Personal email',
+                   'departure_date': 'Leaves the MTC', 'arrival_date': 'Arrived on', 'release_date': 'Release date'}
+
 
 @staff_required
 def report_home(request):
@@ -31,20 +36,25 @@ def report_home(request):
         label, number = ('category', 'given_out_net') if family == 'category' else ('arrival_status', 'people')
         maximum = max((row[number] for row in rows), default=1) or 1
         summary = [{'label': row[label], 'value': row[number], 'width': round(row[number] / maximum * 100)} for row in rows]
+    # Internal record IDs and raw import extras are for the CSV, not the screen.
+    shown = [field for field in fields if field not in SCREEN_HIDDEN]
     low_text = ''
     if valid and family == 'low-stock':
         sections = []
         for status in ('Running low', 'Ran out', 'Never stocked'):
             group = [row for row in rows if row['status'] == status]
             if group:
+                # Short lines for an email: how many are left only where some are.
                 sections.append(f"{status} ({len(group)}):\n" + '\n'.join(
-                    f"• {row['item']}: {row['available']} left (alert at {row['alert_level']})" for row in group))
+                    f"• {row['item']}: {row['available']} left" if status == 'Running low' else f"• {row['item']}"
+                    for row in group))
         low_text = 'Supplies to reorder — MTC\n\n' + '\n\n'.join(sections)
     return render(request, 'reports/home.html', {
         'family': family, 'families': REPORT_CHOICES, 'form': form, 'report_title': title,
         'report_description': REPORT_DESCRIPTIONS.get(family, ''),
-        'headings': ['Given out (net)' if field == 'given_out_net' else field.replace('_', ' ').capitalize() for field in fields],
-        'report_rows': [[row.get(field, '') for field in fields] for row in page],
+        'headings': [SCREEN_HEADINGS.get(field, field.replace('_', ' ').capitalize()) for field in shown],
+        'report_rows': [[row.get(field, '') for field in shown] for row in page],
+        'hidden_columns': len(fields) - len(shown),
         'filters_query': query, 'filters_valid': valid, 'summary': summary, 'low_text': low_text,
         'mail_url': 'mailto:?subject=' + quote('MTC supplies to reorder') + '&body=' + quote(low_text),
         **pagination}, status=200 if valid else 400)

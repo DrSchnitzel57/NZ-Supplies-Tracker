@@ -297,8 +297,33 @@ function New-MtcSecretKey {
     return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
 
+# Windows time zone IDs -> the IANA names Python uses. The likely ones for
+# the MTC (and for trying it out in the US); anything else means NZ time.
+$MtcTimeZoneMap = @{
+    'New Zealand Standard Time' = 'Pacific/Auckland'; 'Chatham Islands Standard Time' = 'Pacific/Chatham'
+    'Tonga Standard Time' = 'Pacific/Tongatapu'; 'Samoa Standard Time' = 'Pacific/Apia'; 'Fiji Standard Time' = 'Pacific/Fiji'
+    'AUS Eastern Standard Time' = 'Australia/Sydney'; 'E. Australia Standard Time' = 'Australia/Brisbane'
+    'Cen. Australia Standard Time' = 'Australia/Adelaide'; 'W. Australia Standard Time' = 'Australia/Perth'
+    'Tasmania Standard Time' = 'Australia/Hobart'; 'West Pacific Standard Time' = 'Pacific/Port_Moresby'
+    'Central Pacific Standard Time' = 'Pacific/Guadalcanal'; 'Hawaiian Standard Time' = 'Pacific/Honolulu'
+    'Pacific Standard Time' = 'America/Los_Angeles'; 'Mountain Standard Time' = 'America/Denver'
+    'US Mountain Standard Time' = 'America/Phoenix'; 'Central Standard Time' = 'America/Chicago'
+    'Eastern Standard Time' = 'America/New_York'; 'Alaskan Standard Time' = 'America/Anchorage'
+    'GMT Standard Time' = 'Europe/London'; 'UTC' = 'UTC'
+}
+
+function ConvertTo-MtcIanaTimeZone {
+    param([string]$WindowsId)
+    if ($WindowsId -and $MtcTimeZoneMap.ContainsKey($WindowsId)) { return $MtcTimeZoneMap[$WindowsId] }
+    return 'Pacific/Auckland'
+}
+
+function Get-MtcLocalTimeZone {
+    try { return (ConvertTo-MtcIanaTimeZone -WindowsId ([System.TimeZoneInfo]::Local.Id)) } catch { return 'Pacific/Auckland' }
+}
+
 function New-MtcSettingsText {
-    param([string]$Root, [string]$HostAddress, [int]$Port, [string]$SecretKey)
+    param([string]$Root, [string]$HostAddress, [int]$Port, [string]$SecretKey, [string]$TimeZone = 'Pacific/Auckland')
     $data = $Root + '\data'
     $lines = @(
         '# MTC Supplies Tracker - settings for this computer (KEY=VALUE, one per line).',
@@ -313,6 +338,8 @@ function New-MtcSettingsText {
         ('MTC_BACKUP_DIR=' + $data + '\backups'),
         ('APP_HOST=' + $HostAddress),
         ('APP_PORT=' + $Port),
+        '# Times in the app are shown in this time zone (taken from this PC''s clock).',
+        ('DJANGO_TIME_ZONE=' + $TimeZone),
         '# APP_VERSION is read from each release''s VERSION file; do not set it here.'
     )
     return (($lines -join "`r`n") + "`r`n")
@@ -1203,10 +1230,14 @@ function New-MtcConnectionText {
         '  It starts when this PC starts and restarts itself if it stops.',
         '  Health, version and backups: in the app, Administration > System status.',
         '',
+        'TRAY ICON (by the clock; it starts when anyone signs in)',
+        '  Open, start, stop and update MTC Supplies. No administrator rights needed.',
+        '',
         'START MENU > MTC SUPPLIES',
         '  Open MTC Supplies            the app in your browser (also on the desktop)',
+        '  MTC Supplies tray icon       brings the tray icon back if you closed it',
         '  Connection details           this file',
-        '  MTC Supplies admin console   start, stop, restart, backup (asks for admin rights)',
+        '  MTC Supplies admin console   everything else, e.g. backups (asks for admin rights)',
         '',
         ('BACKUPS: ' + $BackupDir + ' (every night at 02:00, kept 30 days).'),
         '  Copy this folder to another drive now and then.',
@@ -1220,7 +1251,7 @@ function New-MtcConnectionText {
 function Get-MtcIconPath {
     # Outside the install folder on purpose: <root> is readable by
     # administrators only, and Explorer draws icons as the signed-in user.
-    return (Join-Path (Join-Path $env:ProgramData $MtcShortcutFolderName) 'mtc-supplies.ico')
+    return (Join-Path (Get-MtcSharedFolder) 'mtc-supplies.ico')
 }
 
 function Set-MtcShortcutRunAsAdmin {
@@ -1262,9 +1293,14 @@ function Install-MtcShortcuts {
     if (Test-Path -LiteralPath $ca -PathType Leaf) { $thumbprint = Get-MtcCertificateThumbprint -Path $ca }
 
     $icon = Get-MtcIconPath
-    New-Item -ItemType Directory -Path (Split-Path -Parent $icon) -Force | Out-Null
-    $iconSource = Join-Path (Join-Path (Join-Path $Release 'deploy') 'windows') 'mtc-supplies.ico'
-    if (Test-Path -LiteralPath $iconSource -PathType Leaf) { Copy-Item -LiteralPath $iconSource -Destination $icon -Force }
+    $shared = Get-MtcSharedFolder
+    New-Item -ItemType Directory -Path $shared -Force | Out-Null
+    $windowsDir = Join-Path (Join-Path $Release 'deploy') 'windows'
+    foreach ($file in @('mtc-supplies.ico', 'mtc-supplies-off.ico', 'tray.ps1')) {
+        $from = Join-Path $windowsDir $file
+        if (Test-Path -LiteralPath $from -PathType Leaf) { Copy-Item -LiteralPath $from -Destination (Join-Path $shared $file) -Force }
+    }
+    Protect-MtcSharedFolder -Path $shared
     $iconLines = ''
     if (Test-Path -LiteralPath $icon -PathType Leaf) { $iconLines = 'IconFile=' + $icon + "`r`nIconIndex=0`r`n" }
 
@@ -1291,6 +1327,20 @@ function Install-MtcShortcuts {
     if ($iconLines) { $link.IconLocation = $icon + ',0' }
     $link.Save()
     Set-MtcShortcutRunAsAdmin -Path $console
+
+    # The tray icon: from the Start menu, and for everyone at sign-in.
+    $tray = Join-Path $shared 'tray.ps1'
+    $trayPowershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $trayArguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $tray + '" -Url "' + $url + '"'
+    foreach ($place in @($folder, [Environment]::GetFolderPath('CommonStartup'))) {
+        $link = $shell.CreateShortcut((Join-Path $place 'MTC Supplies tray icon.lnk'))
+        $link.TargetPath = $trayPowershell
+        $link.Arguments = $trayArguments
+        $link.WindowStyle = 7
+        $link.Description = 'MTC Supplies in the notification area: open, start, stop and update without administrator rights'
+        if ($iconLines) { $link.IconLocation = $icon + ',0' }
+        $link.Save()
+    }
 
     $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     if (-not (Test-Path -LiteralPath $MtcUninstallKey)) { New-Item -Path $MtcUninstallKey -Force | Out-Null }
@@ -1323,12 +1373,121 @@ function Remove-MtcShortcuts {
     $desktop = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'MTC Supplies.url'
     if (Test-Path -LiteralPath $desktop) { Remove-Item -LiteralPath $desktop -Force }
     if (Test-Path -LiteralPath $MtcUninstallKey) { Remove-Item -LiteralPath $MtcUninstallKey -Force }
-    $icon = Get-MtcIconPath
-    if (Test-Path -LiteralPath $icon) { Remove-Item -LiteralPath $icon -Force }
-    $iconFolder = Split-Path -Parent $icon
-    if ((Test-Path -LiteralPath $iconFolder) -and -not (Get-ChildItem -LiteralPath $iconFolder -Force)) {
-        Remove-Item -LiteralPath $iconFolder -Force
+    $startup = Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'MTC Supplies tray icon.lnk'
+    if (Test-Path -LiteralPath $startup) { Remove-Item -LiteralPath $startup -Force }
+    # Close running tray icons (they belong to signed-in users).
+    Get-CimInstance -ClassName Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine.Contains('MTC Supplies\tray.ps1') } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    $shared = Get-MtcSharedFolder
+    if (Test-Path -LiteralPath $shared) {
+        Get-ChildItem -LiteralPath $shared -File -Force | Remove-Item -Force -ErrorAction SilentlyContinue
+        if (-not (Get-ChildItem -LiteralPath $shared -Force)) { Remove-Item -LiteralPath $shared -Force }
     }
+}
+
+# --------------------------------------------- tray icon remote control
+# Like a VPN's tray app talking to its service: installing (as administrator,
+# once) registers three fixed jobs that run as SYSTEM, and lets signed-in
+# users START them (not change them). The tray icon runs as the user and only
+# asks Windows to run one of these jobs.
+$MtcControlTasks = [ordered]@{
+    'start' = 'MTC Supplies - Start (tray)'
+    'stop' = 'MTC Supplies - Stop (tray)'
+    'update-online' = 'MTC Supplies - Update (tray)'
+}
+$MtcUpdateRepo = 'DrSchnitzel57/NZ-Supplies-Tracker'
+$MtcUpdateBranch = 'main'
+
+function Get-MtcUpdateUrls {
+    param([string]$Repo, [string]$Branch)
+    return @{
+        Version = ('https://raw.githubusercontent.com/' + $Repo + '/' + $Branch + '/VERSION')
+        Zip = ('https://github.com/' + $Repo + '/archive/refs/heads/' + $Branch + '.zip')
+    }
+}
+
+function Add-MtcSddlAce {
+    # Adds an access rule to the DACL part of a security descriptor string
+    # (before any SACL part) unless it is already there.
+    param([string]$Sddl, [string]$Ace)
+    if ($Sddl.Contains($Ace)) { return $Sddl }
+    $sacl = $Sddl.IndexOf('S:')
+    if ($sacl -ge 0) { return ($Sddl.Substring(0, $sacl) + $Ace + $Sddl.Substring($sacl)) }
+    return ($Sddl + $Ace)
+}
+
+function Register-MtcControlTasks {
+    param([string]$Root)
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $manage = Join-Path $Root 'current\deploy\windows\manage.ps1'
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $jobSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew
+    $service = New-Object -ComObject Schedule.Service
+    $service.Connect()
+    $folder = $service.GetFolder('\')
+    foreach ($verb in $MtcControlTasks.Keys) {
+        $name = $MtcControlTasks[$verb]
+        $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $manage + '" -Root "' + $Root + '" ' + $verb + ' -Yes'
+        $action = New-ScheduledTaskAction -Execute $powershell -Argument $arguments -WorkingDirectory $Root
+        Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Settings $jobSettings -Force `
+            -Description ('MTC Supplies Tracker: "' + $verb + '" when asked from the tray icon. Users may run it, not change it.') | Out-Null
+        # Builtin Users: read + execute (run on demand) only.
+        $task = $folder.GetTask($name)
+        try {
+            $sddl = $task.GetSecurityDescriptor(0xF)
+        } catch {
+            $sddl = $task.GetSecurityDescriptor(7)  # owner, group and DACL when the SACL can't be read
+        }
+        $task.SetSecurityDescriptor((Add-MtcSddlAce -Sddl $sddl -Ace '(A;;GRGX;;;BU)'), 0)
+    }
+}
+
+function Unregister-MtcControlTasks {
+    foreach ($name in $MtcControlTasks.Values) {
+        if (Get-MtcTask -Name $name) { Unregister-ScheduledTask -TaskName $name -Confirm:$false }
+    }
+}
+
+function Get-MtcSharedFolder {
+    return (Join-Path $env:ProgramData $MtcShortcutFolderName)
+}
+
+function Protect-MtcSharedFolder {
+    # %ProgramData%\MTC Supplies holds the tray script and icons that users
+    # run and see: readable by everyone, changeable only by administrators
+    # and SYSTEM (nobody can swap the script other people start).
+    param([string]$Path)
+    $steps = @(
+        @($Path, '/setowner', '*S-1-5-32-544', '/T', '/C', '/Q'),
+        @($Path, '/reset', '/T', '/C', '/Q'),
+        @($Path, '/inheritance:r', '/grant:r', '*S-1-5-32-544:(OI)(CI)F', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-545:(OI)(CI)RX', '/Q')
+    )
+    foreach ($step in $steps) {
+        $result = Invoke-MtcNative -FilePath 'icacls.exe' -ArgumentList $step -AllowFailure -Quiet
+        if ($result.ExitCode -ne 0) { throw "Could not set access on $Path (icacls exit code $($result.ExitCode))." }
+    }
+}
+
+function Write-MtcUpdateStatus {
+    # Read by the tray icon to show "Updating...", then the result.
+    param([string]$State, [string]$Version = '', [string]$Message = '')
+    try {
+        $path = Join-Path (Get-MtcSharedFolder) 'update-status.txt'
+        $text = 'state=' + $State + "`r`nversion=" + $Version + "`r`nmessage=" + $Message + "`r`nat=" + (Get-Date -Format 's') + "`r`n"
+        Write-MtcTextFile -Path $path -Text $text
+    } catch {
+        Write-MtcLog ('Could not write the update status for the tray icon: ' + $_.Exception.Message)
+    }
+}
+
+function Start-MtcTrayForUser {
+    # Explorer opens the shortcut as the signed-in user (not with this
+    # window's administrator rights), the same as clicking it.
+    param([string]$Shortcut)
+    if (-not (Test-Path -LiteralPath $Shortcut -PathType Leaf)) { return }
+    try { Start-Process -FilePath 'explorer.exe' -ArgumentList ('"' + $Shortcut + '"') } catch { }
 }
 
 function Start-MtcHttpsTask {

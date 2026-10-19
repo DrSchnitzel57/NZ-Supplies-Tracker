@@ -8,6 +8,7 @@
       mtc status                      Tasks, readiness, version, last backup
       mtc start                       Start the app and HTTPS for everyone
       mtc stop                        Stop them until "mtc start" (survives a reboot)
+      mtc update-online               Download the newest version from GitHub and update
       mtc create-admin NAME           Create an administrator (asks for a temporary password)
       mtc recover-admin NAME          Reset an administrator's password (temporary, must change)
       mtc import-original "FILE.html" -Username ADMIN
@@ -40,7 +41,7 @@ function Show-MtcUsage {
     if ($help -and $help.description) {
         $help.description | ForEach-Object { Write-Host $_.Text }
     } else {
-        Write-Host 'Usage: mtc status | start | stop | create-admin NAME | import-original FILE -Username ADMIN | backup | restore FILE | update ZIP | rollback | restart | logs | repair | uninstall | <manage.py command>'
+        Write-Host 'Usage: mtc status | start | stop | update-online | create-admin NAME | import-original FILE -Username ADMIN | backup | restore FILE | update ZIP | rollback | restart | logs | repair | uninstall | <manage.py command>'
     }
 }
 
@@ -151,6 +152,70 @@ function Start-MtcServices {
         (Get-MtcStaffUrl -HostAddress (Get-MtcSetting $Settings 'APP_HOST' '?') -Port (Get-MtcSetting $Settings 'APP_PORT' '?')))
 }
 
+function Invoke-MtcOnlineUpdate {
+    # "Update" in the tray icon (run as SYSTEM) or "mtc update-online":
+    # fetch the newest version from the GitHub repository and run THAT
+    # release's update.ps1 (backup first, automatic rollback on failure).
+    param([string]$Root, $Settings, [string]$Current)
+    $repo = Get-MtcSetting $Settings 'MTC_UPDATE_REPO' $MtcUpdateRepo
+    $branch = Get-MtcSetting $Settings 'MTC_UPDATE_BRANCH' $MtcUpdateBranch
+    $urls = Get-MtcUpdateUrls -Repo $repo -Branch $branch
+    $log = Join-Path $Root 'data\logs\update-online.log'
+    Set-MtcLog -Path $log
+    $running = Get-MtcReleaseVersion -Release $Current
+    Write-MtcStep ('Checking ' + $repo + ' (' + $branch + ') for a newer version than ' + $running)
+    Write-MtcUpdateStatus -State 'checking' -Version $running -Message 'Checking for a newer version'
+    Enable-MtcTls12
+    try {
+        $latest = ([string](Invoke-WebRequest -Uri $urls.Version -UseBasicParsing -TimeoutSec 60).Content).Trim()
+    } catch {
+        Write-MtcUpdateStatus -State 'failed' -Version $running -Message 'Could not reach GitHub. Nothing was changed.'
+        throw ('Could not reach GitHub (' + $_.Exception.Message + '). Nothing was changed.')
+    }
+    if (-not (Test-MtcVersionString $latest)) {
+        Write-MtcUpdateStatus -State 'failed' -Version $running -Message 'GitHub did not return a version number.'
+        throw ('GitHub returned "' + $latest + '" instead of a version number. Nothing was changed.')
+    }
+    if ((Compare-MtcVersion $latest $running) -le 0) {
+        Write-MtcUpdateStatus -State 'current' -Version $running -Message ('Already up to date (' + $running + ')')
+        Write-MtcOk ('Already up to date (' + $running + ')')
+        return 0
+    }
+    Write-MtcUpdateStatus -State 'running' -Version $latest -Message ('Updating to ' + $latest)
+    $work = Join-Path $Root ('data\imports\online-' + $latest + '-' + (New-MtcStamp))
+    $code = 1
+    try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $zip = Join-Path $work 'release.zip'
+        Write-MtcStep ('Downloading ' + $latest)
+        Invoke-MtcDownload -Url $urls.Zip -OutFile $zip
+        Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $work 'src') -Force
+        $release = Find-MtcReleaseRoot -Dir (Join-Path $work 'src')
+        $found = Get-MtcReleaseVersion -Release $release
+        if ($found -ne $latest) { throw ('The download is version ' + $found + ', not ' + $latest + '. Try again in a minute.') }
+        $script = Join-Path $release 'deploy\windows\update.ps1'
+        $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        Write-MtcStep ('Running the ' + $latest + ' updater (details in ' + $log + ')')
+        & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -Root $Root -Yes *>> $log
+        $code = $LASTEXITCODE
+    } catch {
+        Write-MtcUpdateStatus -State 'failed' -Version $running -Message ($_.Exception.Message)
+        throw
+    } finally {
+        if (Test-Path -LiteralPath $work) {
+            try { Remove-MtcTree -Path $work -Root $Root } catch { Write-MtcWarn ('Could not remove ' + $work) }
+        }
+    }
+    if ($code -eq 0) {
+        Write-MtcUpdateStatus -State 'done' -Version $latest -Message ('Updated to ' + $latest)
+        Write-MtcOk ('Updated to ' + $latest)
+    } else {
+        Write-MtcUpdateStatus -State 'failed' -Version $running -Message 'The update did not finish; the previous version was kept or put back.'
+        Write-MtcFail ('The update did not finish (exit code ' + $code + '); see ' + $log)
+    }
+    return $code
+}
+
 function Stop-MtcServices {
     param([string]$Root)
     Write-MtcStep 'Stopping the app and HTTPS for everyone'
@@ -199,6 +264,9 @@ try {
         }
         'stop' {
             Stop-MtcServices -Root $Root
+        }
+        'update-online' {
+            $exitCode = Invoke-MtcOnlineUpdate -Root $Root -Settings $settings -Current $current
         }
         { $_ -eq 'create-admin' -or $_ -eq 'recover-admin' } {
             if ($verbArgs.Count -lt 1) { throw "Usage: mtc $verb NAME" }

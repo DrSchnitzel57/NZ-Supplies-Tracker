@@ -85,7 +85,14 @@
             wrap.classList.toggle("is-low", !!info.low);
           }
         } else {
-          cell.textContent = info.available + (info.low ? " (low)" : "");
+          cell.textContent = info.available;
+          var box = cell.closest(".kpi");
+          if (box) {
+            box.classList.toggle("crit", info.available === 0);
+            box.classList.toggle("warn", info.available !== 0 && !!info.low);
+            var note = box.querySelector("[data-stock-note]");
+            if (note) note.textContent = info.available === 0 ? "Out of stock" : info.low ? "Running low · alert at " + info.low_threshold : "On the shelf";
+          }
         }
       }
     });

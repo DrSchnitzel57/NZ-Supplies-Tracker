@@ -66,14 +66,19 @@ class SearchAndLists(TestCase):
         self.assertEqual(response.context['missionaries'][0].name, 'Synthetic 094')
         for i in range(65):
             make_item(self.staff, category=f'Group {i // 40}', name=f'Synthetic {i:03}')
-        first = self.client.get('/inventory/', {'sort': 'category'})
-        second = self.client.get('/inventory/', {'sort': 'category', 'page': 2})
+        # Other sort orders page through a flat list...
+        first = self.client.get('/inventory/', {'sort': 'name'})
+        second = self.client.get('/inventory/', {'sort': 'name', 'page': 2})
         self.assertEqual(first.context['total'], 65)
         self.assertEqual(second.context['total'], 65)
         a = {i.pk for i in first.context['items']}
         b = {i.pk for i in second.context['items']}
         self.assertFalse(a & b)
-        self.assertContains(second, 'Group')
+        # ...while the category view (1.0.3) shows every line in collapsible sections.
+        grouped = self.client.get('/inventory/', {'sort': 'category'})
+        self.assertEqual(len(grouped.context['items']), 65)
+        self.assertEqual([s['name'] for s in grouped.context['sections']], ['Group 0', 'Group 1'])
+        self.assertContains(grouped, 'Group 1')
 
     def test_batch_view_requires_review_and_retains_all_errors(self):
         row = batch_rows(1)[0]

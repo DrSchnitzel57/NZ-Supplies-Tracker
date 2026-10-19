@@ -41,9 +41,13 @@ on the server unless it says "staff PC".
 
 After the install you'll find:
 
-- **Start menu > MTC Supplies**: *Open MTC Supplies* and *Connection details*
-  (no administrator rights needed), plus *MTC Supplies admin console* for the
-  rare server jobs below (it asks for administrator rights once per window).
+- **A tray icon** by the clock (the "M"; grey when stopped). Click it to open
+  the app; right-click for *Start*, *Stop for everyone*, *Update* and *System
+  status*. None of these ask for administrator rights. It starts when anyone
+  signs in; *Close this icon* only hides it (bring it back from the Start menu).
+- **Start menu > MTC Supplies**: *Open MTC Supplies*, *MTC Supplies tray icon*
+  and *Connection details*, plus *MTC Supplies admin console* for the rare
+  server jobs below (it asks for administrator rights once per window).
 - **MTC Supplies** on the desktop, which opens the app in the browser.
 - **Settings > Apps > MTC Supplies Tracker**, which is where you uninstall it.
 
@@ -151,6 +155,14 @@ command. (`mtc help` lists them all.)
 
 ## Updating to a new version
 
+**From the tray icon (easiest):** right-click the tray icon and choose
+**Check for updates**, then **Update to X.Y.Z**. It downloads the newest
+version from the project's GitHub repository and runs the normal update below
+(backup first, automatic rollback). The tray icon says when it has finished.
+This needs the server to reach github.com; if it can't, use the steps below.
+
+**By hand:**
+
 1. Copy the new release `.zip` to the server, **Extract All**.
 2. In the new folder open `deploy\windows` and double-click **`update.cmd`**.
    (Or: `C:\MTCSupplies\mtc update "C:\path\mtc-supplies-1.0.1.zip"`.)
@@ -174,6 +186,11 @@ will no longer be in the app (a safety copy is kept). Type `RESTORE` to go
 ahead. A rollback can be done once; to move forward again, run the update
 again.
 
+**Publishing an update (for the developer):** raise the number in `VERSION`
+(for example 1.0.3 to 1.0.4) and push to `main`. Tray icons notice within six
+hours, or straight away with *Check for updates*. A push without a higher
+`VERSION` is never offered as an update.
+
 ## Troubleshooting
 
 | Problem | What to do |
@@ -181,6 +198,8 @@ again.
 | Staff PCs cannot open the address at all | On the server run `mtc status`. If the address shown is not the server's current address, run `mtc repair -HostAddress <new address>`. Make sure the office network is set to *Private* in Windows (the installer offers to fix this). |
 | "Your connection isn't private" on a staff PC | That PC does not trust the certificate yet: see *Let staff PCs trust the connection*. (After `mtc repair` with a new address the same certificate stays valid; staff just use the new address.) |
 | "Bad Request (400)" | The address typed is not the one the app was set up with. Use the address from `mtc status`, or `mtc repair -HostAddress ...`. |
+| The tray icon's Start/Stop/Update says Windows would not run it | The tray's permissions were not set up (for example on an install from before 1.0.3 that was updated by hand from an old copy). Run `mtc repair` in the admin console. |
+| Times in the app are off by hours | The app uses this PC's time zone. Check Windows' clock settings, then `mtc restart`. (`DJANGO_TIME_ZONE` in `settings.env` sets it directly.) |
 | Staff are told saving is paused / maintenance | An update or backup is running; wait a few minutes. If it stays like that, run `mtc status`. After an interrupted update run the update again with `-Takeover`, or `mtc rollback -Takeover`. |
 | Nothing answers after a restart of the server | Give it two minutes, then `mtc status`, `mtc restart`, `mtc logs`. |
 | Install or update stops while downloading | Check the internet connection. Behind a proxy, IT must set `HTTPS_PROXY` first. If the network inspects HTTPS, run the install/update again with `-UseSystemCertificates`. |

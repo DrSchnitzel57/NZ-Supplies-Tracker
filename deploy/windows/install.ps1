@@ -355,10 +355,14 @@ try {
         }
     } else {
         Write-MtcTextFile -Path $settingsPath -Text (New-MtcSettingsText -Root $Root -HostAddress $HostAddress `
-                -Port $Port -SecretKey (New-MtcSecretKey))
+                -Port $Port -SecretKey (New-MtcSecretKey) -TimeZone (Get-MtcLocalTimeZone))
         Write-MtcOk 'settings.env created with a new random secret key'
     }
     $settings = Import-MtcSettings -Path $settingsPath
+    if (-not (Get-MtcSetting $settings 'DJANGO_TIME_ZONE' '')) {
+        Set-MtcSettingValues -Path $settingsPath -Values @{ 'DJANGO_TIME_ZONE' = (Get-MtcLocalTimeZone) }
+        $settings = Import-MtcSettings -Path $settingsPath
+    }
     Assert-MtcSettingsUsable $settings
 
     if ($Repair) {
@@ -435,6 +439,7 @@ try {
         Stop-MtcHttpsTask -Root $Root
     }
     Register-MtcTasks -Root $Root
+    Register-MtcControlTasks -Root $Root
     Write-MtcOk ("Tasks: '" + $MtcAppTaskName + "', '" + $MtcHttpsTaskName + "', '" + $MtcBackupTaskName + "' (02:00 daily)")
 
     Write-MtcStep 'Opening the firewall for staff PCs'
@@ -483,7 +488,8 @@ try {
         Install-MtcShortcuts -Root $Root -HostAddress $HostAddress -Port ([string]$Port) -Version $version `
             -BackupDir $backupDir -Release $current | Out-Null
         $shortcutsOk = $true
-        Write-MtcOk 'Start menu > MTC Supplies: Open MTC Supplies, Connection details, admin console'
+        Write-MtcOk 'Start menu > MTC Supplies, the desktop link and the tray icon by the clock'
+        Start-MtcTrayForUser -Shortcut (Join-Path (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $MtcShortcutFolderName) 'MTC Supplies tray icon.lnk')
     } catch {
         Write-MtcWarn ('Could not add the shortcuts (' + $_.Exception.Message + '). The app itself is fine.')
     }
@@ -499,6 +505,7 @@ try {
     Write-Host (' Backups:         ' + $backupDir + '  (daily at 02:00, kept 30 days)')
     Write-Host (' Logs:            ' + $Root + '\data\logs')
     if ($shortcutsOk) {
+        Write-Host ' Tray icon:       by the clock - open, start, stop and update, no admin needed' -ForegroundColor Green
         Write-Host ' Start menu:      MTC Supplies > Open MTC Supplies (and the desktop link)' -ForegroundColor Green
         Write-Host '                  Health and backups: in the app, Administration > System status.' -ForegroundColor Green
         Write-Host '                  These details are saved there too: MTC Supplies > Connection details.' -ForegroundColor Green

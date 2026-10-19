@@ -444,6 +444,40 @@ try {
 } finally {
     Remove-Item -LiteralPath $lnkDir -Recurse -Force
 }
+# Tray icon controls, online update, time zone
+Check ((Add-MtcSddlAce -Sddl 'D:(A;;FA;;;BA)(A;;FA;;;SY)' -Ace '(A;;GRGX;;;BU)') -eq 'D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;BU)') 'users may run the tray jobs'
+Check ((Add-MtcSddlAce -Sddl 'O:BAD:(A;;FA;;;BA)S:(AU;FA;FA;;;WD)' -Ace '(A;;GRGX;;;BU)') -eq 'O:BAD:(A;;FA;;;BA)(A;;GRGX;;;BU)S:(AU;FA;FA;;;WD)') 'rule goes into the DACL, not the SACL'
+Check ((Add-MtcSddlAce -Sddl 'D:(A;;GRGX;;;BU)' -Ace '(A;;GRGX;;;BU)') -eq 'D:(A;;GRGX;;;BU)') 'rule added once'
+Check (((@($MtcControlTasks.Keys)) -join ',') -eq 'start,stop,update-online') 'three fixed tray jobs'
+$updateUrls = Get-MtcUpdateUrls -Repo 'Org/Repo' -Branch 'main'
+Check ($updateUrls.Version -eq 'https://raw.githubusercontent.com/Org/Repo/main/VERSION') 'version check url'
+Check ($updateUrls.Zip -eq 'https://github.com/Org/Repo/archive/refs/heads/main.zip') 'release zip url'
+Check ((ConvertTo-MtcIanaTimeZone 'Mountain Standard Time') -eq 'America/Denver') 'Utah time zone'
+Check ((ConvertTo-MtcIanaTimeZone 'New Zealand Standard Time') -eq 'Pacific/Auckland') 'NZ time zone'
+Check ((ConvertTo-MtcIanaTimeZone 'Unknown Zone') -eq 'Pacific/Auckland') 'unknown zone falls back to NZ'
+$tzSettings = ConvertFrom-MtcSettingsText -Text (New-MtcSettingsText -Root 'C:\MTCSupplies' -HostAddress 'h' -Port 1 -SecretKey $secret -TimeZone 'America/Denver')
+Check ($tzSettings['DJANGO_TIME_ZONE'] -eq 'America/Denver') 'time zone written to settings.env'
+# Pure helpers inside tray.ps1 (the rest needs Windows Forms)
+$trayTokens = $null
+$trayErrors = $null
+$trayAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $windowsDir 'tray.ps1'), [ref]$trayTokens, [ref]$trayErrors)
+foreach ($fn in $trayAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+    if ($fn.Name -in @('Test-MtcTrayNewer', 'Get-MtcTrayUpdateStatus')) { . ([scriptblock]::Create($fn.Extent.Text)) }
+}
+Check (Test-MtcTrayNewer -Candidate '1.0.10' -Running '1.0.9') 'tray compares versions numerically'
+Check (-not (Test-MtcTrayNewer -Candidate '1.0.3' -Running '1.0.3')) 'same version is not an update'
+Check (-not (Test-MtcTrayNewer -Candidate '<html>' -Running '1.0.3')) 'junk is not an update'
+$script:here = Join-Path ([System.IO.Path]::GetTempPath()) ('mtc-tray-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $script:here | Out-Null
+try {
+    Check ((Get-MtcTrayUpdateStatus).state -eq '') 'no status file yet'
+    [System.IO.File]::WriteAllText((Join-Path $script:here 'update-status.txt'), "state=running`r`nversion=1.0.4`r`nmessage=Updating to 1.0.4 = soon`r`n")
+    $trayStatus = Get-MtcTrayUpdateStatus
+    Check ($trayStatus.state -eq 'running' -and $trayStatus.version -eq '1.0.4' -and $trayStatus.message -eq 'Updating to 1.0.4 = soon') 'tray reads the update status'
+} finally {
+    Remove-Item -LiteralPath $script:here -Recurse -Force
+}
+
 Check ((New-MtcConnectionText -Root 'C:\x' -Url 'https://h:1/' -Version '1' -Thumbprint '' -BackupDir 'b').Contains('not created yet')) 'missing thumbprint explained'
 
 if ($failures.Count -gt 0) {

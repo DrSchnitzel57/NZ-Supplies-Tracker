@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Issue to {{ issue|person_name }} — MTC Supplies{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="/issue/history/">← History</a></p>
+<p class="crumbs"><a href="/issue/history/" data-back>← Back</a></p>
 <div class="page-head"><div><span class="eyebrow">Issue record</span><h1>Issue to {{ issue|person_name }}</h1><p class="sub">{{ issue.missionary_external_id }} · given by {{ issue|staff_name }} · {{ issue.issued_at }}</p></div>
 <div class="actions"><a class="btn" href="/roster/{{ issue.missionary_id }}/">View missionary</a>{% if issue.status == "ACTIVE" and not issue.missionary.is_archived %}<a class="btn primary" href="/issue/?missionary={{ issue.missionary_id }}">{% include "components/icon.html" with name="plus" %}Issue more</a>{% endif %}</div></div>
 {% if issue.status == "REVERSED" %}

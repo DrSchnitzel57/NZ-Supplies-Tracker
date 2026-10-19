@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ item.name }}{% if item.size %} ({{ item.size }}){% endif %} — MTC Supplies{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="{{ return_to }}">← Inventory</a> · {{ item.category }}</p>
+<p class="crumbs"><a href="{{ return_to }}" data-back>← Back</a> · {{ item.category }}</p>
 <div class="page-head">
   <div><h1>{{ item.name }}{% if item.size %} <span class="muted" style="font-weight:500">· {{ item.size }}</span>{% endif %}</h1>
   <p class="sub">{{ item.category }} · counted in “{{ item.unit }}” · low-stock alert at {{ item.low_threshold }}{% if item.is_archived %} · <span class="tag">Archived</span>{% endif %}</p></div>
@@ -16,7 +16,7 @@
   </div>
 </div>
 <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-  <div class="kpi {% if item.alert_status == 'out' %}crit{% elif item.alert_status == 'low' %}warn{% endif %}"><div class="lab">Available now</div><div class="big tnum" data-available-for="{{ item.pk }}">{{ item.on_hand }}</div><div class="note">{% if item.alert_status == 'out' %}Out of stock{% elif item.alert_status == 'low' %}Running low — alert at {{ item.low_threshold }}{% else %}On the shelf{% endif %}</div></div>
+  <div class="kpi {% if item.alert_status == 'out' %}crit{% elif item.alert_status == 'low' %}warn{% endif %}"><div class="lab">Available now</div><div class="big tnum" data-available-for="{{ item.pk }}">{{ item.on_hand }}</div><div class="note" data-stock-note>{% if item.alert_status == 'out' %}Out of stock{% elif item.alert_status == 'low' %}Running low · alert at {{ item.low_threshold }}{% else %}On the shelf{% endif %}</div></div>
   <div class="kpi"><div class="lab">Given out</div><div class="big tnum" data-net-for="{{ item.pk }}">{{ item.net_given }}</div><div class="note">In current issues (undone issues excluded)</div></div>
   <div class="kpi"><div class="lab">Count corrections</div><div class="big tnum" data-corrections-for="{{ item.pk }}">{{ item.corrections_total }}</div><div class="note">Net change from stocktakes</div></div>
 </div>

@@ -40,8 +40,11 @@ quantities**, or **Back to my original list**.
 
 ## 3. Add stock or correct a count
 
-In **Inventory**, each row has **Add stock**, **Count** and **Edit**. They open
-in a side panel, so you stay where you were in the list.
+**Inventory** is grouped by category; click a category's heading to fold it
+away. An item that comes in sizes (belts, shirts, shoes) is one row showing
+every size and how many are left; choose **Show sizes** to work with one size.
+Each row has **Add stock**, **Count** and **Edit**. They open in a side panel,
+so you stay where you were in the list.
 
 - **Add stock** – a delivery arrived: enter how many and where they came from.
 - **Count** – the shelf doesn't match: enter what is actually there and why.

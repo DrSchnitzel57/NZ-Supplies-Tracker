@@ -56,8 +56,13 @@ def user_list(request):
 def _user_screen(request, form=None, status=200):
     User = get_user_model()
     users = list(User.objects.order_by("username"))
+    created = None
+    created_id = request.GET.get("created", "")
+    if created_id.isdigit():
+        created = next((u for u in users if u.pk == int(created_id)), None)
     return render(request, "accounts/users.html", {"users": users,
-        "form": form or AdminUserForm(), "fresh": reauth_fresh(request)}, status=status)
+        "form": form or AdminUserForm(), "fresh": reauth_fresh(request), "created": created,
+        "site_address": f"{request.scheme}://{request.get_host()}/"}, status=status)
 
 
 @admin_required
@@ -74,9 +79,8 @@ def user_create(request):
         return _user_screen(request, form=form, status=400)
     messages.success(
         request,
-        f"Created {'an administrator' if user.is_superuser else 'a staff'} account for {user.shown_name} "
-        f"(username {user.username}). They will choose their own password when they first sign in.")
-    return redirect("accounts-users")
+        f"Created {'an administrator' if user.is_superuser else 'a staff'} account for {user.shown_name}.")
+    return redirect(f"/accounts/users/?created={user.pk}#account-{user.pk}")
 
 
 @admin_required

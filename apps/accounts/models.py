@@ -7,7 +7,7 @@ class User(AbstractUser):
 
     must_change_password = models.BooleanField(default=False)
     password_changed_at = models.DateTimeField(null=True, blank=True)
-    # Shown in history and on issue records ("Sister Langkilde"); falls back
+    # Shown in history and on issue records ("Sister Walker"); falls back
     # to the username when blank. Records keep their username snapshot.
     display_name = models.CharField(max_length=80, blank=True, default="")
 

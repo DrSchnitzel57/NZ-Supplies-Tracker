@@ -14,7 +14,15 @@ from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 LANGUAGE_CODE = "en-nz"
-TIME_ZONE = "Pacific/Auckland"
+# The server's own time zone (the Windows installer writes it from the PC's
+# clock settings); New Zealand time when unset or unknown.
+TIME_ZONE = os.environ.get("DJANGO_TIME_ZONE", "").strip() or "Pacific/Auckland"
+try:
+    from zoneinfo import ZoneInfo
+
+    ZoneInfo(TIME_ZONE)
+except Exception:  # unknown name or no time zone data: keep the NZ default
+    TIME_ZONE = "Pacific/Auckland"
 USE_TZ = True
 # Django has no en-NZ formats; ours give "17 Oct 2026, 2:17 PM".
 FORMAT_MODULE_PATH = ["config.formats"]

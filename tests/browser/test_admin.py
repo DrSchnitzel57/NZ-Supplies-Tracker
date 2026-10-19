@@ -9,6 +9,8 @@ from django.contrib.auth import get_user_model
 
 from apps.audit.models import AuditEvent
 from apps.roster.models import Missionary
+from playwright.sync_api import expect
+
 from tests.browser.conftest import assert_no_internet, admin_login, staff_login, tag
 from tests.factories import make_item, make_missionary, make_staff
 
@@ -26,23 +28,25 @@ def test_account_lifecycle_with_fresh_identity(page, live_server, externals):
     admin, pw = admin_login(page, live_server, "life")
     page.goto(f"{live_server.url}/accounts/users/")
     assert "Staff accounts" in page.content()
-    # Account changes need fresh identity: without it nothing is created.
-    page.fill("input[name=username]", "blocked-1")
-    page.fill("input[name=password]", "TempPass123!")
-    with page.expect_navigation():
-        page.click("text=Create account")
-    assert not User.objects.filter(username="blocked-1").exists()
+    # Account changes need fresh identity: the page asks for it first, on the
+    # same screen, so nobody types a new account only to have it dropped.
     assert "Confirm your password" in page.content()
-    # Follow the offered return path, not a manually substituted safe URL.
-    page.fill('input[name=password]', pw)
-    page.click('main button[type=submit]')
+    assert page.locator("input[name=username]").count() == 0
+    page.fill("#reauth-password", pw)
+    with page.expect_navigation():
+        page.click("form[action^='/admin-area/reauth/'] button[type=submit]")
     page.wait_for_url(f'{live_server.url}/accounts/users/')
+    page.fill("input[name=display_name]", "Sister Synthetic")
     page.fill("input[name=username]", "ui-staff-1")
-    page.fill("input[name=password]", "TempPass123!")
+    page.fill("main form[action='/accounts/users/create/'] input[name=password]", "TempPass123!")
     with page.expect_navigation():
         page.click("text=Create account")
     user = User.objects.get(username="ui-staff-1")
     assert user.must_change_password
+    steps = page.locator(".next-steps").inner_text()
+    assert "Next steps for Sister Synthetic" in steps and "ui-staff-1" in steps and live_server.url in steps
+    assert "TempPass123!" not in page.content()
+    expect(page.locator(f"#account-{user.pk}.just-added")).to_be_visible()
     row = page.locator(f"text={user.username}")
     assert row.count() >= 1
     deactivate = page.locator(f"form[action='/accounts/users/{user.pk}/deactivate/'] button")
