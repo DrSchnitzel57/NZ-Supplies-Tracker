@@ -20,8 +20,8 @@ roadmap: `docs/history/`.
 
 ## Working rules
 
-- Do not implement or commit on `main`; work on a user-approved branch or
-  worktree. Never push.
+- Work directly on `main` (the owner prefers it to side branches). This
+  environment cannot push; the owner pushes from their PC.
 - Run suites **serially** (they share the file-backed test DB
   `.local/test_db.sqlite3`): `manage.py test --noinput`, then
   `pytest tests/browser`, then `pytest tests/deployment` (needs Docker).

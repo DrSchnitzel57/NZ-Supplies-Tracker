@@ -61,7 +61,13 @@ that issue, give a short reason and choose **Undo this issue**. Everything in it
 goes back on the shelf (back to **Available**). The record stays in history,
 marked **Undone**, with who undid it and why. Then issue the right items again.
 
-## 5. Reports
+## 5. Check someone in
+
+When a missionary arrives, open **Missionaries**, set **Arrived** to *Not yet arrived*
+and choose **Check in** on their row (it's also on their page). It marks them
+**Arrived** with today's date. To fix a date or undo it, use **Edit details**.
+
+## 6. Reports
 
 **Reports** has stock on hand, the reorder list, what was given out (by
 missionary, item or category), issue history and arrivals and departures. Choose a report,

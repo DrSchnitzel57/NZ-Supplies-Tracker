@@ -35,8 +35,21 @@ on the server unless it says "staff PC".
      **temporary password**, typed twice. Nothing shows while you type; that
      is normal. You change it at the first sign-in.
    - **Trust the certificate on this PC?** Answer yes.
-5. At the end it prints a green summary with the staff address, where the
-   backups are and the next steps. Keep that window open until you've read it.
+5. At the end it prints a green summary and opens the app in your browser.
+   You don't need to copy anything down: the same details are saved in
+   **Start menu > MTC Supplies > Connection details**.
+
+After the install you'll find:
+
+- **Start menu > MTC Supplies**: *Open MTC Supplies*, *MTC Supplies - Status*,
+  *MTC Supplies - Start*, *MTC Supplies - Stop* and *Connection details*.
+  Status, Start and Stop ask for administrator rights.
+- **MTC Supplies** on the desktop, which opens the app in the browser.
+- **Settings > Apps > MTC Supplies Tracker**, which is where you uninstall it.
+
+The app runs in the background whenever the PC is on, so there is no window to
+keep open. *Stop* keeps it stopped, even after a restart, until you choose
+*Start*.
 
 If anything goes wrong it says so in plain words. Fix the problem (usually
 the internet connection) and double-click `install.cmd` again; it carries on
@@ -68,16 +81,20 @@ before loading the real roster.
 ## Bring in the original tracker's data
 
 Do this **once, before anyone starts entering data** (it only works while the
-app is empty). Put the original `MTC Missionary Supplies Tracker.html` on the
-server, then in an **administrator Command Prompt** (Start, type `cmd`,
-right-click *Command Prompt*, *Run as administrator*):
+app is empty):
 
-```
-C:\MTCSupplies\mtc import-original "C:\Users\me\Desktop\MTC Missionary Supplies Tracker.html" -Username admin
-```
+1. Sign in as the administrator.
+2. Open **Administration > Full data export & import**, and confirm your
+   password if asked.
+3. Under **Load the original tracker**, choose `MTC Missionary Supplies Tracker.html`
+   and click **Import the original tracker**.
 
-It shows only counts (people, items), never names. The HTML file contains
-personal details: keep it somewhere private or delete it afterwards.
+It shows only counts (people, items), never names, and the file is not kept on
+the server. The HTML file contains personal details: keep it somewhere private
+or delete it afterwards.
+
+(The same thing from an administrator Command Prompt:
+`C:\MTCSupplies\mtc import-original "C:\path\MTC Missionary Supplies Tracker.html" -Username admin`.)
 
 ## Let staff PCs trust the connection
 
@@ -109,7 +126,8 @@ command. (`C:\MTCSupplies\mtc help` lists them all.)
 
 | Command | What it does |
 | --- | --- |
-| `mtc status` | Is it running, which version, last backup, free disk space |
+| `mtc status` | Is it running, which version, staff address, last backup, free disk space |
+| `mtc start` / `mtc stop` | Start or stop the app for everyone (stop lasts until start, even after a reboot) |
 | `mtc create-admin NAME` | Make another administrator |
 | `mtc recover-admin NAME` | Forgotten administrator password: set a temporary one |
 | `mtc backup` | Take a backup right now |
@@ -170,11 +188,13 @@ again.
 
 ## Uninstalling
 
+Use **Settings > Apps > MTC Supplies Tracker > Uninstall**, or run
+
 ```
 C:\MTCSupplies\mtc uninstall
 ```
 
-removes the scheduled tasks, firewall rule and program, but **keeps the data**
+Either way it removes the Start menu and desktop shortcuts, the scheduled tasks, firewall rule and program, but **keeps the data**
 (`C:\MTCSupplies\data`, `settings.env`). Installing again into the same folder
 picks it all up. To delete everything, including every backup, add
 `-DeleteData` and type `DELETE` when asked - copy the backups elsewhere first.

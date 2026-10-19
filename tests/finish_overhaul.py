@@ -235,3 +235,114 @@ class DemoDataTests(TestCase):
             self.assertEqual(inv.ledger_balance(item.pk), item.on_hand)
         with self.assertRaises(CommandError):
             call_command("load_demo_data", username=admin.username, verbosity=0)
+
+
+class OriginalHtmlImportTests(TestCase):
+    """Administrators load the old tracker from the browser, not a terminal."""
+
+    def _html(self, roster=2, items=2):
+        import json
+
+        seed = {"missionaries": [{"id": f"SYN-{i}", "name": f"Synthetic, Person {i}", "type": "Elder",
+                                  "arrived": False, "missionArrival": "2026-11-12"} for i in range(roster)],
+                "inventory": [{"cat": "Hygiene", "item": f"Thing {i}", "remain": 3} for i in range(items)]}
+        return f"<html><script>const SEED = {json.dumps(seed)};</script></html>".encode()
+
+    def _login(self, user, pw, reauth=True):
+        import time
+
+        self.client.login(username=user.username, password=pw)
+        if reauth:
+            session = self.client.session
+            session["admin_reauth"] = {"at": time.time(), "user_id": user.pk, "pwd": user.password}
+            session.save()
+
+    def _post(self, data, name="MTC Missionary Supplies Tracker.html"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return self.client.post("/transfers/bundle/import-original/",
+                                {"original": SimpleUploadedFile(name, data, content_type="text/html")},
+                                follow=True)
+
+    def test_admin_uploads_the_original_file_into_an_empty_app(self):
+        admin, pw = make_admin()
+        self._login(admin, pw)
+        self.assertContains(self.client.get("/transfers/bundle/"), 'name="original"')
+        page = self._post(self._html())
+        self.assertContains(page, "Imported the original tracker: 2 missionaries and 2 stock items.")
+        self.assertNotContains(page, "Synthetic, Person")
+        person = Missionary.objects.get(external_id="SYN-0")
+        self.assertEqual(person.departure_date, dt.date(2026, 11, 12))
+        self.assertEqual(person.arrival_status, "expected")
+        self.assertEqual(Item.objects.count(), 2)
+
+    def test_refused_when_not_empty_not_a_tracker_or_not_an_admin(self):
+        admin, pw = make_admin()
+        self._login(admin, pw)
+        page = self._post(b"<html><body>hello</body></html>", name="other.html")
+        self.assertContains(page, "Nothing was imported: no tracker data was found")
+        page = self._post(b"\xff\xfe\x00garbage", name="tracker.html")
+        self.assertContains(page, "Nothing was imported")
+        self.assertEqual(Missionary.objects.count(), 0)
+        make_missionary(admin)
+        page = self._post(self._html())
+        self.assertContains(page, "Nothing was imported")
+        self.assertEqual(Missionary.objects.count(), 1)
+        self.client.logout()
+        staff, spw = make_staff()
+        self.client.login(username=staff.username, password=spw)
+        self.assertEqual(self._post(self._html()).status_code, 403)
+
+    def test_without_fresh_password_confirmation_nothing_is_imported(self):
+        admin, pw = make_admin()
+        self._login(admin, pw, reauth=False)
+        page = self._post(self._html())
+        self.assertContains(page, "Confirm your password")
+        self.assertEqual(Missionary.objects.count(), 0)
+
+
+class CheckInTests(TestCase):
+    """Staff mark arrivals with one click instead of editing the record."""
+
+    def setUp(self):
+        self.staff, pw = make_staff()
+        self.client.login(username=self.staff.username, password=pw)
+
+    def test_check_in_marks_arrived_today_once(self):
+        from apps.audit.models import AuditEvent
+
+        person = make_missionary(self.staff, name="Doorway, Example")
+        person.title_prefix = "Sister"
+        person.arrival_status = "expected"
+        person.save()
+        listing = self.client.get("/roster/", {"arrival": "expected"})
+        self.assertContains(listing, f'action="/roster/{person.pk}/check-in/')
+        self.assertContains(self.client.get(f"/roster/{person.pk}/"), "Check in")
+        page = self.client.post(f"/roster/{person.pk}/check-in/?return_to=/roster/%3Farrival%3Dexpected",
+                                follow=True)
+        self.assertContains(page, "Checked in Sister Doorway: arrived")
+        self.assertEqual(page.redirect_chain[-1][0], "/roster/?arrival=expected")
+        person.refresh_from_db()
+        self.assertTrue(person.arrived)
+        self.assertEqual(person.arrival_date, timezone.localdate())
+        again = self.client.post(f"/roster/{person.pk}/check-in/?from=profile", follow=True)
+        self.assertContains(again, "was already checked in")
+        self.assertEqual(AuditEvent.objects.filter(action="roster.checked_in").count(), 1)
+        self.assertNotContains(self.client.get(f"/roster/{person.pk}/"), f'/roster/{person.pk}/check-in/')
+
+    def test_check_in_keeps_a_recorded_arrival_date_and_rejects_bad_returns(self):
+        person = make_missionary(self.staff, name="Early, Example")
+        person.arrival_date = dt.date(2026, 10, 1)
+        person.save()
+        page = self.client.post(f"/roster/{person.pk}/check-in/?return_to=https://evil.example/", follow=True)
+        self.assertEqual(page.redirect_chain[-1][0], "/roster/")
+        person.refresh_from_db()
+        self.assertEqual(person.arrival_date, dt.date(2026, 10, 1))
+        self.assertTrue(person.arrived)
+        self.assertEqual(self.client.get(f"/roster/{person.pk}/check-in/").status_code, 405)
+        early = make_missionary(self.staff, name="Ahead, Example")
+        early.arrival_date = timezone.localdate() + dt.timedelta(days=3)  # planned, came early
+        early.save()
+        self.client.post(f"/roster/{early.pk}/check-in/")
+        early.refresh_from_db()
+        self.assertEqual(early.arrival_date, timezone.localdate())

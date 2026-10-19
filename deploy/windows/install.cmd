@@ -23,7 +23,9 @@ for %%I in ("%HERE%..\..") do set "MTC_RELEASE=%%~fI"
 "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%HERE%install.ps1"
 set "RC=%ERRORLEVEL%"
 echo.
-pause
+if "%RC%"=="0" echo Everything above is saved: Start menu, MTC Supplies, Connection details.
+echo Press any key to close this window.
+pause >nul
 exit /b %RC%
 
 :elevate

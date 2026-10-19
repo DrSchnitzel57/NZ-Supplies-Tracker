@@ -910,6 +910,10 @@ function Stop-MtcAppTask {
 function Start-MtcAppTask {
     Enable-ScheduledTask -TaskName $MtcAppTaskName | Out-Null
     Start-ScheduledTask -TaskName $MtcAppTaskName
+    # "mtc stop" also disables HTTPS; the app is no use to staff without it
+    # (update and restore start the app this way too).
+    $https = Get-MtcTask -Name $MtcHttpsTaskName
+    if ($null -ne $https -and [string]$https.State -eq 'Disabled') { Start-MtcHttpsTask }
 }
 
 function Stop-MtcHttpsTask {
@@ -1150,6 +1154,135 @@ function Copy-MtcLauncher {
     if (Test-Path -LiteralPath $source -PathType Leaf) {
         Copy-Item -LiteralPath $source -Destination (Join-Path $Root 'mtc.cmd') -Force
     }
+}
+
+# ------------------------------------------ Start menu, desktop, Apps list
+$MtcShortcutFolderName = 'MTC Supplies'
+$MtcUninstallKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MTCSupplies'
+
+function Get-MtcStaffUrl {
+    param([string]$HostAddress, [string]$Port)
+    return ('https://' + $HostAddress + ':' + $Port + '/')
+}
+
+function New-MtcElevatedArguments {
+    # powershell.exe arguments that ask Windows for administrator rights and
+    # then run "<root>\mtc.cmd <verb>" in a console window that waits for a
+    # key before it closes (so the result can be read). Encoded, so an
+    # install folder with spaces or quotes cannot break the command line.
+    param([string]$Root, [string]$Verb)
+    $mtc = $Root.TrimEnd('\') + '\mtc.cmd'
+    $cmdLine = '/c ""' + $mtc + '" ' + $Verb + ' & echo. & pause"'
+    $script = "Start-Process -FilePath `$env:ComSpec -ArgumentList '" + $cmdLine.Replace("'", "''") + "' -Verb RunAs"
+    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($script))
+    return ('-NoProfile -WindowStyle Hidden -EncodedCommand ' + $encoded)
+}
+
+function New-MtcConnectionText {
+    # What the installer prints once at the end, kept as a file people can
+    # open again from the Start menu. Plain ASCII so Notepad shows it as is.
+    param([string]$Root, [string]$Url, [string]$Version, [string]$Thumbprint, [string]$BackupDir)
+    $tp = $Thumbprint
+    if (-not $tp) { $tp = '(not created yet; run "mtc status" later)' }
+    $lines = @(
+        'MTC Supplies Tracker - connection details',
+        ('Version ' + $Version + ', installed in ' + $Root),
+        '',
+        'STAFF ADDRESS',
+        ('  ' + $Url),
+        '  Staff open this in Edge or Chrome. Nothing is installed on their PCs.',
+        '',
+        'REMOVE THE "NOT PRIVATE" WARNING ON A STAFF PC (once per PC)',
+        ('  1. Open ' + $Url + 'ca.crt and save MTC-Supplies-CA.crt.'),
+        '  2. Open the file > Install Certificate > Local Machine > "Place all',
+        '     certificates in the following store" > Trusted Root Certification',
+        '     Authorities > OK > Next > Finish. Then restart the browser.',
+        ('  Thumbprint to check: ' + $tp),
+        '',
+        'START MENU > MTC SUPPLIES',
+        '  Open MTC Supplies       the app in your browser (also on the desktop)',
+        '  MTC Supplies - Status   is it running, version, address, last backup',
+        '  MTC Supplies - Start    start the app for everyone',
+        '  MTC Supplies - Stop     stop it for everyone until you start it again',
+        '  (Status, Start and Stop ask for administrator rights.)',
+        '',
+        ('BACKUPS: ' + $BackupDir + ' (every night at 02:00, kept 30 days).'),
+        '  Copy this folder to another drive now and then.',
+        '',
+        ('ALL COMMANDS (administrator Command Prompt): ' + $Root.TrimEnd('\') + '\mtc.cmd help'),
+        '  Uninstall: Settings > Apps > MTC Supplies Tracker (keeps the data).'
+    )
+    return (($lines -join "`r`n") + "`r`n")
+}
+
+function Install-MtcShortcuts {
+    # Start menu folder (all users), a desktop link to the app, the saved
+    # connection details and an entry under Settings > Apps. Safe to run
+    # again: install, repair and update all call it.
+    param([string]$Root, [string]$HostAddress, [string]$Port, [string]$Version, [string]$BackupDir)
+    $url = Get-MtcStaffUrl -HostAddress $HostAddress -Port $Port
+    $thumbprint = ''
+    $ca = Join-Path $Root 'MTC-Supplies-CA.crt'
+    if (Test-Path -LiteralPath $ca -PathType Leaf) { $thumbprint = Get-MtcCertificateThumbprint -Path $ca }
+    $folder = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $MtcShortcutFolderName
+    New-Item -ItemType Directory -Path $folder -Force | Out-Null
+    # Start from a clean folder so renamed shortcuts from older versions go.
+    Get-ChildItem -LiteralPath $folder -File -ErrorAction SilentlyContinue | Remove-Item -Force
+    $urlText = "[InternetShortcut]`r`nURL=" + $url + "`r`n"
+    Write-MtcTextFile -Path (Join-Path $folder 'Open MTC Supplies.url') -Text $urlText
+    Write-MtcTextFile -Path (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'MTC Supplies.url') -Text $urlText
+    $details = New-MtcConnectionText -Root $Root -Url $url -Version $Version -Thumbprint $thumbprint -BackupDir $BackupDir
+    Write-MtcTextFile -Path (Join-Path $folder 'Connection details.txt') -Text $details
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $shell = New-Object -ComObject WScript.Shell
+    $links = @(
+        @('MTC Supplies - Status', 'status', 'Is it running? Version, staff address and last backup'),
+        @('MTC Supplies - Start', 'start', 'Start the MTC Supplies Tracker for everyone'),
+        @('MTC Supplies - Stop', 'stop', 'Stop the MTC Supplies Tracker for everyone')
+    )
+    foreach ($entry in $links) {
+        $link = $shell.CreateShortcut((Join-Path $folder ($entry[0] + '.lnk')))
+        $link.TargetPath = $powershell
+        $link.Arguments = New-MtcElevatedArguments -Root $Root -Verb $entry[1]
+        $link.Description = $entry[2]
+        $link.IconLocation = $env:ComSpec + ',0'
+        $link.WorkingDirectory = $env:SystemRoot
+        $link.Save()
+    }
+    if (-not (Test-Path -LiteralPath $MtcUninstallKey)) { New-Item -Path $MtcUninstallKey -Force | Out-Null }
+    $values = @{
+        'DisplayName' = 'MTC Supplies Tracker'
+        'DisplayVersion' = $Version
+        'Publisher' = 'NZ MTC supplies (unofficial stop gap)'
+        'InstallLocation' = $Root
+        'DisplayIcon' = $env:ComSpec
+        'URLInfoAbout' = $url
+        'UninstallString' = ('"' + $powershell + '" ' + (New-MtcElevatedArguments -Root $Root -Verb 'uninstall'))
+    }
+    foreach ($key in $values.Keys) {
+        New-ItemProperty -Path $MtcUninstallKey -Name $key -Value $values[$key] -PropertyType String -Force | Out-Null
+    }
+    foreach ($key in @('NoModify', 'NoRepair')) {
+        New-ItemProperty -Path $MtcUninstallKey -Name $key -Value 1 -PropertyType DWord -Force | Out-Null
+    }
+    return $url
+}
+
+function Remove-MtcShortcuts {
+    $folder = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $MtcShortcutFolderName
+    if (Test-Path -LiteralPath $folder) {
+        Get-ChildItem -LiteralPath $folder -Force | Remove-Item -Force
+        Remove-Item -LiteralPath $folder -Force
+    }
+    $desktop = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'MTC Supplies.url'
+    if (Test-Path -LiteralPath $desktop) { Remove-Item -LiteralPath $desktop -Force }
+    if (Test-Path -LiteralPath $MtcUninstallKey) { Remove-Item -LiteralPath $MtcUninstallKey -Force }
+}
+
+function Start-MtcHttpsTask {
+    # "mtc stop" disables the task, so enable it before starting.
+    Enable-ScheduledTask -TaskName $MtcHttpsTaskName | Out-Null
+    Start-ScheduledTask -TaskName $MtcHttpsTaskName
 }
 
 function Split-MtcArguments {

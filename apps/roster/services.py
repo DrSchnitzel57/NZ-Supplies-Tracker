@@ -125,6 +125,41 @@ def archive_missionary(*, actor, missionary_id, expected_version: int | None = N
     return transact(_work)
 
 
+def check_in_missionary(*, actor, missionary_id):
+    """Mark a missionary as arrived at the MTC.
+
+    The arrival date becomes today unless an earlier date is already recorded.
+
+    One click for staff at the door. Returns (missionary, changed); checking
+    in someone who has already arrived changes nothing.
+    """
+    permissions.require_staff(actor)
+    from apps.roster.models import ARRIVED, Missionary
+
+    def _work():
+        assert_writes_allowed()
+        try:
+            obj = Missionary.objects.select_for_update().get(pk=missionary_id)
+        except Missionary.DoesNotExist as exc:
+            raise ValidationError("missionary not found") from exc
+        if obj.is_archived:
+            raise ValidationError("archived missionaries cannot be checked in; reactivate them first")
+        if obj.arrived:
+            return obj, False
+        obj.arrival_status = ARRIVED
+        today = timezone.localdate()
+        # A planned date in the future means they came early: today is the
+        # truth. A past date is kept (staff catching up on yesterday's arrivals).
+        if obj.arrival_date is None or obj.arrival_date > today:
+            obj.arrival_date = today
+        obj.version += 1
+        obj.save()
+        _audit(actor, "roster.checked_in", obj)
+        return obj, True
+
+    return transact(_work)
+
+
 def reactivate_missionary(*, actor, missionary_id):
     permissions.require_staff(actor)
     from apps.roster.models import Missionary

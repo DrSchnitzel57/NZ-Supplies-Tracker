@@ -159,6 +159,34 @@ def import_bundle(*, actor, data: bytes, filename: str = "bundle.zip") -> dict:
         return transact(_work)
 
 
+MAX_ORIGINAL_HTML_BYTES = 20 * 1024 * 1024
+
+
+def import_original_html(*, actor, data: bytes, filename: str) -> dict:
+    """Load the original single-file HTML tracker into an empty app.
+
+    Admin only. The file is read in memory and never stored or executed; only
+    counts are returned or logged. Same all-or-nothing rules as a full import.
+    """
+    from apps.transfers.seed import html_to_bundle
+
+    permissions.require_admin(actor)
+    if len(data) > MAX_ORIGINAL_HTML_BYTES:
+        raise ValidationError("the file is too large (limit 20 MB)")
+    try:
+        html = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValidationError("this is not the original tracker file (it is not a UTF-8 HTML file)") from exc
+    if not operational_empty():
+        raise ValidationError("the app already has data; the original tracker can only be loaded into an empty app")
+    try:
+        bundle, counts = html_to_bundle(html, source=f"seed:{filename}")
+    except ValueError as exc:
+        raise ValidationError(f"no tracker data was found in this file ({exc})") from exc
+    import_bundle(actor=actor, data=bundle, filename=filename)
+    return counts
+
+
 def _parse_dt(raw: str):
     if not raw:
         return None

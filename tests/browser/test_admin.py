@@ -131,12 +131,40 @@ def test_bundle_export_reset_import_round_trip(page, live_server, externals):
     assert Missionary.objects.count() == 0
     page.goto(f"{live_server.url}/transfers/bundle/")
     with page.expect_file_chooser() as chooser:
-        page.click("input[type=file]")
+        page.click("input[name=bundle]")
     chooser.value.set_files(
         {"name": "bundle.zip", "mimeType": "application/zip", "buffer": bundle_bytes})
     with page.expect_navigation():
-        page.click("main button[type=submit]")
+        page.click("form[action='/transfers/bundle/import/'] button[type=submit]")
     assert "Imported bundle" in page.content()
     assert Missionary.objects.filter(external_id=person.external_id).count() == 1
     assert Item.objects.count() == 1
+    assert_no_internet(externals)
+
+
+def test_original_tracker_html_imports_from_the_admin_screen(page, live_server, externals):
+    """No command line needed: an administrator uploads the old HTML file."""
+    import json
+
+    from apps.inventory.models import Item
+
+    admin, pw = admin_login(page, live_server, "orig")
+    seed = {"missionaries": [{"id": f"SYN-{i}", "name": f"Synthetic, Person {i}", "type": "Sister",
+                              "arrived": True} for i in range(3)],
+            "inventory": [{"cat": "Hygiene", "item": "Soap", "remain": 5},
+                          {"cat": "Hygiene", "item": "Lip Balm", "remain": -2}]}
+    html = f"<html><script>const SEED = {json.dumps(seed)};</script></html>".encode()
+    _reauth(page, live_server, pw, "/transfers/bundle/")
+    page.goto(f"{live_server.url}/transfers/bundle/")
+    page.set_input_files("input[name=original]", files=[
+        {"name": "MTC Missionary Supplies Tracker.html", "mimeType": "text/html", "buffer": html}])
+    with page.expect_navigation():
+        page.click("form[action='/transfers/bundle/import-original/'] button[type=submit]")
+    text = page.locator("main").inner_text()
+    assert "Imported the original tracker: 3 missionaries and 2 stock items" in text
+    assert "1 item had a negative count" in text
+    assert "Synthetic" not in page.locator(".messages").inner_text()
+    assert Missionary.objects.count() == 3 and Item.objects.count() == 2
+    page.goto(f"{live_server.url}/transfers/bundle/")
+    assert page.locator("input[name=original]").count() == 0  # only into an empty app
     assert_no_internet(externals)

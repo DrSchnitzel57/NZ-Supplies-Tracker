@@ -402,6 +402,26 @@ foreach ($needle in @('admin off', 'default_sni 192.168.1.10', 'https://192.168.
 }
 Check (-not $caddyText.Contains('root.key')) 'Caddyfile never exposes the CA key'
 
+# Start menu shortcuts and saved connection details
+Check ((Get-MtcStaffUrl -HostAddress '192.168.1.10' -Port '8443') -eq 'https://192.168.1.10:8443/') 'staff url'
+$elevated = New-MtcElevatedArguments -Root "C:\My Apps\O'Brien MTC" -Verb 'status'
+Check ($elevated.StartsWith('-NoProfile -WindowStyle Hidden -EncodedCommand ')) 'elevated launcher is an encoded command'
+$decoded = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($elevated.Split(' ')[-1]))
+Check ($decoded.Contains('-Verb RunAs')) 'launcher asks for administrator rights'
+Check ($decoded.Contains("""C:\My Apps\O''Brien MTC\mtc.cmd"" status & echo. & pause")) 'launcher runs mtc <verb>, quoted, then waits'
+$tokens = $null
+$parseErrors = $null
+[System.Management.Automation.Language.Parser]::ParseInput($decoded, [ref]$tokens, [ref]$parseErrors) | Out-Null
+Check ($parseErrors.Count -eq 0) 'launcher script parses'
+$details = New-MtcConnectionText -Root 'C:\MTCSupplies' -Url 'https://192.168.1.10:8443/' -Version '1.0.1' `
+    -Thumbprint 'ABC123' -BackupDir 'C:\MTCSupplies\data\backups'
+foreach ($needle in @('https://192.168.1.10:8443/', 'https://192.168.1.10:8443/ca.crt', 'ABC123', 'MTC Supplies - Stop',
+        'C:\MTCSupplies\data\backups', 'C:\MTCSupplies\mtc.cmd help', 'Version 1.0.1')) {
+    Check ($details.Contains($needle)) ("connection details contain: " + $needle)
+}
+Check (-not ($details.ToCharArray() | Where-Object { [int]$_ -gt 127 })) 'connection details are plain ASCII'
+Check ((New-MtcConnectionText -Root 'C:\x' -Url 'https://h:1/' -Version '1' -Thumbprint '' -BackupDir 'b').Contains('not created yet')) 'missing thumbprint explained'
+
 if ($failures.Count -gt 0) {
     $failures | ForEach-Object { Write-Output ('FAIL: ' + $_) }
     exit 1

@@ -322,6 +322,9 @@ def test_batch_review_retained_errors_atomic_unknown_success_retry(page, live_se
             route.abort()
         else:
             route.continue_()
+    # Wait until the page's safe-form handler is attached; clicking earlier
+    # submits natively, and the aborted reply then replaces the whole page.
+    expect(page.locator('#batch-form[data-recovery-ready="1"]')).to_have_count(1)
     page.route('**/inventory/batch/', lose_reply)
     page.click('#batch-form button[type=submit]')
     expect(page.locator('#batch-form [role=status]')).to_contain_text('success is not confirmed')

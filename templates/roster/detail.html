@@ -16,6 +16,7 @@
     </div>
   </div>
   <div class="actions">
+    {% if not person.is_archived and not person.arrived %}<form method="post" action="/roster/{{ person.pk }}/check-in/?from=profile" class="inline">{% csrf_token %}<button type="submit">{% include "components/icon.html" with name="check" %}Check in</button></form>{% endif %}
     <a class="btn" href="/roster/{{ person.pk }}/edit/?return_to={{ return_to|urlencode }}">Edit details</a>
     <details class="menu"><summary aria-label="More actions">{% include "components/icon.html" with name="more" %}</summary><div class="menu-list">
       <a href="/issue/history/?missionary={{ person.pk }}">Filter history for this person</a>

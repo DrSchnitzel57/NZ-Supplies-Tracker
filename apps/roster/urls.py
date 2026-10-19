@@ -9,6 +9,7 @@ urlpatterns = [
     path("<uuid:pk>/summary/", views.missionary_summary, name="roster-summary"),
     path("<uuid:pk>/edit/", views.missionary_edit, name="roster-edit"),
     path("<uuid:pk>/archive/", views.missionary_archive, name="roster-archive"),
+    path("<uuid:pk>/check-in/", views.missionary_check_in, name="roster-check-in"),
     path(
         "<uuid:pk>/reactivate/",
         views.missionary_reactivate,

@@ -76,6 +76,33 @@ def bundle_import(request):
     return redirect("dashboard")
 
 
+@admin_required
+@reauth_required
+@require_http_methods(["POST"])
+def original_import(request):
+    upload = request.FILES.get("original")
+    if upload is None:
+        messages.error(request, "Choose the original tracker file (.html) to import.")
+        return redirect("transfers-bundle")
+    if upload.size > transfer_services.MAX_ORIGINAL_HTML_BYTES:
+        messages.error(request, "That file is too large to be the original tracker (limit 20 MB).")
+        return redirect("transfers-bundle")
+    try:
+        counts = transfer_services.import_original_html(
+            actor=request.user, data=upload.read(), filename=upload.name)
+    except (ValueError, DomainError) as exc:
+        messages.error(request, f"Nothing was imported: {exc}")
+        return redirect("transfers-bundle")
+    note = ""
+    if counts["corrections"]:
+        note = (f" {counts['corrections']} item{'s' if counts['corrections'] != 1 else ''} had a negative "
+                "count in the old file and now start at 0 (noted in the audit log).")
+    messages.success(
+        request,
+        f"Imported the original tracker: {counts['roster']} missionaries and {counts['items']} stock items.{note}")
+    return redirect("dashboard")
+
+
 def _import_screen(request, kind: str):
     from apps.accounts import services as permissions
 

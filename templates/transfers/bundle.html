@@ -1,17 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Full data export &amp; import — MTC Supplies{% endblock %}
 {% block content %}
-<div class="page-head"><div><span class="eyebrow">Administration</span><h1>Full data export &amp; import</h1><p class="sub">Move everything — roster, stock, history and audit — in one ZIP file. Used to load the original tracker’s data once, or to hand data to the PowerApp later.</p></div></div>
+<div class="page-head"><div><span class="eyebrow">Administration</span><h1>Full data export &amp; import</h1><p class="sub">Move everything — roster, stock, history and audit — in one ZIP file. Use it to load the original tracker once, to move to a new server, or to hand the data to the Power App later.</p></div></div>
 <div class="banner {% if empty %}info{% else %}warn{% endif %}"><span class="ic">{% include "components/icon.html" with name="info" %}</span><div><h2>{% if empty %}The app is empty — a full import can be loaded{% else %}The app already has data — a full import needs an empty app (use Protected reset first){% endif %}</h2><p>A full import is all-or-nothing: if anything in the file is wrong, nothing is written.</p></div></div>
-<div class="grid two">
+<section class="card" id="original"><div class="hd"><h2>Load the original tracker</h2></div><div class="bd">
+<p style="margin-top:0">Choose the old single-file tracker (<strong>MTC Missionary Supplies Tracker.html</strong>) to bring in its missionaries and stock. Do this once, before anyone starts entering data. Only counts are shown, never names, and the file is not kept on the server.</p>
+{% if empty %}<form method="post" action="/transfers/bundle/import-original/" enctype="multipart/form-data" class="stack">
+{% csrf_token %}
+<label>Original tracker file <input type="file" name="original" accept=".html,.htm,text/html" required></label>
+<div class="form-actions"><button type="submit" class="primary">Import the original tracker</button></div>
+</form>
+<p class="help">Afterwards, delete the HTML file or keep it somewhere private: it contains personal details.</p>
+{% else %}<p class="help">Not available: the app already has data. The original tracker can only be loaded into an empty app.</p>{% endif %}
+</div></section>
+<div class="grid two" style="margin-top:16px">
 <section class="card"><div class="hd"><h2>Export everything</h2></div><div class="bd"><p style="margin-top:0">A ZIP of CSV tables with a checksum manifest. It never contains accounts or passwords.</p><a class="btn primary" href="/transfers/bundle/export/">{% include "components/icon.html" with name="download" %}Download full export (ZIP)</a><p class="help">For everyday spreadsheets and PDFs, use <a href="/reports/">Reports</a>.</p></div></section>
 <section class="card"><div class="hd"><h2>Import a full export</h2></div><div class="bd">
+<p style="margin-top:0">A ZIP made by <strong>Download full export</strong>, for example when moving to a new server.</p>
 <form method="post" action="/transfers/bundle/import/" enctype="multipart/form-data" class="stack">
 {% csrf_token %}
 <label>ZIP file <input type="file" name="bundle" accept=".zip" required></label>
-<div class="form-actions"><button type="submit" class="primary">Import</button></div>
+<div class="form-actions"><button type="submit">Import</button></div>
 </form>
-<p class="help">To load the original HTML tracker, convert it first on the server: <code>manage.py seed_bundle</code> (or <code>mtc import-original</code> on Windows). See the install guide.</p>
 </div></section>
 </div>
 <section class="card" style="margin-top:16px"><div class="hd"><h2>Backups</h2></div><div class="bd">

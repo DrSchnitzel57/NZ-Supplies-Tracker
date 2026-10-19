@@ -28,7 +28,7 @@
 <td data-label="At the MTC">{% if m.arrived %}<span class="chip ok">Arrived</span>{% elif m.arrived is False %}<span class="chip warn">Not yet arrived</span>{% else %}<span class="chip plain">{{ m.arrival_label }}</span>{% endif %}{% if m.arrival_date %}<small>{{ m.arrival_date|day }}</small>{% endif %}</td>
 <td data-label="Leaves" class="nowrap">{% if m.departure_date %}{{ m.departure_date|day }}{% with d=m.departure_date|days_until %}<small{% if d >= 0 and d <= 14 %} style="color:var(--warn);font-weight:600"{% endif %}>{{ m.departure_date|relative_day }}</small>{% endwith %}{% else %}—{% endif %}</td>
 <td data-label="Received" class="r tnum">{% if m.received %}{{ m.received }}{% else %}<span class="muted">0</span>{% endif %}</td>
-<td class="actions">{% if not m.is_archived %}<a class="btn small" href="/issue/?missionary={{ m.pk }}">Issue supplies</a>{% endif %}</td>
+<td class="actions">{% if not m.is_archived %}<div class="btn-row">{% if not m.arrived %}<form method="post" action="/roster/{{ m.pk }}/check-in/?return_to={{ request.get_full_path|urlencode }}" class="inline">{% csrf_token %}<button type="submit" class="small" aria-label="Check in {{ m.display_name }}">Check in</button></form>{% endif %}<a class="btn small" href="/issue/?missionary={{ m.pk }}">Issue supplies</a></div>{% endif %}</td>
 </tr>
 {% empty %}<tr><td colspan="7"><div class="empty"><strong>No missionaries found</strong>Try a different search, or <a href="/roster/">clear the filters</a>.</div></td></tr>
 {% endfor %}

@@ -64,6 +64,14 @@ try {
     }
     Stop-MtcStrayProcesses -Root $Root -Port $MtcAppPort -ImageName 'caddy'
 
+    Write-MtcStep 'Removing the Start menu, desktop and Settings > Apps entries'
+    try {
+        Remove-MtcShortcuts
+        Write-MtcOk 'Shortcuts removed'
+    } catch {
+        Write-MtcWarn ('Could not remove every shortcut (' + $_.Exception.Message + ')')
+    }
+
     Write-MtcStep 'Removing the firewall rule'
     Get-NetFirewallRule -Name $MtcFirewallRuleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     Write-MtcOk 'Firewall rule removed'

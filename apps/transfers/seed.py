@@ -402,3 +402,35 @@ def seed_to_bundle_rows(seed) -> dict:
         "movements": movement_rows, "audits": audit_rows,
         "settings": [], "distributions": list(dists),
     }
+
+
+def html_to_bundle(html: str, *, source: str) -> tuple[bytes, dict]:
+    """Original tracker HTML -> standard bundle ZIP plus counts (never names).
+
+    Shared by the ``seed_bundle`` command and the administrator upload screen.
+    Raises ValueError when the file holds no readable tracker data.
+    """
+    from apps.transfers import bundle as bundle_mod
+
+    seed = extract_seed_json(html)
+    try:
+        rows = seed_to_bundle_rows(seed)
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise ValueError("the tracker data is not in the expected shape") from exc
+    data = bundle_mod.build_bundle(
+        source=source,
+        settings_rows=rows["settings"],
+        roster_rows=rows["roster"],
+        item_rows=rows["items"],
+        issue_rows=rows["issues"],
+        line_rows=rows["lines"],
+        movement_rows=rows["movements"],
+        audit_rows=rows["audits"],
+    )
+    counts = {
+        "roster": len(rows["roster"]),
+        "items": len(rows["items"]),
+        "corrections": sum(1 for r in rows["items"] if r.get("source_corrected") == "true"),
+        "distributions": len(rows["distributions"]),
+    }
+    return data, counts

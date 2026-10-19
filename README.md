@@ -48,11 +48,12 @@ trust it (a one-off step, or a Group Policy push).
 ### After installing
 
 1. Sign in as the administrator and choose a new password.
-2. **Bring in the original tracker** (once, while the app is empty):
-   `mtc import-original "MTC Missionary Supplies Tracker.html" -Username admin`
-   on Windows. With Docker, run `seed_bundle --source FILE.html --output initial.zip`
-   then `import_bundle initial.zip --username admin` (see [Data format](docs/DATA_FORMAT.md#seed-conversion)).
-   Either way it reports counts only, never names.
+2. **Bring in the original tracker** (once, while the app is empty): open
+   **Administration → Full data export & import**, choose the old
+   `MTC Missionary Supplies Tracker.html` under *Load the original tracker* and
+   import it. It reports counts only, never names, and the file isn't kept.
+   (Command-line versions: `mtc import-original` on Windows, or `seed_bundle` +
+   `import_bundle`, see [Data format](docs/DATA_FORMAT.md#seed-conversion).)
 3. Create staff accounts under **Administration → Staff accounts**, with the name
    staff should see (for example “Sister Walker”).
 4. Copy the backups folder somewhere else from time to time.

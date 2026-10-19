@@ -6,6 +6,8 @@
     Normally run through <root>\mtc.cmd from an administrator window:
 
       mtc status                      Tasks, readiness, version, last backup
+      mtc start                       Start the app and HTTPS for everyone
+      mtc stop                        Stop them until "mtc start" (survives a reboot)
       mtc create-admin NAME           Create an administrator (asks for a temporary password)
       mtc recover-admin NAME          Reset an administrator's password (temporary, must change)
       mtc import-original "FILE.html" -Username ADMIN
@@ -38,7 +40,7 @@ function Show-MtcUsage {
     if ($help -and $help.description) {
         $help.description | ForEach-Object { Write-Host $_.Text }
     } else {
-        Write-Host 'Usage: mtc status | create-admin NAME | import-original FILE -Username ADMIN | backup | restore FILE | update ZIP | rollback | restart | logs | repair | uninstall | <manage.py command>'
+        Write-Host 'Usage: mtc status | start | stop | create-admin NAME | import-original FILE -Username ADMIN | backup | restore FILE | update ZIP | rollback | restart | logs | repair | uninstall | <manage.py command>'
     }
 }
 
@@ -71,6 +73,10 @@ function Show-MtcStatus {
         $color = 'Gray'
         if ([string]$task.State -eq 'Disabled') { $color = 'Red' }
         Write-Host $line -ForegroundColor $color
+    }
+    $appTask = Get-MtcTask -Name $MtcAppTaskName
+    if ($null -ne $appTask -and [string]$appTask.State -eq 'Disabled') {
+        Write-Host '  Stopped on purpose. Start it with: Start menu > MTC Supplies - Start (or: mtc start)' -ForegroundColor Yellow
     }
     $ready = Get-MtcReadiness
     if ($ready.Ok) {
@@ -128,10 +134,31 @@ function Restart-MtcServices {
     Stop-MtcAppTask -Root $Root
     Stop-MtcHttpsTask -Root $Root
     Start-MtcAppTask
-    Start-ScheduledTask -TaskName $MtcHttpsTaskName
+    Start-MtcHttpsTask
     $ready = Wait-MtcReady -TimeoutSeconds 120
     if (-not $ready.Ok) { throw ('The app did not become ready (' + $ready.Reason + '); see mtc logs') }
     Write-MtcOk ('App ready, version ' + $ready.Version)
+}
+
+function Start-MtcServices {
+    param([string]$Root, $Settings)
+    Write-MtcStep 'Starting the app and HTTPS'
+    Start-MtcAppTask
+    Start-MtcHttpsTask
+    $ready = Wait-MtcReady -TimeoutSeconds 120
+    if (-not $ready.Ok) { throw ('The app did not become ready (' + $ready.Reason + '); see mtc logs') }
+    Write-MtcOk ('Running, version ' + $ready.Version + '. Staff address: ' +
+        (Get-MtcStaffUrl -HostAddress (Get-MtcSetting $Settings 'APP_HOST' '?') -Port (Get-MtcSetting $Settings 'APP_PORT' '?')))
+}
+
+function Stop-MtcServices {
+    param([string]$Root)
+    Write-MtcStep 'Stopping the app and HTTPS for everyone'
+    Stop-MtcAppTask -Root $Root
+    if (Get-MtcTask -Name $MtcHttpsTaskName) { Disable-ScheduledTask -TaskName $MtcHttpsTaskName | Out-Null }
+    Stop-MtcHttpsTask -Root $Root
+    Write-MtcOk 'Stopped. It stays stopped, even after this PC restarts, until you start it again.'
+    Write-Host '    Start it with: Start menu > MTC Supplies - Start (or: mtc start). The nightly backup still runs.'
 }
 
 $exitCode = 0
@@ -166,6 +193,12 @@ try {
         }
         'restart' {
             Restart-MtcServices -Root $Root
+        }
+        'start' {
+            Start-MtcServices -Root $Root -Settings $settings
+        }
+        'stop' {
+            Stop-MtcServices -Root $Root
         }
         { $_ -eq 'create-admin' -or $_ -eq 'recover-admin' } {
             if ($verbArgs.Count -lt 1) { throw "Usage: mtc $verb NAME" }

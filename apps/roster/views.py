@@ -199,6 +199,25 @@ def missionary_archive(request, pk):
 
 @staff_required
 @require_http_methods(["POST"])
+def missionary_check_in(request, pk):
+    person = get_object_or_404(Missionary, pk=pk)
+    try:
+        person, changed = roster_services.check_in_missionary(actor=request.user, missionary_id=person.pk)
+    except DomainError as exc:
+        messages.error(request, f"Could not check in: {exc}")
+    else:
+        if changed:
+            messages.success(request, f"Checked in {person.display_name}: arrived "
+                                      f"{formats.date_format(person.arrival_date)}.")
+        else:
+            messages.info(request, f"{person.display_name} was already checked in.")
+    if request.GET.get("from") == "profile":
+        return redirect("roster-detail", pk=person.pk)
+    return redirect(list_return(request, "/roster/"))
+
+
+@staff_required
+@require_http_methods(["POST"])
 def missionary_reactivate(request, pk):
     person = get_object_or_404(Missionary, pk=pk)
     try:

@@ -444,7 +444,7 @@ try {
 
     Write-MtcStep 'Starting the app'
     Start-MtcAppTask
-    Start-ScheduledTask -TaskName $MtcHttpsTaskName
+    Start-MtcHttpsTask
     $ready = Wait-MtcReady -ExpectedVersion $version -TimeoutSeconds 180
     if (-not $ready.Ok) {
         throw ("The app did not become ready (" + $ready.Reason + "). Look at " + $Root + '\data\logs\app.log')
@@ -476,6 +476,16 @@ try {
     }
 
     $url = 'https://' + $HostAddress + ':' + $Port
+    $backupDir = Get-MtcBackupDir -Settings $settings -Root $Root
+    Write-MtcStep 'Adding MTC Supplies to the Start menu, the desktop and Settings > Apps'
+    $shortcutsOk = $false
+    try {
+        Install-MtcShortcuts -Root $Root -HostAddress $HostAddress -Port ([string]$Port) -Version $version -BackupDir $backupDir | Out-Null
+        $shortcutsOk = $true
+        Write-MtcOk 'Start menu > MTC Supplies: Open, Status, Start, Stop and Connection details'
+    } catch {
+        Write-MtcWarn ('Could not add the shortcuts (' + $_.Exception.Message + '). The app itself is fine.')
+    }
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor Green
     Write-Host ' MTC Supplies Tracker is installed and running.' -ForegroundColor Green
@@ -485,12 +495,21 @@ try {
     if ($thumbprint) { Write-Host (' Thumbprint:      ' + $thumbprint) }
     Write-Host '                  On each staff PC: open the .crt, Install Certificate, Local Machine,'
     Write-Host '                  "Trusted Root Certification Authorities". (Or ask IT to push it by Group Policy.)'
-    Write-Host (' Backups:         ' + (Get-MtcBackupDir -Settings $settings -Root $Root) + '  (daily at 02:00, kept 30 days)')
+    Write-Host (' Backups:         ' + $backupDir + '  (daily at 02:00, kept 30 days)')
     Write-Host (' Logs:            ' + $Root + '\data\logs')
-    Write-Host (' Admin commands:  ' + $Root + '\mtc.cmd status   (run in an administrator window)')
-    Write-Host ' Import the original tracker data (only into a new, empty app):'
-    Write-Host ('   ' + $Root + '\mtc.cmd import-original "C:\path\MTC Missionary Supplies Tracker.html" -Username <admin>')
+    if ($shortcutsOk) {
+        Write-Host ' Start menu:      MTC Supplies > Open MTC Supplies, Status, Start, Stop' -ForegroundColor Green
+        Write-Host '                  These details are saved there too: MTC Supplies > Connection details.' -ForegroundColor Green
+    }
+    Write-Host (' Admin commands:  ' + $Root + '\mtc.cmd help   (run in an administrator window)')
+    Write-Host ' Bring in the original tracker: sign in, then Administration > Full data export & import.'
     Write-Host ''
+    if (-not $Yes) {
+        # explorer.exe hands the address to the default browser as the signed-in
+        # user, not with this window's administrator rights.
+        try { Start-Process -FilePath 'explorer.exe' -ArgumentList $url; Write-Host (' Opening ' + $url + ' in your browser now.') } catch { }
+        Write-Host ''
+    }
     Write-MtcLog 'install.ps1 finished OK'
 } catch {
     $exitCode = 1
