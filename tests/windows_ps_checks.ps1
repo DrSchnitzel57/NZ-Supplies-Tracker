@@ -415,11 +415,35 @@ $parseErrors = $null
 Check ($parseErrors.Count -eq 0) 'launcher script parses'
 $details = New-MtcConnectionText -Root 'C:\MTCSupplies' -Url 'https://192.168.1.10:8443/' -Version '1.0.1' `
     -Thumbprint 'ABC123' -BackupDir 'C:\MTCSupplies\data\backups'
-foreach ($needle in @('https://192.168.1.10:8443/', 'https://192.168.1.10:8443/ca.crt', 'ABC123', 'MTC Supplies - Stop',
+foreach ($needle in @('https://192.168.1.10:8443/', 'https://192.168.1.10:8443/ca.crt', 'ABC123', 'MTC Supplies admin console', 'Administration > System status',
         'C:\MTCSupplies\data\backups', 'C:\MTCSupplies\mtc.cmd help', 'Version 1.0.1')) {
     Check ($details.Contains($needle)) ("connection details contain: " + $needle)
 }
 Check (-not ($details.ToCharArray() | Where-Object { [int]$_ -gt 127 })) 'connection details are plain ASCII'
+$plain = New-MtcUninstallCommand -Powershell 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -Root 'C:\MTCSupplies'
+Check ($plain -eq '"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "Start-Process -FilePath $env:ComSpec -ArgumentList ''/c C:\MTCSupplies\mtc.cmd uninstall & echo. & pause'' -Verb RunAs"') 'plain uninstall command for the usual folder'
+$spaced = New-MtcUninstallCommand -Powershell 'C:\ps.exe' -Root 'D:\My Apps\MTC'
+Check ($spaced.Contains('-EncodedCommand ') -and -not $spaced.Contains('My Apps')) 'folders needing quotes use the encoded form'
+$lnkDir = Join-Path ([System.IO.Path]::GetTempPath()) ('mtc-lnk-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $lnkDir | Out-Null
+try {
+    $fake = Join-Path $lnkDir 'x.lnk'
+    $header = New-Object byte[] 0x4C
+    $header[0] = 0x4C
+    $header[0x14] = 0x9B
+    $header[0x15] = 0x00
+    [System.IO.File]::WriteAllBytes($fake, $header)
+    Set-MtcShortcutRunAsAdmin -Path $fake
+    $after = [System.IO.File]::ReadAllBytes($fake)
+    Check ($after[0x15] -eq 0x20 -and $after[0x14] -eq 0x9B -and $after.Length -eq 0x4C) 'run-as-administrator flag set, nothing else changed'
+    Set-MtcShortcutRunAsAdmin -Path $fake
+    Check ([System.IO.File]::ReadAllBytes($fake)[0x15] -eq 0x20) 'setting the flag twice is harmless'
+    $notLink = Join-Path $lnkDir 'y.lnk'
+    [System.IO.File]::WriteAllBytes($notLink, [byte[]](1..100))
+    Check ((Throws { Set-MtcShortcutRunAsAdmin -Path $notLink }) -match 'not a Windows shortcut') 'non-shortcut file refused'
+} finally {
+    Remove-Item -LiteralPath $lnkDir -Recurse -Force
+}
 Check ((New-MtcConnectionText -Root 'C:\x' -Url 'https://h:1/' -Version '1' -Thumbprint '' -BackupDir 'b').Contains('not created yet')) 'missing thumbprint explained'
 
 if ($failures.Count -gt 0) {

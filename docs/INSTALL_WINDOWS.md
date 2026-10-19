@@ -41,15 +41,16 @@ on the server unless it says "staff PC".
 
 After the install you'll find:
 
-- **Start menu > MTC Supplies**: *Open MTC Supplies*, *MTC Supplies - Status*,
-  *MTC Supplies - Start*, *MTC Supplies - Stop* and *Connection details*.
-  Status, Start and Stop ask for administrator rights.
+- **Start menu > MTC Supplies**: *Open MTC Supplies* and *Connection details*
+  (no administrator rights needed), plus *MTC Supplies admin console* for the
+  rare server jobs below (it asks for administrator rights once per window).
 - **MTC Supplies** on the desktop, which opens the app in the browser.
 - **Settings > Apps > MTC Supplies Tracker**, which is where you uninstall it.
 
-The app runs in the background whenever the PC is on, so there is no window to
-keep open. *Stop* keeps it stopped, even after a restart, until you choose
-*Start*.
+The app runs in the background whenever the PC is on: it starts with Windows
+and restarts itself if it stops, so there is nothing to start each day. To see
+that it's healthy (version, last backup, disk space), sign in and open
+**Administration > System status**.
 
 If anything goes wrong it says so in plain words. Fix the problem (usually
 the internet connection) and double-click `install.cmd` again; it carries on
@@ -121,8 +122,9 @@ if Firefox still warns, import the file in Firefox's own certificate settings.
 
 ## Everyday administrator commands
 
-Open an **administrator Command Prompt** and type `C:\MTCSupplies\mtc` and a
-command. (`C:\MTCSupplies\mtc help` lists them all.)
+Open **Start menu > MTC Supplies > MTC Supplies admin console** (or any
+administrator Command Prompt in `C:\MTCSupplies`) and type `mtc` and a
+command. (`mtc help` lists them all.)
 
 | Command | What it does |
 | --- | --- |

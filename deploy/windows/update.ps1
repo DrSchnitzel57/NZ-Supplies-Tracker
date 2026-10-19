@@ -250,7 +250,7 @@ try {
     try {
         Install-MtcShortcuts -Root $S.Root -HostAddress (Get-MtcSetting $settings 'APP_HOST' '') `
             -Port (Get-MtcSetting $settings 'APP_PORT' '') -Version $S.NewVersion `
-            -BackupDir (Get-MtcBackupDir -Settings $settings -Root $S.Root) | Out-Null
+            -BackupDir (Get-MtcBackupDir -Settings $settings -Root $S.Root) -Release $S.NewRelease | Out-Null
         Write-MtcOk 'Start menu > MTC Supplies shortcuts and connection details updated'
     } catch {
         Write-MtcWarn ('Could not update the Start menu shortcuts (' + $_.Exception.Message + ')')

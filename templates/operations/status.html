@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}System status — MTC Supplies{% endblock %}
+{% block content %}
+<div class="page-head"><div><span class="eyebrow">Administration</span><h1>System status</h1><p class="sub">Is everything healthy? Version, backups and the address staff use. No need to sign in to the server.</p></div></div>
+{% if status.maintenance.active %}<div class="banner warn"><span class="ic">{% include "components/icon.html" with name="alert" %}</span><div><h2>Saving is paused</h2><p>An update, restore or backup is running{% if status.maintenance.owner %} ({{ status.maintenance.owner }}){% endif %}. Staff can look things up; saving comes back when it finishes.</p></div></div>
+{% else %}<div class="banner info"><span class="ic">{% include "components/icon.html" with name="check" %}</span><div><h2>Running normally</h2><p>It starts by itself when the server starts and restarts itself if it ever stops. Nobody needs to start it each day.</p></div></div>{% endif %}
+<div class="grid two" style="margin-top:16px">
+<section class="card"><div class="hd"><h2>App</h2></div><div class="bd">
+<dl class="facts">
+<dt>Version</dt><dd>{{ status.version }}</dd>
+<dt>Staff address</dt><dd><a href="{{ status.address }}">{{ status.address }}</a></dd>
+<dt>Certificate</dt><dd><a href="{{ status.certificate }}">Download for a staff PC</a><small>Removes the “not private” warning; see the install guide.</small></dd>
+<dt>Free disk space</dt><dd>{% if status.free_gb is not None %}{{ status.free_gb|floatformat:1 }} GB{% else %}Unknown{% endif %}</dd>
+</dl>
+</div></section>
+<section class="card"><div class="hd"><h2>Backups</h2></div><div class="bd">
+{% with b=status.last_backup %}
+<dl class="facts">
+<dt>Last backup</dt><dd>{% if b %}{{ b.made|when }}{% if b.hours > 26 %} <span class="chip warn">Over a day old</span>{% elif b.complete %} <span class="chip ok">Complete</span>{% else %} <span class="chip warn">Not checked</span>{% endif %}<small>{{ b.name }} · {{ b.size_mb|floatformat:1 }} MB</small>{% else %}<span class="chip warn">None yet</span><small>The first one is made tonight at 02:00.</small>{% endif %}</dd>
+<dt>Kept</dt><dd>{{ status.backup_count }} backup{{ status.backup_count|plural }} · {{ status.backup_total_mb|floatformat:1 }} MB</dd>
+<dt>Folder</dt><dd><code>{{ status.backup_dir }}</code><small>On the server. Copy it to another drive now and then.</small></dd>
+</dl>
+{% endwith %}
+</div></section>
+</div>
+<p class="help">Start, stop, restart and manual backups are done on the server: <strong>Start menu → MTC Supplies → MTC Supplies admin console</strong>.</p>
+{% endblock %}

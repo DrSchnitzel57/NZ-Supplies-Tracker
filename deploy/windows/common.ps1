@@ -1199,12 +1199,14 @@ function New-MtcConnectionText {
         '     Authorities > OK > Next > Finish. Then restart the browser.',
         ('  Thumbprint to check: ' + $tp),
         '',
+        'IT RUNS BY ITSELF',
+        '  It starts when this PC starts and restarts itself if it stops.',
+        '  Health, version and backups: in the app, Administration > System status.',
+        '',
         'START MENU > MTC SUPPLIES',
-        '  Open MTC Supplies       the app in your browser (also on the desktop)',
-        '  MTC Supplies - Status   is it running, version, address, last backup',
-        '  MTC Supplies - Start    start the app for everyone',
-        '  MTC Supplies - Stop     stop it for everyone until you start it again',
-        '  (Status, Start and Stop ask for administrator rights.)',
+        '  Open MTC Supplies            the app in your browser (also on the desktop)',
+        '  Connection details           this file',
+        '  MTC Supplies admin console   start, stop, restart, backup (asks for admin rights)',
         '',
         ('BACKUPS: ' + $BackupDir + ' (every night at 02:00, kept 30 days).'),
         '  Copy this folder to another drive now and then.',
@@ -1215,49 +1217,93 @@ function New-MtcConnectionText {
     return (($lines -join "`r`n") + "`r`n")
 }
 
+function Get-MtcIconPath {
+    # Outside the install folder on purpose: <root> is readable by
+    # administrators only, and Explorer draws icons as the signed-in user.
+    return (Join-Path (Join-Path $env:ProgramData $MtcShortcutFolderName) 'mtc-supplies.ico')
+}
+
+function Set-MtcShortcutRunAsAdmin {
+    # Same as ticking "Run as administrator" in a shortcut's Advanced
+    # properties: LinkFlags bit 0x00002000 (byte 0x15, value 0x20).
+    param([string]$Path)
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 0x4C -or $bytes[0] -ne 0x4C -or $bytes[1] -ne 0 -or $bytes[2] -ne 0 -or $bytes[3] -ne 0) {
+        throw ($Path + ' is not a Windows shortcut file.')
+    }
+    $bytes[0x15] = [byte]($bytes[0x15] -bor 0x20)
+    [System.IO.File]::WriteAllBytes($Path, $bytes)
+}
+
+function New-MtcUninstallCommand {
+    # Settings > Apps runs this as the signed-in user; it asks Windows for
+    # administrator rights, then runs "mtc uninstall" in a window that waits.
+    # Plain text for the usual install folder (security tools distrust
+    # encoded commands); encoded only when the folder needs quoting.
+    param([string]$Powershell, [string]$Root)
+    if ($Root -match '^[A-Za-z]:\\[A-Za-z0-9_.\\-]*$') {
+        $mtc = $Root.TrimEnd('\') + '\mtc.cmd'
+        return ('"' + $Powershell + '" -NoProfile -Command "Start-Process -FilePath $env:ComSpec -ArgumentList ''/c ' +
+            $mtc + ' uninstall & echo. & pause'' -Verb RunAs"')
+    }
+    return ('"' + $Powershell + '" ' + (New-MtcElevatedArguments -Root $Root -Verb 'uninstall'))
+}
+
 function Install-MtcShortcuts {
     # Start menu folder (all users), a desktop link to the app, the saved
     # connection details and an entry under Settings > Apps. Safe to run
     # again: install, repair and update all call it.
-    param([string]$Root, [string]$HostAddress, [string]$Port, [string]$Version, [string]$BackupDir)
+    param([string]$Root, [string]$HostAddress, [string]$Port, [string]$Version, [string]$BackupDir,
+        [string]$Release = '')
+    if (-not $Release) { $Release = Join-Path $Root 'current' }
     $url = Get-MtcStaffUrl -HostAddress $HostAddress -Port $Port
     $thumbprint = ''
     $ca = Join-Path $Root 'MTC-Supplies-CA.crt'
     if (Test-Path -LiteralPath $ca -PathType Leaf) { $thumbprint = Get-MtcCertificateThumbprint -Path $ca }
+
+    $icon = Get-MtcIconPath
+    New-Item -ItemType Directory -Path (Split-Path -Parent $icon) -Force | Out-Null
+    $iconSource = Join-Path (Join-Path (Join-Path $Release 'deploy') 'windows') 'mtc-supplies.ico'
+    if (Test-Path -LiteralPath $iconSource -PathType Leaf) { Copy-Item -LiteralPath $iconSource -Destination $icon -Force }
+    $iconLines = ''
+    if (Test-Path -LiteralPath $icon -PathType Leaf) { $iconLines = 'IconFile=' + $icon + "`r`nIconIndex=0`r`n" }
+
     $folder = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) $MtcShortcutFolderName
     New-Item -ItemType Directory -Path $folder -Force | Out-Null
-    # Start from a clean folder so renamed shortcuts from older versions go.
+    # Start from a clean folder so shortcuts from older versions go.
     Get-ChildItem -LiteralPath $folder -File -ErrorAction SilentlyContinue | Remove-Item -Force
-    $urlText = "[InternetShortcut]`r`nURL=" + $url + "`r`n"
+    $urlText = "[InternetShortcut]`r`nURL=" + $url + "`r`n" + $iconLines
     Write-MtcTextFile -Path (Join-Path $folder 'Open MTC Supplies.url') -Text $urlText
     Write-MtcTextFile -Path (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'MTC Supplies.url') -Text $urlText
     $details = New-MtcConnectionText -Root $Root -Url $url -Version $Version -Thumbprint $thumbprint -BackupDir $BackupDir
     Write-MtcTextFile -Path (Join-Path $folder 'Connection details.txt') -Text $details
-    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+
+    # One administrator window for the rare server jobs (start, stop,
+    # restart, backup). Marked "Run as administrator" like a right-click,
+    # so Windows asks once per window, not per command.
     $shell = New-Object -ComObject WScript.Shell
-    $links = @(
-        @('MTC Supplies - Status', 'status', 'Is it running? Version, staff address and last backup'),
-        @('MTC Supplies - Start', 'start', 'Start the MTC Supplies Tracker for everyone'),
-        @('MTC Supplies - Stop', 'stop', 'Stop the MTC Supplies Tracker for everyone')
-    )
-    foreach ($entry in $links) {
-        $link = $shell.CreateShortcut((Join-Path $folder ($entry[0] + '.lnk')))
-        $link.TargetPath = $powershell
-        $link.Arguments = New-MtcElevatedArguments -Root $Root -Verb $entry[1]
-        $link.Description = $entry[2]
-        $link.IconLocation = $env:ComSpec + ',0'
-        $link.WorkingDirectory = $env:SystemRoot
-        $link.Save()
-    }
+    $console = Join-Path $folder 'MTC Supplies admin console.lnk'
+    $link = $shell.CreateShortcut($console)
+    $link.TargetPath = $env:ComSpec
+    $link.Arguments = '/k title MTC Supplies admin console & cd /d "' + $Root + '" & mtc help'
+    $link.WorkingDirectory = $Root
+    $link.Description = 'Administrator window for MTC Supplies: mtc status, start, stop, restart, backup'
+    if ($iconLines) { $link.IconLocation = $icon + ',0' }
+    $link.Save()
+    Set-MtcShortcutRunAsAdmin -Path $console
+
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     if (-not (Test-Path -LiteralPath $MtcUninstallKey)) { New-Item -Path $MtcUninstallKey -Force | Out-Null }
+    $displayIcon = $env:ComSpec
+    if ($iconLines) { $displayIcon = $icon }
     $values = @{
         'DisplayName' = 'MTC Supplies Tracker'
         'DisplayVersion' = $Version
         'Publisher' = 'NZ MTC supplies (unofficial stop gap)'
         'InstallLocation' = $Root
-        'DisplayIcon' = $env:ComSpec
+        'DisplayIcon' = $displayIcon
         'URLInfoAbout' = $url
-        'UninstallString' = ('"' + $powershell + '" ' + (New-MtcElevatedArguments -Root $Root -Verb 'uninstall'))
+        'UninstallString' = (New-MtcUninstallCommand -Powershell $powershell -Root $Root)
     }
     foreach ($key in $values.Keys) {
         New-ItemProperty -Path $MtcUninstallKey -Name $key -Value $values[$key] -PropertyType String -Force | Out-Null
@@ -1277,6 +1323,12 @@ function Remove-MtcShortcuts {
     $desktop = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'MTC Supplies.url'
     if (Test-Path -LiteralPath $desktop) { Remove-Item -LiteralPath $desktop -Force }
     if (Test-Path -LiteralPath $MtcUninstallKey) { Remove-Item -LiteralPath $MtcUninstallKey -Force }
+    $icon = Get-MtcIconPath
+    if (Test-Path -LiteralPath $icon) { Remove-Item -LiteralPath $icon -Force }
+    $iconFolder = Split-Path -Parent $icon
+    if ((Test-Path -LiteralPath $iconFolder) -and -not (Get-ChildItem -LiteralPath $iconFolder -Force)) {
+        Remove-Item -LiteralPath $iconFolder -Force
+    }
 }
 
 function Start-MtcHttpsTask {

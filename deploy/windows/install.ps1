@@ -480,9 +480,10 @@ try {
     Write-MtcStep 'Adding MTC Supplies to the Start menu, the desktop and Settings > Apps'
     $shortcutsOk = $false
     try {
-        Install-MtcShortcuts -Root $Root -HostAddress $HostAddress -Port ([string]$Port) -Version $version -BackupDir $backupDir | Out-Null
+        Install-MtcShortcuts -Root $Root -HostAddress $HostAddress -Port ([string]$Port) -Version $version `
+            -BackupDir $backupDir -Release $current | Out-Null
         $shortcutsOk = $true
-        Write-MtcOk 'Start menu > MTC Supplies: Open, Status, Start, Stop and Connection details'
+        Write-MtcOk 'Start menu > MTC Supplies: Open MTC Supplies, Connection details, admin console'
     } catch {
         Write-MtcWarn ('Could not add the shortcuts (' + $_.Exception.Message + '). The app itself is fine.')
     }
@@ -498,7 +499,8 @@ try {
     Write-Host (' Backups:         ' + $backupDir + '  (daily at 02:00, kept 30 days)')
     Write-Host (' Logs:            ' + $Root + '\data\logs')
     if ($shortcutsOk) {
-        Write-Host ' Start menu:      MTC Supplies > Open MTC Supplies, Status, Start, Stop' -ForegroundColor Green
+        Write-Host ' Start menu:      MTC Supplies > Open MTC Supplies (and the desktop link)' -ForegroundColor Green
+        Write-Host '                  Health and backups: in the app, Administration > System status.' -ForegroundColor Green
         Write-Host '                  These details are saved there too: MTC Supplies > Connection details.' -ForegroundColor Green
     }
     Write-Host (' Admin commands:  ' + $Root + '\mtc.cmd help   (run in an administrator window)')

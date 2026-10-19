@@ -96,6 +96,53 @@ def dashboard_api(request):
     )
 
 
+def _system_status(request) -> dict:
+    """What an administrator would otherwise need "mtc status" (and admin
+    rights on the server) for. No personal data."""
+    import os
+    import shutil
+    from datetime import datetime
+
+    from django.conf import settings as django_settings
+
+    from apps.operations import backup as backup_mod
+    from apps.operations.guards import maintenance_status
+
+    backup_dir = os.environ.get("MTC_BACKUP_DIR") or str(backup_mod.default_backup_dir())
+    files = backup_mod.list_backups(backup_dir)
+    newest = max(files, key=lambda p: p.stat().st_mtime) if files else None
+    last = None
+    if newest is not None:
+        stat = newest.stat()
+        made = datetime.fromtimestamp(stat.st_mtime, tz=timezone.get_current_timezone())
+        manifest = backup_mod.read_manifest(newest) or {}
+        last = {"name": newest.name, "made": made, "size_mb": stat.st_size / 1_048_576,
+                "hours": (timezone.now() - made).total_seconds() / 3600,
+                "complete": manifest.get("completed") is True}
+    try:
+        disk = shutil.disk_usage(backup_dir if os.path.isdir(backup_dir) else backup_mod.live_db_path().parent)
+        free_gb = disk.free / 1_073_741_824
+    except OSError:
+        free_gb = None
+    base = f"{request.scheme}://{request.get_host()}"
+    return {
+        "version": getattr(django_settings, "APP_VERSION", "") or "development copy",
+        "address": base + "/",
+        "certificate": base + "/ca.crt",
+        "maintenance": maintenance_status(),
+        "backup_dir": backup_dir,
+        "backup_count": len(files),
+        "backup_total_mb": sum(p.stat().st_size for p in files) / 1_048_576,
+        "last_backup": last,
+        "free_gb": free_gb,
+    }
+
+
+@admin_required
+def status_view(request):
+    return render(request, "operations/status.html", {"status": _system_status(request)})
+
+
 @admin_required
 def settings_view(request):
     from apps.accounts import reauth as reauth_mod

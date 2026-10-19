@@ -346,3 +346,32 @@ class CheckInTests(TestCase):
         self.client.post(f"/roster/{early.pk}/check-in/")
         early.refresh_from_db()
         self.assertEqual(early.arrival_date, timezone.localdate())
+
+
+class SystemStatusTests(TestCase):
+    """Health, version and backups in the browser: no admin rights on the PC."""
+
+    def test_admin_sees_version_backups_and_address(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        admin, pw = make_admin()
+        self.client.login(username=admin.username, password=pw)
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "daily-20261019-020000.sqlite3").write_bytes(b"x" * 2048)
+            with mock.patch.dict(os.environ, {"MTC_BACKUP_DIR": folder}), \
+                    self.settings(APP_VERSION="9.9.9"):
+                page = self.client.get("/admin-area/status/")
+        self.assertContains(page, "9.9.9")
+        self.assertContains(page, "daily-20261019-020000.sqlite3")
+        self.assertContains(page, "1 backup")
+        self.assertContains(page, "http://testserver/ca.crt")
+        self.assertContains(page, "Running normally")
+        self.assertContains(self.client.get("/"), 'href="/admin-area/status/"')
+
+    def test_staff_cannot_open_it(self):
+        staff, pw = make_staff()
+        self.client.login(username=staff.username, password=pw)
+        self.assertEqual(self.client.get("/admin-area/status/").status_code, 403)

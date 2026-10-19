@@ -345,6 +345,7 @@ td.nowrap,td.actions{overflow-wrap:normal}
 dl{display:grid;grid-template-columns:minmax(120px,40%) 1fr;gap:10px 16px;margin:0}
 dt{color:var(--muted);font-weight:500}
 dd{margin:0;font-weight:500}
+dd small{display:block;margin-top:2px;color:var(--muted);font-weight:400;font-size:12.5px}
 .kv{grid-template-columns:minmax(140px,38%) 1fr}
 
 /* ---------- feedback ---------- */

@@ -31,6 +31,7 @@
 <a class="navlink" href="/guide/" {% if request.path == '/guide/' %}aria-current="page"{% endif %}>{% include "components/icon.html" with name="help" %}Help</a>
 {% if user.is_superuser %}
 <details class="admin-nav" {% if request.path|slice:':12' == '/admin-area/' or request.path|slice:':16' == '/accounts/users/' or request.path == '/transfers/bundle/' %}open{% endif %}><summary>{% include "components/icon.html" with name="shield" %}Administration</summary>
+<a class="navlink" href="/admin-area/status/" {% if request.path == '/admin-area/status/' %}aria-current="page"{% endif %}>System status</a>
 <a class="navlink" href="/accounts/users/" {% if request.path|slice:':16' == '/accounts/users/' %}aria-current="page"{% endif %}>Staff accounts</a>
 <a class="navlink" href="/admin-area/settings/" {% if request.path == '/admin-area/settings/' %}aria-current="page"{% endif %}>Settings</a>
 <a class="navlink" href="/transfers/bundle/" {% if request.path == '/transfers/bundle/' %}aria-current="page"{% endif %}>Full data export &amp; import</a>

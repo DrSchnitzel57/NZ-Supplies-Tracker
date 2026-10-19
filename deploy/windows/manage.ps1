@@ -76,7 +76,7 @@ function Show-MtcStatus {
     }
     $appTask = Get-MtcTask -Name $MtcAppTaskName
     if ($null -ne $appTask -and [string]$appTask.State -eq 'Disabled') {
-        Write-Host '  Stopped on purpose. Start it with: Start menu > MTC Supplies - Start (or: mtc start)' -ForegroundColor Yellow
+        Write-Host '  Stopped on purpose. Start it again with: mtc start' -ForegroundColor Yellow
     }
     $ready = Get-MtcReadiness
     if ($ready.Ok) {
@@ -158,7 +158,7 @@ function Stop-MtcServices {
     if (Get-MtcTask -Name $MtcHttpsTaskName) { Disable-ScheduledTask -TaskName $MtcHttpsTaskName | Out-Null }
     Stop-MtcHttpsTask -Root $Root
     Write-MtcOk 'Stopped. It stays stopped, even after this PC restarts, until you start it again.'
-    Write-Host '    Start it with: Start menu > MTC Supplies - Start (or: mtc start). The nightly backup still runs.'
+    Write-Host '    Start it again with: mtc start. The nightly backup still runs.'
 }
 
 $exitCode = 0
